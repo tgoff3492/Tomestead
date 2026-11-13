@@ -17,7 +17,10 @@ window.TomesteadReader = function (api) {
   const bar = $('#rdBar');
   const hint = $('#rdHint');
 
-  if (matchMedia('(hover: hover) and (pointer: fine)').matches) hint.textContent = 'Click the book to open it';
+  if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    hint.querySelector('.rd-hint-main').textContent = 'Click the book to open it';
+    hint.querySelector('.rd-hint-sub').textContent = 'Click anywhere else to put it back';
+  }
   const EASE_OUT = 'cubic-bezier(.22,.8,.26,1)';
   const EASE_IN_OUT = 'cubic-bezier(.65,0,.35,1)';
   const EASE_SOFT = 'cubic-bezier(.45,.05,.25,1)';
@@ -319,13 +322,14 @@ window.TomesteadReader = function (api) {
 
   function setBar(mode) {
     S && (S.barMode = mode);
+    // resting on the table, the hint says it all; the bar is for the open book
     if (mode) bar.dataset.mode = mode;
-    bar.classList.toggle('show', !!mode);
+    bar.classList.toggle('show', mode === 'open');
     hint.classList.toggle('show', mode === 'rest');
     const rm = bar.querySelector('[data-rd="remove"]');
     if (rm) { rm.textContent = 'Remove'; rm.dataset.confirm = ''; }
     closeCoverMenu();
-    if (mode === 'rest') setTimeout(() => bar.querySelector('[data-rd="open"]').focus({ preventScroll: true }), 30);
+    if (mode === 'rest') setTimeout(() => S && S.box && S.box.focus({ preventScroll: true }), 30);
     if (mode === 'open') setTimeout(() => bar.querySelector('[data-rd="close"]').focus({ preventScroll: true }), 30);
   }
 
