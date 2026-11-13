@@ -1,11 +1,13 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v3';
+const VERSION = 'tomestead-v4';
 const SHELL = [
   './',
   'index.html',
   'styles.css',
   'app.js',
   'decor.js',
+  'covers.js',
+  'reader.js',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -29,17 +31,18 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
-  if (url.origin !== self.location.origin && !isFont) return;
+  const isCover = url.hostname === 'covers.openlibrary.org';
+  if (url.origin !== self.location.origin && !isFont && !isCover) return;
 
   event.respondWith(
     caches.open(VERSION).then(async (cache) => {
       const cached = await cache.match(req, { ignoreSearch: req.mode === 'navigate' });
-      // Fonts rarely change: serve from cache first.
-      if (isFont && cached) return cached;
+      // Fonts and cover images rarely change: serve from cache first.
+      if ((isFont || isCover) && cached) return cached;
       // App files: get the newest copy when online, fall back to the saved copy offline.
       try {
         const res = await fetch(req);
-        if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
+        if (res && (res.ok || (res.type === 'opaque' && !isCover))) cache.put(req, res.clone());
         return res;
       } catch {
         return cached || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());

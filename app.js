@@ -44,7 +44,6 @@
   let query = '';
   let justAdded = null;
   let editingId = null;
-  let openId = null;
   let pickedRating = 0;
   let caseIndex = 0;
   let defaultFinished = null;
@@ -353,13 +352,24 @@
     const list = visibleBooks();
     ol.innerHTML = list.map(b => {
       const c = colorOf(b);
+      const a = b.art || {};
+      const thumb = a.status === 'found' && a.ids && a.ids.length
+        ? `<img class="thumb" alt="" loading="lazy" src="${Covers.coverURL(a.ids[a.i || 0], 'S')}" data-bg="${c.bg}">`
+        : a.status === 'upload' ? `<img class="thumb" alt="" data-upload="${esc(b.id)}" data-bg="${c.bg}">`
+        : `<span class="chip" style="--bg:${c.bg}" aria-hidden="true"></span>`;
       return `<li><button type="button" class="ledger-item" data-id="${esc(b.id)}">
-        <span class="chip" style="--bg:${c.bg}" aria-hidden="true"></span>
+        ${thumb}
         <span><h3>${esc(b.title)}</h3><span class="by">${esc(b.author || '')}${b.genre ? `, ${esc(b.genre)}` : ''}</span></span>
         <span class="right">${b.rating ? `<span class="stars-sm" aria-label="${b.rating} of 5 stars">${starsHTML(b.rating)}</span>` : '<span class="date">Not rated</span>'}<br><span class="date">${esc(fmtDate(b.finished))}</span></span>
         ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : ''}
       </button></li>`;
     }).join('');
+    const toChip = (img) => { const sp = document.createElement('span'); sp.className = 'chip'; sp.style.setProperty('--bg', img.dataset.bg); sp.setAttribute('aria-hidden', 'true'); img.replaceWith(sp); };
+    ol.querySelectorAll('img.thumb').forEach(img => img.addEventListener('error', () => toChip(img), { once: true }));
+    ol.querySelectorAll('img[data-upload]').forEach(async img => {
+      const u = await Covers.uploadURL(img.dataset.upload);
+      if (u) img.src = u; else toChip(img);
+    });
     const empty = $('#listEmpty');
     empty.hidden = list.length > 0;
     if (query.trim()) empty.textContent = `No books match “${query}”.`;
@@ -484,29 +494,51 @@
     renderCustomize();
   }
 
-  // ---------- details ----------
-  function openDetail(id) {
-    const b = books.find(x => x.id === id);
-    if (!b) return;
-    openId = id;
-    const c = colorOf(b);
-    $('#dChip').style.setProperty('--bg', c.bg);
-    $('#dTitle').textContent = b.title;
-    $('#dAuthor').textContent = b.author ? `by ${b.author}` : '';
-    $('#dStars').innerHTML = b.rating ? starsHTML(b.rating) : '<span class="off" style="font-size:1rem;letter-spacing:0">Not rated</span>';
-    $('#dStars').setAttribute('aria-label', b.rating ? `${b.rating} of 5 stars` : 'Not rated');
-    const meta = [];
-    if (b.finished) meta.push(`Finished ${fmtDate(b.finished)}`);
-    if (b.pages) meta.push(`${b.pages} pages`);
-    if (b.genre) meta.push(b.genre);
-    $('#dMeta').textContent = meta.join(', ');
-    const rev = $('#dReview');
-    rev.textContent = b.review || 'No review written yet.';
-    rev.classList.toggle('none', !b.review);
-    const rm = $('#dRemove');
-    rm.textContent = 'Remove';
-    rm.dataset.confirm = '';
-    $('#detail').showModal();
+  // ---------- cover art & summaries ----------
+  const Covers = window.TomesteadCovers;
+  const inflight = new Map();
+  function lookup(b) {
+    if (inflight.has(b.id)) return inflight.get(b.id);
+    const p = (async () => {
+      try {
+        const r = await Covers.lookup(b);
+        const keep = b.art && (b.art.status === 'upload' || b.art.status === 'plain') ? b.art.status : null;
+        b.art = { status: keep || (r.ids.length ? 'found' : 'none'), ids: r.ids, i: 0, olKey: r.olKey };
+        b.about = r.about;
+        b.lookedUp = Date.now();
+        save();
+        scheduleListRefresh();
+      } catch {
+        /* offline or the catalog is busy: try again another time */
+      }
+    })().finally(() => inflight.delete(b.id));
+    inflight.set(b.id, p);
+    return p;
+  }
+  // quietly fetch covers for books that don't have one yet
+  let queueRunning = false;
+  async function runLookupQueue() {
+    if (queueRunning || navigator.onLine === false) return;
+    queueRunning = true;
+    let n = 0;
+    for (const b of [...books].sort((a, c) => (c.addedAt || 0) - (a.addedAt || 0))) {
+      if (n >= 40) break;
+      if (b.lookedUp || (b.art && (b.art.status === 'upload' || b.art.status === 'plain'))) continue;
+      await lookup(b);
+      n++;
+      await new Promise(r => setTimeout(r, 450));
+    }
+    queueRunning = false;
+  }
+  let listTimer;
+  function scheduleListRefresh() {
+    clearTimeout(listTimer);
+    listTimer = setTimeout(() => { if (prefs.view === 'list' && !onCustomize() && !(reader && reader.isOpen())) renderList(); }, 400);
+  }
+
+  let reader = null;
+  function openDetail(id, el) {
+    if (reader) reader.open(id, el);
   }
 
   // ---------- editor ----------
@@ -601,24 +633,31 @@
     };
     const y = yearOf(data);
     const before = y ? countInYear(y) : 0;
+    let target;
     if (editingId) {
-      const b = books.find(x => x.id === editingId);
+      const b = target = books.find(x => x.id === editingId);
+      const renamed = b.title !== data.title || (b.author || '') !== data.author;
       Object.assign(b, data, { updatedAt: Date.now() });
+      if (renamed) {
+        const keep = b.art && (b.art.status === 'upload' || b.art.status === 'plain') ? { status: b.art.status } : null;
+        b.art = keep; b.about = null; b.lookedUp = 0;
+      }
       toast('Changes saved.');
     } else {
-      const b = Object.assign({ id: uid(), addedAt: Date.now() }, data);
+      const b = target = Object.assign({ id: uid(), addedAt: Date.now() }, data);
       books.push(b);
       justAdded = b.id;
       toast(`“${title}” is on the shelf.`);
     }
+    if (!target.lookedUp) lookup(target).then(() => { if (reader && reader.currentId() === target.id) reader.refresh(); });
     const wasEditing = editingId;
     editingId = null;
     save();
     $('#editor').close();
     render();
     const goal = y ? goalFor(y) : 0;
+    if (wasEditing && reader && reader.currentId() === wasEditing) reader.refresh();
     if (goal && before < goal && countInYear(y) >= goal) celebrate(y);
-    else if (wasEditing) setTimeout(() => openDetail(wasEditing), 0);
   }
 
   // ---------- goals ----------
@@ -679,8 +718,15 @@
   function closeCelebrate() { $('#celebrate').hidden = true; $('#celebrate .confetti').innerHTML = ''; }
 
   // ---------- backup ----------
-  function exportBooks() {
-    const payload = { app: 'Tomestead', version: 2, exportedAt: new Date().toISOString(), books, settings: { theme: prefs.theme, goals: prefs.goals } };
+  const blobToDataURL = (blob) => new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob); });
+  async function exportBooks() {
+    const uploads = {};
+    try {
+      const all = await Covers.allUploads();
+      for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
+    } catch {}
+    const clean = books;
+    const payload = { app: 'Tomestead', version: 3, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -691,7 +737,7 @@
   }
   function importBooks(file) {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const parsed = JSON.parse(reader.result);
         const incoming = Array.isArray(parsed) ? parsed : parsed.books;
@@ -706,9 +752,18 @@
             genre: String(b.genre || ''), review: String(b.review || ''),
             color: Number.isInteger(b.color) ? b.color : null, addedAt: Number(b.addedAt) || Date.now(),
           };
+          if (b.art && typeof b.art === 'object') clean.art = { status: String(b.art.status || ''), ids: Array.isArray(b.art.ids) ? b.art.ids.filter(Number.isFinite) : [], i: parseInt(b.art.i, 10) || 0, olKey: b.art.olKey ? String(b.art.olKey) : null };
+          if (b.about && b.about.text) clean.about = { text: String(b.about.text), source: String(b.about.source || 'Open Library'), url: String(b.about.url || '') };
+          if (b.lookedUp) clean.lookedUp = Number(b.lookedUp) || 0;
           const i = books.findIndex(x => x.id === clean.id);
           if (i >= 0) books[i] = clean; else books.push(clean);
           n++;
+        }
+        if (!Array.isArray(parsed) && parsed.uploads) {
+          for (const [id, dataURL] of Object.entries(parsed.uploads)) {
+            if (!dataURL || !String(dataURL).startsWith('data:image/')) continue;
+            try { const blob = await (await fetch(dataURL)).blob(); await Covers.putUpload(id, blob); } catch {}
+          }
         }
         const st = !Array.isArray(parsed) && parsed.settings;
         if (st) {
@@ -770,9 +825,9 @@
       const ghost = e.target.closest('.book.ghost');
       if (ghost) { const y = ghost.dataset.ghost; return openEditor(null, y === thisYear() ? today() : `${y}-12-31`); }
       const b = e.target.closest('.book');
-      if (b) return openDetail(b.dataset.id);
+      if (b) return openDetail(b.dataset.id, b);
       const it = e.target.closest('.ledger-item');
-      if (it) return openDetail(it.dataset.id);
+      if (it) return openDetail(it.dataset.id, it.querySelector('.thumb, .chip'));
       if (e.target.closest('[data-add]')) return openEditor();
       if (e.target.closest('[data-goal]')) return openGoal();
       if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
@@ -785,7 +840,7 @@
     let st;
     $('#cases').addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(updatePager, 60); }, { passive: true });
     document.addEventListener('keydown', e => {
-      if (onCustomize() || prefs.view !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden) return;
+      if (onCustomize() || prefs.view !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden || (reader && reader.isOpen())) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
       if (e.key === 'ArrowRight') goCase(currentCase() + 1);
       if (e.key === 'ArrowLeft') goCase(currentCase() - 1);
@@ -793,18 +848,6 @@
 
     document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => btn.closest('dialog').close()));
     document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
-    $('#detail').addEventListener('close', () => { openId = null; });
-
-    $('#dEdit').addEventListener('click', () => { const id = openId; $('#detail').close(); openEditor(id); });
-    $('#dRemove').addEventListener('click', (e) => {
-      const btn = e.currentTarget;
-      if (!btn.dataset.confirm) { btn.dataset.confirm = '1'; btn.textContent = 'Remove for good?'; return; }
-      const b = books.find(x => x.id === openId);
-      books = books.filter(x => x.id !== openId);
-      save(); $('#detail').close(); render();
-      toast(b ? `Removed “${b.title}”.` : 'Removed.');
-    });
-
     $('#bookForm').addEventListener('submit', submitEditor);
 
     // goals
@@ -827,6 +870,7 @@
     $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoal(); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
+    window.addEventListener('online', runLookupQueue);
     $('#importBtn').addEventListener('click', () => { more.open = false; $('#importFile').click(); });
     $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importBooks(f); e.target.value = ''; });
     $('#installBtn').addEventListener('click', async () => {
@@ -876,9 +920,28 @@
   }
 
   D.applyTheme(prefs.theme);
+  reader = window.TomesteadReader({
+    esc, colorOf, dims, starsHTML, fmtDate, toast,
+    spineEl: (b) => spine(b),
+    getBook: (id) => books.find(x => x.id === id),
+    saveBook: () => { save(); scheduleListRefresh(); },
+    lookup,
+    onEdit: (id) => openEditor(id),
+    onRemove: (id) => {
+      const b = books.find(x => x.id === id);
+      books = books.filter(x => x.id !== id);
+      Covers.delUpload(id);
+      save(); render();
+      toast(b ? `Removed “${b.title}”.` : 'Removed.');
+    },
+  });
+  // props on the reading table
+  $('#reader .rd-prop.candle').innerHTML = D.sized(D.TRINKETS.candle.svg, 1.25);
+  $('#reader .rd-prop.tea').innerHTML = D.sized(D.TRINKETS.teacup.svg, 1.35);
   wire();
   render();
   setupIosTip();
+  setTimeout(runLookupQueue, 1500);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => render());
 
   if ('serviceWorker' in navigator) {

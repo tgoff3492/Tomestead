@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div id="stage">
   <header class="topbar">
     <div class="brand">
       <h1>Tomestead</h1>
@@ -122,32 +123,44 @@
     </div>
   </div>
 
+  </div><!-- /stage -->
+
+  <!-- Reading table: a book pulled from the shelf -->
+  <div id="reader" class="reader" role="dialog" aria-modal="true" hidden>
+    <div id="rdDim" class="rd-dim"></div>
+    <div id="rdTable" class="rd-table" aria-hidden="true">
+      <div class="rd-surface"></div>
+      <div class="rd-pool"></div>
+      <div class="rd-vignette"></div>
+      <div class="rd-prop candle"></div>
+      <div class="rd-prop tea"></div>
+    </div>
+    <div id="rdShadow" class="rd-shadow"></div>
+    <div id="rdScene" class="rd-scene"></div>
+    <p id="rdHint" class="rd-hint">Tap the book to open it</p>
+    <div id="rdBar" class="rd-bar">
+      <button type="button" class="rd-btn" data-rd="return" data-when="rest">Put it back</button>
+      <button type="button" class="rd-btn primary" data-rd="open" data-when="rest">Open the book</button>
+      <button type="button" class="rd-btn" data-rd="close" data-when="open">Close the book</button>
+      <button type="button" class="rd-btn" data-rd="edit" data-when="open">Edit</button>
+      <span class="rd-wrap-cover" data-when="open">
+        <button type="button" class="rd-btn" data-rd="cover" aria-haspopup="true">Cover</button>
+        <div id="rdCoverMenu" class="rd-cover-menu" hidden>
+          <button type="button" data-rd="next-cover">Try another cover</button>
+          <button type="button" data-rd="photo">Use my own photo</button>
+          <button type="button" data-rd="plain">Use a plain cloth cover</button>
+          <button type="button" data-rd="find">Search for the cover again</button>
+        </div>
+      </span>
+      <button type="button" class="rd-btn danger" data-rd="remove" data-when="open">Remove</button>
+    </div>
+    <input id="rdPhoto" type="file" accept="image/*" hidden>
+  </div>
+
   <div id="iosTip" class="ios-tip" hidden>
     <p>To keep Tomestead on your Home Screen, tap the Share button, then <strong>Add to Home Screen</strong>.</p>
     <button id="iosTipClose" class="btn btn-ghost">Got it</button>
   </div>
-
-  <!-- Book details -->
-  <dialog id="detail" class="paper">
-    <article>
-      <div class="detail-head">
-        <span id="dChip" class="chip" aria-hidden="true"></span>
-        <div>
-          <h2 id="dTitle"></h2>
-          <p id="dAuthor" class="byline"></p>
-        </div>
-      </div>
-      <p id="dStars" class="stars-lg"></p>
-      <p id="dMeta" class="meta"></p>
-      <div id="dReview" class="review"></div>
-      <div class="actions">
-        <button id="dRemove" class="btn btn-ghost danger">Remove</button>
-        <span class="spacer"></span>
-        <button id="dEdit" class="btn btn-ink">Edit</button>
-        <button class="btn btn-ghost" data-close>Close</button>
-      </div>
-    </article>
-  </dialog>
 
   <!-- Add / edit form -->
   <dialog id="editor" class="paper">
@@ -239,6 +252,8 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="decor.js"></script>
+  <script src="covers.js"></script>
+  <script src="reader.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
