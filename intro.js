@@ -180,12 +180,28 @@
 
   const anims = [];
   const run = (target, frames, opts) => { const a = target.animate(frames, Object.assign({ fill: 'both' }, opts)); anims.push(a); return a; };
+  const stage = document.getElementById('stage');
   let done = false;
+  function cleanup() {
+    anims.forEach(a => a.cancel());
+    el.remove();
+    if (stage) stage.style.transformOrigin = '';
+    document.documentElement.classList.remove('intro-on');
+  }
   function finish(fast) {
     if (done) return;
     done = true;
-    const out = el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], { duration: fast ? 320 : 700, easing: 'ease-out', fill: 'forwards' });
-    out.finished.then(() => { anims.forEach(a => a.cancel()); el.remove(); document.documentElement.classList.remove('intro-on'); });
+    if (fast) {
+      // skipping: settle the shelf in place and fade the room quickly
+      const now = getComputedStyle(el).opacity;
+      anims.forEach(a => { if (a.effect && a.effect.target === stage) a.cancel(); });
+      anims.push(el.animate([{ opacity: now }, { opacity: 0 }], { duration: 320, easing: 'ease-out', fill: 'forwards' }));
+      anims[anims.length - 1].finished.then(cleanup, cleanup);
+    } else {
+      const out = el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], { duration: 600, easing: 'ease-out', fill: 'forwards' });
+      anims.push(out);
+      out.finished.then(cleanup, cleanup);
+    }
   }
 
   if (reduce) {
@@ -193,13 +209,22 @@
     setTimeout(() => finish(), 1400);
   } else {
     const go = () => {
+      const ZOOM_AT = 3900, ZOOM_FOR = 2600;
+      const PHASE_AT = ZOOM_AT + ZOOM_FOR * 0.3, PHASE_FOR = ZOOM_FOR * 0.78;
       run(title, [{ opacity: 0, transform: 'translateY(10px)', letterSpacing: '.32em' }, { opacity: 1, transform: 'none', letterSpacing: '.12em' }], { duration: 1200, easing: 'cubic-bezier(.2,.7,.2,1)' });
       run(el.querySelector('.intro-sub'), [{ opacity: 0 }, { opacity: .85 }], { duration: 900, delay: 500, easing: 'ease-out' });
       run(el.querySelector('.intro-rule'), [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 900, delay: 300, easing: 'cubic-bezier(.2,.7,.2,1)' });
       run(el.querySelector('.intro-titlecard'), [{ opacity: 1 }, { opacity: 0 }], { duration: 700, delay: 2100, easing: 'ease-in' });
-      run(room, [{ opacity: 0, transform: 'scale(1.05)' }, { opacity: 1, transform: 'scale(1)', offset: .32 }, { opacity: 1, transform: 'scale(1)' }], { duration: 3600, delay: 2500, easing: 'ease-out' });
-      run(room.firstElementChild, [{ transform: 'scale(1)' }, { transform: `scale(${f(zoom)})` }], { duration: 2400, delay: 3900, easing: 'cubic-bezier(.55,0,.25,1)' });
-      setTimeout(() => finish(), 5900);
+      run(room, [{ opacity: 0, transform: 'scale(1.05)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 1200, delay: 2500, easing: 'ease-out' });
+      // push in to the bookcase…
+      run(room.firstElementChild, [{ transform: 'scale(1)' }, { transform: `scale(${f(zoom)})` }], { duration: ZOOM_FOR, delay: ZOOM_AT, easing: 'cubic-bezier(.55,0,.3,1)' });
+      // …and partway through, the room dissolves and your own shelf comes forward to meet you
+      run(el, [{ opacity: 1 }, { opacity: 0 }], { duration: PHASE_FOR, delay: PHASE_AT, easing: 'cubic-bezier(.4,0,.6,1)' });
+      if (stage) {
+        stage.style.transformOrigin = `50% ${f(window.scrollY + vh * 0.55)}px`;
+        run(stage, [{ transform: 'scale(.86)' }, { transform: 'scale(1)' }], { duration: PHASE_FOR + 200, delay: PHASE_AT, easing: 'cubic-bezier(.3,0,.25,1)' });
+      }
+      setTimeout(() => { if (!done) { done = true; cleanup(); } }, PHASE_AT + PHASE_FOR + 260);
     };
     // start once the title font is ready (but never wait long)
     const fontReady = document.fonts && document.fonts.load ? Promise.race([document.fonts.load('400 48px "IM Fell English"'), new Promise(r => setTimeout(r, 700))]) : Promise.resolve();
