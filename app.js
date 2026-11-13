@@ -529,16 +529,16 @@
     const goal = goalFor(y), done = countInYear(y);
     if (!goal) {
       bar.className = 'goalbar';
-      bar.innerHTML = `<p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} finished in ${esc(y)}. Set a goal and empty spots will hold space on the shelf.</p><span class="spacer"></span><button class="btn btn-brass" data-goal>Set a ${esc(y)} goal</button>`;
+      bar.innerHTML = `<p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button>`;
       return;
     }
     const pct = Math.min(100, Math.round((done / goal) * 100));
     const met = done >= goal;
     bar.className = 'goalbar' + (met ? ' met' : '');
     const left = goal - done;
-    bar.innerHTML = `<p class="goal-text"><strong>${done} of ${goal}</strong> books for ${esc(y)}. ${met ? 'Goal reached.' : `${left} to go.`}</p>
+    bar.innerHTML = `<p class="goal-text"><strong>${done} of ${goal}</strong> ${met ? '· goal reached' : `· ${left} to go`}</p>
       <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(done, goal)}"><span style="width:${pct}%"></span></div>
-      <button class="btn btn-ghost" data-goal>Change goal</button>`;
+      <button class="linkbtn" data-goal>Change</button>`;
   }
 
   // ---------- page routing ----------
@@ -561,7 +561,66 @@
     $('#tab-list').setAttribute('aria-selected', String(!shelf));
     $('#sort').value = prefs.sort;
     if (shelf) renderShelf(); else renderList();
+    placeFloor();
     justAdded = null;
+  }
+
+  // ---------- the floor the bookcase stands on ----------
+  const BASEBOARD = 30, SETBACK = 14;   // the bookcase stands a little in front of the wall
+  let floorKey = '';
+  function placeFloor() {
+    const fl = $('#floor');
+    const show = !onCustomize() && prefs.view === 'shelf';
+    fl.hidden = !show;
+    if (!show) return;
+    const cases = $('#cases');
+    const pad = parseFloat(getComputedStyle(cases).paddingBottom) || 0;
+    const stageTop = $('#stage').getBoundingClientRect().top;
+    const baseY = cases.getBoundingClientRect().bottom - pad - stageTop;   // bottom of the bookcase
+    const top = Math.round(baseY - SETBACK - BASEBOARD);
+    const stageH = Math.max($('#stage').scrollHeight, window.innerHeight);
+    const W = Math.round(document.documentElement.clientWidth), H = Math.max(120, Math.round(stageH - top));
+    fl.style.top = `${top}px`;
+    fl.style.height = `${H}px`;
+    const caseRect = cases.getBoundingClientRect();
+    const key = [W, H, prefs.theme.wood, Math.round(caseRect.left), Math.round(caseRect.width)].join('|');
+    if (key === floorKey) return;
+    floorKey = key;
+    fl.innerHTML = floorSVG(W, H, caseRect.left + 0, caseRect.width);
+  }
+  function floorSVG(W, H, caseX, caseW) {
+    const wood = (D.WOODS.find(w => w.key === prefs.theme.wood) || D.WOODS[0]).v;
+    const r = Art.rng(77);
+    const fy = BASEBOARD;                       // where wall meets floor
+    let boards = '', y = fy, h = 9, row = 0;
+    while (y < H) {
+      const off = r() * 300;
+      for (let x = -off; x < W; x += 260 + r() * 340) boards += `<path d="M${x.toFixed(1)} ${y.toFixed(1)}v${h.toFixed(1)}" stroke="#000" stroke-opacity=".35"/>`;
+      boards += `<rect x="0" y="${y.toFixed(1)}" width="${W}" height="${h.toFixed(1)}" fill="${row % 3 === 0 ? '#ffd9a8' : '#000'}" opacity="${row % 3 === 0 ? .05 : .05 + r() * .08}"/>`;
+      boards += `<path d="M0 ${y.toFixed(1)}H${W}" stroke="#000" stroke-opacity=".45"/><path d="M0 ${(y + 1).toFixed(1)}H${W}" stroke="#fff" stroke-opacity=".05"/>`;
+      y += h; h *= 1.16; row++;
+    }
+    const cx = caseX + caseW / 2;
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false" style="display:block">
+      <defs>
+        <linearGradient id="fl-base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${wood[2]}"/><stop offset=".6" stop-color="${wood[3]}"/><stop offset="1" stop-color="${wood[4]}"/></linearGradient>
+        <linearGradient id="fl-floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a2f1c"/><stop offset=".3" stop-color="#3b2516"/><stop offset="1" stop-color="#1a1008"/></linearGradient>
+        <radialGradient id="fl-lamp" cx="${(cx * .7 / W).toFixed(3)}" cy="0" r=".7"><stop offset="0" stop-color="#ffc677" stop-opacity=".22"/><stop offset="1" stop-color="#ffc677" stop-opacity="0"/></radialGradient>
+        <radialGradient id="fl-shadow"><stop offset="0" stop-color="#000" stop-opacity=".75"/><stop offset=".6" stop-color="#000" stop-opacity=".35"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+        <linearGradient id="fl-wallao" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+        <linearGradient id="fl-fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${W}" height="${BASEBOARD}" fill="url(#fl-base)"/>
+      <rect x="0" y="0" width="${W}" height="3" fill="${wood[0]}" opacity=".55"/>
+      <rect x="0" y="5" width="${W}" height="1.2" fill="#000" opacity=".35"/>
+      <rect x="0" y="${fy}" width="${W}" height="${H - fy}" fill="url(#fl-floor)"/>
+      <g>${boards}</g>
+      <rect x="0" y="${fy}" width="${W}" height="${Math.min(40, H - fy)}" fill="url(#fl-wallao)"/>
+      <rect x="0" y="0" width="${W}" height="${H}" fill="url(#fl-lamp)"/>
+      <rect x="0" y="0" width="${W}" height="${H}" fill="url(#fl-fade)"/>
+      <ellipse cx="${cx.toFixed(1)}" cy="${(BASEBOARD + SETBACK).toFixed(1)}" rx="${(caseW * .56).toFixed(1)}" ry="16" fill="url(#fl-shadow)"/>
+      <rect x="${(caseX + 6).toFixed(1)}" y="${(BASEBOARD + SETBACK - 3).toFixed(1)}" width="${(caseW - 12).toFixed(1)}" height="7" rx="3" fill="#000" opacity=".55"/>
+    </svg>`;
   }
 
   // ---------- customize ----------
@@ -980,6 +1039,14 @@
     }));
     $('#sort').addEventListener('change', e => { prefs.sort = e.target.value; savePrefs(); caseIndex = 0; render(); });
     $('#search').addEventListener('input', e => { query = e.target.value; caseIndex = 0; render(); });
+    const openSearch = (on) => {
+      $('.toolbar').classList.toggle('searching', on);
+      $('#searchBtn').setAttribute('aria-expanded', String(on));
+      if (on) setTimeout(() => $('#search').focus(), 0);
+    };
+    $('#searchBtn').addEventListener('click', () => openSearch(!$('.toolbar').classList.contains('searching')));
+    $('#search').addEventListener('blur', () => { if (!query.trim()) openSearch(false); });
+    $('#search').addEventListener('keydown', e => { if (e.key === 'Escape') { query = ''; e.target.value = ''; render(); openSearch(false); } });
     $('#years').addEventListener('click', e => {
       const b = e.target.closest('[data-year]'); if (!b) return;
       prefs.year = b.dataset.year; caseIndex = 0; savePrefs(); render();
@@ -1001,7 +1068,7 @@
       if (e.target.closest('[data-add]')) return openEditor();
       if (e.target.closest('[data-goal]')) return openGoal();
       if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
-      if (e.target.closest('[data-clear]')) { query = ''; $('#search').value = ''; render(); }
+      if (e.target.closest('[data-clear]')) { query = ''; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
     });
 
     // bookcase paging
@@ -1085,6 +1152,7 @@
       toast('Back to the original look.');
     });
 
+    if ('ResizeObserver' in window) new ResizeObserver(() => placeFloor()).observe($('#cases'));
     let rt; let lastW = window.innerWidth;
     window.addEventListener('resize', () => {
       clearTimeout(rt);

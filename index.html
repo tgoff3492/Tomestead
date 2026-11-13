@@ -31,17 +31,14 @@
     <p class="intro-skip">Tap to skip</p>
   </div>
   <div id="stage">
+  <div id="floor" class="floor" aria-hidden="true" hidden></div>
   <header class="topbar">
     <div class="brand">
       <h1>Tomestead</h1>
       <p id="stats" class="stats">Every book you've read, on one shelf.</p>
     </div>
     <div class="controls">
-      <div class="viewtoggle" role="tablist" aria-label="View">
-        <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">Shelf</button>
-        <button role="tab" id="tab-list" aria-selected="false" data-view="list">List</button>
-      </div>
-      <button id="addBtn" class="btn btn-brass">Add a book</button>
+      <button id="addBtn" class="btn btn-brass btn-sm" aria-label="Add a book"><span aria-hidden="true">+ Add<span class="add-long"> a book</span></span></button>
       <details class="more">
         <summary aria-label="More options">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -61,16 +58,24 @@
 
   <div id="libraryPage">
     <div class="toolbar">
-      <div id="years" class="years" role="tablist" aria-label="Year read"></div>
+      <div class="viewtoggle pills" role="tablist" aria-label="View">
+        <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">Shelf</button>
+        <button role="tab" id="tab-list" aria-selected="false" data-view="list">List</button>
+      </div>
+      <div id="years" class="years pills" role="tablist" aria-label="Year read"></div>
       <div class="toolbar-right">
-        <label class="search">
+        <label class="search" id="searchWrap">
           <span class="sr-only">Search your books</span>
-          <input id="search" type="search" placeholder="Find a title or author" autocomplete="off">
+          <input id="search" type="search" placeholder="Title or author" autocomplete="off">
         </label>
-        <label class="sort">
-          <span>Arrange by</span>
+        <button type="button" id="searchBtn" class="icon-pill" aria-label="Search your books" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        </button>
+        <label class="sort icon-pill">
+          <span class="sr-only">Arrange by</span>
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <select id="sort">
-            <option value="added">Recently added</option>
+            <option value="added">Recent</option>
             <option value="finished">Date finished</option>
             <option value="author">Author</option>
             <option value="title">Title</option>
