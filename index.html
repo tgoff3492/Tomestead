@@ -17,8 +17,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script>try { if (sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
 <body>
+  <!-- startup: title, the room, then in to the bookcase -->
+  <div id="intro" class="intro" aria-hidden="true">
+    <div class="intro-room"></div>
+    <div class="intro-titlecard">
+      <h1 class="intro-title">Tomestead</h1>
+      <span class="intro-rule"></span>
+      <p class="intro-sub">A home for every book you’ve read</p>
+    </div>
+    <p class="intro-skip">Tap to skip</p>
+  </div>
   <div id="stage">
   <header class="topbar">
     <div class="brand">
@@ -117,6 +128,17 @@
         <p class="cz-hint" id="czTrinketHint">Choose what sits in the empty spots on your shelves.</p>
         <div id="czTrinkets" class="tiles" aria-label="Trinkets"></div>
       </section>
+      <section class="cz-section">
+        <h3>Reading table</h3>
+        <p class="cz-hint">Where a book lands when you take it off the shelf.</p>
+        <div id="czTablePreview" class="tb-preview" aria-hidden="true"></div>
+        <div id="czTable" class="tiles" role="radiogroup" aria-label="Reading table"></div>
+      </section>
+      <section class="cz-section">
+        <h3>On the table</h3>
+        <p class="cz-hint" id="czTableItemsHint">Pick up to 5 things to keep beside your book.</p>
+        <div id="czTableItems" class="tiles" aria-label="On the table"></div>
+      </section>
       <div class="cz-foot">
         <button id="czReset" class="btn btn-ghost">Reset to the original look</button>
       </div>
@@ -128,13 +150,7 @@
   <!-- Reading table: a book pulled from the shelf -->
   <div id="reader" class="reader" role="dialog" aria-modal="true" hidden>
     <div id="rdDim" class="rd-dim"></div>
-    <div id="rdTable" class="rd-table" aria-hidden="true">
-      <div class="rd-surface"></div>
-      <div class="rd-pool"></div>
-      <div class="rd-vignette"></div>
-      <div class="rd-prop candle"></div>
-      <div class="rd-prop tea"></div>
-    </div>
+    <div id="rdTable" class="rd-table" aria-hidden="true"></div>
     <div id="rdShadow" class="rd-shadow"></div>
     <div id="rdScene" class="rd-scene"></div>
     <p id="rdHint" class="rd-hint">Tap the book to open it</p>
@@ -239,7 +255,7 @@
   <div id="celebrate" class="celebrate" hidden>
     <div class="confetti" aria-hidden="true"></div>
     <div class="celebrate-card paper-panel" role="alertdialog" aria-labelledby="celebrateTitle" aria-describedby="celebrateText">
-      <div class="celebrate-seal" aria-hidden="true">★</div>
+      <div id="celebrateTrophy" class="celebrate-trophy" aria-hidden="true"></div>
       <h2 id="celebrateTitle">You did it!</h2>
       <p id="celebrateText"></p>
       <div class="actions center">
@@ -251,8 +267,11 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="art.js"></script>
   <script src="decor.js"></script>
+  <script src="intro.js"></script>
   <script src="covers.js"></script>
+  <script src="table.js"></script>
   <script src="reader.js"></script>
   <script src="app.js"></script>
 </body>

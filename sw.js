@@ -1,11 +1,14 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v4';
+const VERSION = 'tomestead-v5';
 const SHELL = [
   './',
   'index.html',
   'styles.css',
   'app.js',
+  'art.js',
   'decor.js',
+  'intro.js',
+  'table.js',
   'covers.js',
   'reader.js',
   'manifest.webmanifest',

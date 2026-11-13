@@ -26,6 +26,7 @@ window.TomesteadReader = function (api) {
   let busy = false;
 
   // ---------- geometry ----------
+  const PERSP = 1800, ORIGIN_Y = 0.42;   // must match .rd-scene perspective
   function geo() {
     const vw = window.innerWidth, vh = window.innerHeight;
     const narrow = vw < 720;
@@ -39,13 +40,21 @@ window.TomesteadReader = function (api) {
       Wb = Hb * 0.68;
     }
     const pan = Math.round(vh * 0.4);
-    return {
+    const g = {
       vw, vh, narrow, Hb, Wb, pan,
-      rest: { x: vw / 2, y: vh * (narrow ? 0.6 : 0.63), s: narrow ? 0.6 : 0.56, rx: 58, rz: -4 },
+      rest: { x: vw / 2, y: vh * (narrow ? 0.63 : 0.64), s: narrow ? 0.4 : 0.42, rx: 52, rz: -5 },
       open: narrow
         ? { x: vw * 0.05 + Wb / 2, y: vh * 0.45, s: 1 }
         : { x: vw / 2 + Wb / 2, y: vh * 0.47, s: 1 },
     };
+    // the table the book rests on
+    const frontY = vh * (narrow ? 0.85 : 0.875), farY = vh * (narrow ? 0.47 : 0.44);
+    const foot = Wb * g.rest.s;
+    const frontW = narrow ? vw * 0.96 : Math.min(1240, Math.max(foot * 3.6, vw * 0.8));
+    const T = window.TomesteadTable.geometry({ W: vw, H: vh, cx: vw / 2, frontY, farY, frontW, ratio: 0.72 });
+    const vBook = T.vAt(g.rest.y);
+    g.table = { W: vw, H: vh, cx: vw / 2, frontY, farY, frontW, ratio: 0.72, narrow, unit: (Hb * g.rest.s / 23) / T.k(vBook) };
+    return g;
   }
 
   const zAt = (d) => `0px 0px ${(S.Tb / 2 + d).toFixed(2)}px`;
@@ -142,7 +151,7 @@ window.TomesteadReader = function (api) {
     // book thickness, scaled up from the spine's own proportions
     const spineW = originEl && originEl.classList.contains('book') ? originEl.getBoundingClientRect().width : d.width;
     const spineH = originEl && originEl.classList.contains('book') ? originEl.getBoundingClientRect().height : d.height;
-    const Tb = Math.max(g.Hb * 0.06, Math.min(g.Hb * 0.22, spineW * g.Hb / spineH));
+    const Tb = Math.max(g.Hb * 0.05, Math.min(g.Hb * 0.3, spineW * g.Hb / spineH));
 
     const box = document.createElement('div');
     box.className = 'b3d';
@@ -177,39 +186,122 @@ window.TomesteadReader = function (api) {
     return { box, Tb, s0 };
   }
 
-  // ---------- states ----------
-  function originPose(g) {
-    const r = S.originRect;
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    if (S.mode === 'spine') {
-      const s0 = r.height / g.Hb;
-      return { x: cx, y: cy, z: -(g.Wb / 2) * s0, ry: 90, s: s0 };
+  // ---------- motion ----------
+  // CSS rotation order is rotateX · rotateY · rotateZ
+  function rot(rx, ry, rz) {
+    const r = Math.PI / 180;
+    const [a, b, c] = [rx * r, ry * r, rz * r];
+    const X = [[1, 0, 0], [0, Math.cos(a), -Math.sin(a)], [0, Math.sin(a), Math.cos(a)]];
+    const Y = [[Math.cos(b), 0, Math.sin(b)], [0, 1, 0], [-Math.sin(b), 0, Math.cos(b)]];
+    const Z = [[Math.cos(c), -Math.sin(c), 0], [Math.sin(c), Math.cos(c), 0], [0, 0, 1]];
+    const mul = (A, B) => A.map((row, i) => B[0].map((_, j) => row.reduce((t, _, k) => t + A[i][k] * B[k][j], 0)));
+    return mul(mul(X, Y), Z);
+  }
+  const apply = (M, p) => [0, 1, 2].map(i => M[i][0] * p[0] + M[i][1] * p[1] + M[i][2] * p[2]);
+
+  // monotone cubic through keys: smooth velocity, never overshoots (so the book never dips back into the shelf)
+  function monotone(ts, ys) {
+    const n = ts.length, d = [], m = new Array(n).fill(0);
+    for (let i = 0; i < n - 1; i++) d[i] = (ys[i + 1] - ys[i]) / (ts[i + 1] - ts[i]);
+    for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+      const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+      if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
     }
-    const s0 = r.height / g.Hb;
-    return { x: cx, y: cy, z: -(S.Tb / 2) * s0, s: s0 };
+    return (t) => {
+      let i = 0;
+      while (i < n - 2 && t > ts[i + 1]) i++;
+      const h = ts[i + 1] - ts[i], u = Math.min(1, Math.max(0, (t - ts[i]) / h));
+      const u2 = u * u, u3 = u2 * u;
+      return (2 * u3 - 3 * u2 + 1) * ys[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * ys[i + 1] + (u3 - u2) * h * m[i + 1];
+    };
   }
 
-  function flightFrames(g) {
+  function originPose(g) {
+    const r = S.originRect;
+    const s0 = r.height / g.Hb;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (S.mode === 'spine') return { x: cx, y: cy, z: -(g.Wb / 2) * s0, rx: 0, ry: 90, rz: 0, s: s0, tip: 0 };
+    return { x: cx, y: cy, z: -(S.Tb / 2) * s0, rx: 0, ry: 0, rz: 0, s: s0, tip: 0 };
+  }
+
+  // key poses from the shelf to the table
+  function flightKeys(g) {
     const o = originPose(g), R = g.rest;
-    const lift = Math.min(70, g.Wb * 0.18);
     const mid = (a, b, t) => a + (b - a) * t;
-    const spine = S.mode === 'spine';
+    const rest = { x: R.x, y: R.y, z: 0, rx: R.rx, ry: 0, rz: R.rz, s: R.s, tip: 0 };
+    if (S.mode !== 'spine') {
+      return [
+        [0, o],
+        [0.3, { ...o, y: o.y - 20, z: o.z + 120, s: mid(o.s, R.s, .4) }],
+        [0.74, { x: R.x, y: R.y - g.vh * 0.15, z: 110, rx: 30, ry: 0, rz: R.rz * .8, s: R.s * 1.05, tip: 0 }],
+        [0.92, { x: R.x, y: R.y - 3, z: 8, rx: R.rx - 2, ry: 0, rz: R.rz, s: R.s, tip: 0 }],
+        [1, rest],
+      ];
+    }
+    const depth = g.Wb * o.s;                    // how far the book reaches into the shelf
+    const clear = o.z + depth + 16;              // its back is out of the shelf here
     return [
-      { transform: tf(g, o), offset: 0, easing: EASE_OUT },
-      // slide straight out of the slot, toward you
-      { transform: tf(g, { ...o, y: o.y - 3, z: o.z + lift }), offset: 0.2, easing: 'cubic-bezier(.4,0,.3,1)' },
-      // lift and begin to turn the cover toward you
-      { transform: tf(g, { x: mid(o.x, R.x, 0.18), y: o.y - g.vh * 0.06, z: o.z + lift + 120, rx: -6, ry: spine ? 62 : 0, rz: spine ? 5 : 0, s: mid(o.s, R.s, 0.35) }), offset: 0.42, easing: 'cubic-bezier(.35,0,.25,1)' },
-      // carried down over the table as the camera follows
-      { transform: tf(g, { x: mid(o.x, R.x, 0.85), y: R.y - g.vh * 0.18, z: 150, rx: 32, ry: spine ? 8 : 0, rz: -9, s: R.s * 1.08 }), offset: 0.74, easing: 'cubic-bezier(.3,0,.2,1)' },
-      // set down
-      { transform: tf(g, { x: R.x, y: R.y - 6, z: 14, rx: R.rx - 3, rz: R.rz - 1, s: R.s }), offset: 0.92, easing: 'cubic-bezier(.3,0,.4,1)' },
-      { transform: tf(g, { x: R.x, y: R.y, z: 0, rx: R.rx, rz: R.rz, s: R.s }), offset: 1 },
+      [0, o],
+      [0.12, { ...o, y: o.y - 1, z: o.z + 5, tip: -9 }],                         // tip the top toward you
+      [0.34, { ...o, y: o.y - 7, z: clear, tip: -3 }],                          // slide it straight out
+      [0.56, { x: mid(o.x, R.x, .45), y: o.y - g.vh * 0.03, z: clear + 110, rx: -3, ry: 46, rz: 3, s: mid(o.s, R.s, .5), tip: 0 }],
+      [0.8, { x: R.x, y: R.y - g.vh * 0.15, z: 110, rx: 30, ry: 6, rz: R.rz * .8, s: R.s * 1.05, tip: 0 }],
+      [0.93, { x: R.x, y: R.y - 3, z: 8, rx: R.rx - 2, ry: 0, rz: R.rz, s: R.s, tip: 0 }],
+      [1, rest],
     ];
+  }
+
+  // sample the path densely so the browser just plays it back, frame to frame
+  function sampleFlight(g, n = 96) {
+    const keys = flightKeys(g);
+    const ts = keys.map(k => k[0]);
+    const ch = {};
+    ['x', 'y', 'z', 'rx', 'ry', 'rz', 's', 'tip'].forEach(c => { ch[c] = monotone(ts, keys.map(k => k[1][c] || 0)); });
+    const slot = S.mode === 'spine' ? S.originRect : null;
+    const pivot = [-g.Wb / 2, g.Hb / 2, 0];       // bottom of the spine: the book tips over this edge
+    const Ox = g.vw / 2, Oy = g.vh * ORIGIN_Y;
+    const proj = (p) => { const k = PERSP / (PERSP - p[2]); return [Ox + (p[0] - Ox) * k, Oy + (p[1] - Oy) * k]; };
+    const box = [], clip = [];
+    let cleared = !slot;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const p = {}; for (const c in ch) p[c] = ch[c](t);
+      // tipping turns about the pivot, not the middle of the book
+      if (Math.abs(p.tip) > 0.01) {
+        const sp = pivot.map(v => v * p.s);
+        const a = apply(rot(p.rx, p.ry, p.rz), sp), b = apply(rot(p.rx + p.tip, p.ry, p.rz), sp);
+        p.x += a[0] - b[0]; p.y += a[1] - b[1]; p.z += a[2] - b[2];
+      }
+      box.push({ transform: tf(g, { x: p.x, y: p.y, z: p.z, rx: p.rx + p.tip, ry: p.ry, rz: p.rz, s: p.s }), offset: t });
+      // while any part of the book is still inside the shelf, hide what its neighbours would cover
+      let poly = 'polygon(-4000px -4000px, 9000px -4000px, 9000px 9000px, -4000px 9000px)';
+      if (!cleared) {
+        const M = rot(p.rx + p.tip, p.ry, p.rz);
+        const W = g.Wb / 2, H = g.Hb / 2, T2 = S.Tb / 2;
+        const world = (l) => { const q = apply(M, l.map(v => v * p.s)); return [p.x + q[0], p.y + q[1], p.z + q[2]]; };
+        const corners = [[-W, -H, -T2], [-W, -H, T2], [-W, H, -T2], [-W, H, T2], [W, -H, -T2], [W, -H, T2], [W, H, -T2], [W, H, T2]].map(world);
+        const back = Math.min(...corners.map(c => c[2]));
+        if (back < 0) {
+          const face = corners.slice(0, 4).map(proj);
+          const x0 = Math.min(slot.left, ...face.map(q => q[0])) - 0.5, x1 = Math.max(slot.left + slot.width, ...face.map(q => q[0])) + 0.5;
+          poly = `polygon(${x0.toFixed(1)}px -4000px, ${x1.toFixed(1)}px -4000px, ${x1.toFixed(1)}px 9000px, ${x0.toFixed(1)}px 9000px)`;
+        } else cleared = true;
+      }
+      clip.push({ clipPath: poly, offset: t });
+    }
+    return { box, clip };
   }
 
   const restT = (g) => tf(g, { x: g.rest.x, y: g.rest.y, rx: g.rest.rx, rz: g.rest.rz, s: g.rest.s });
   const openT = (g) => tf(g, { x: g.open.x, y: g.open.y, z: 30, rx: g.narrow ? 4 : 7, s: 1 });
+
+  function drawTable(g) {
+    const th = api.theme();
+    const out = window.TomesteadTable.drawTable({ ...g.table, style: th.table, items: th.tableItems, maxItems: g.narrow ? 4 : 5, id: 'rt' });
+    tableEl.innerHTML = out.html;
+  }
 
   function placeShadow(g, state) {
     const R = g.rest;
@@ -252,7 +344,9 @@ window.TomesteadReader = function (api) {
     paintCover(b, S.box.querySelector('.cv'));
     lookupIfNeeded(b);
 
-    // lock the page behind
+    // set the table and lock the page behind
+    drawTable(g);
+    stage.classList.add('panned');
     S.scrollY = window.scrollY;
     document.documentElement.classList.add('reading');
     stage.inert = true;
@@ -277,25 +371,27 @@ window.TomesteadReader = function (api) {
       return;
     }
 
-    const T = g.narrow ? 1500 : 1650;
-    S.box.style.transform = flightFrames(g)[0].transform;
+    const T = g.narrow ? 1750 : 1950;
+    const path = sampleFlight(g);
+    S.box.style.transform = path.box[0].transform;
+    scene.style.clipPath = path.clip[0].clipPath;
     // hide the real spine the instant the 3D copy covers it
     requestAnimationFrame(() => { if (originEl) originEl.style.visibility = 'hidden'; });
 
+    // the camera pans down only once the book is clear of the shelf
     const pan = [
-      anim(stage, [{ transform: 'translateY(0)', filter: 'blur(0px) brightness(1)' }, { transform: `translateY(${-g.pan}px)`, filter: 'blur(3px) brightness(.5)' }],
-        { duration: T * 0.72, delay: T * 0.2, easing: EASE_IN_OUT }),
-      anim(tableEl, [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: T * 0.72, delay: T * 0.2, easing: EASE_IN_OUT }),
-      anim(dim, [{ opacity: 0 }, { opacity: 1 }], { duration: T * 0.6, delay: T * 0.2, easing: 'ease-out' }),
+      anim(stage, [{ transform: 'translateY(0)' }, { transform: `translateY(${-g.pan}px)` }], { duration: T * 0.54, delay: T * 0.32, easing: EASE_IN_OUT }),
+      anim(tableEl, [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: T * 0.54, delay: T * 0.32, easing: EASE_IN_OUT }),
+      anim(dim, [{ opacity: 0 }, { opacity: 1 }], { duration: T * 0.5, delay: T * 0.28, easing: 'ease-out' }),
     ];
-    stage.classList.add('panned');
     placeShadow(g, 'rest');
-    const flight = anim(S.box, flightFrames(g), { duration: T });
+    const flight = anim(S.box, path.box, { duration: T });
+    const clipA = anim(scene, path.clip, { duration: T }).then(() => { scene.style.clipPath = ''; });
     // shadow arrives as the book touches down, with a soft settle
     anim(shadow, [{ opacity: 0, transform: `rotate(${g.rest.rz}deg) scale(1.5)` }, { opacity: 0.55, transform: `rotate(${g.rest.rz}deg) scale(1)` }],
-      { duration: T * 0.28, delay: T * 0.72, easing: 'ease-out' });
+      { duration: T * 0.26, delay: T * 0.74, easing: 'ease-out' });
 
-    await Promise.all([flight, ...pan]);
+    await Promise.all([flight, clipA, ...pan]);
     S.state = 'rest';
     S.box.setAttribute('tabindex', '0');
     setBar('rest');
@@ -389,20 +485,19 @@ window.TomesteadReader = function (api) {
       return;
     }
 
-    const T = g.narrow ? 1350 : 1500;
-    const frames = flightFrames(g).reverse().map((f, i, arr) => ({ transform: f.transform, offset: 1 - f.offset, easing: i < arr.length - 1 ? 'cubic-bezier(.45,0,.55,1)' : undefined }));
-    frames[0].easing = 'cubic-bezier(.5,0,.6,1)';
-    // tweak: slide home gently at the very end
-    frames[frames.length - 2].easing = 'cubic-bezier(.2,.7,.25,1)';
-    const fly = anim(S.box, frames.map(f => { const o = { transform: f.transform, offset: f.offset }; if (f.easing) o.easing = f.easing; return o; }), { duration: T });
+    const T = g.narrow ? 1650 : 1850;
+    const path = sampleFlight(g);
+    const rev = (arr) => arr.slice().reverse().map(k => ({ ...k, offset: 1 - k.offset }));
+    const fly = anim(S.box, rev(path.box), { duration: T });
+    const clipA = anim(scene, rev(path.clip), { duration: T }).then(() => { scene.style.clipPath = ''; });
     anim(shadow, [{ opacity: 0.55 }, { opacity: 0 }], { duration: T * 0.2 });
+    // the camera is back on the shelf before the book slides into its slot
     const pan = [
-      anim(stage, [{ transform: `translateY(${-g.pan}px)`, filter: 'blur(3px) brightness(.5)' }, { transform: 'translateY(0)', filter: 'blur(0px) brightness(1)' }],
-        { duration: T * 0.7, delay: T * 0.08, easing: EASE_IN_OUT }),
-      anim(tableEl, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: T * 0.7, delay: T * 0.08, easing: EASE_IN_OUT }),
-      anim(dim, [{ opacity: 1 }, { opacity: 0 }], { duration: T * 0.6, delay: T * 0.2, easing: 'ease-in' }),
+      anim(stage, [{ transform: `translateY(${-g.pan}px)` }, { transform: 'translateY(0)' }], { duration: T * 0.52, delay: T * 0.1, easing: EASE_IN_OUT }),
+      anim(tableEl, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: T * 0.52, delay: T * 0.1, easing: EASE_IN_OUT }),
+      anim(dim, [{ opacity: 1 }, { opacity: 0 }], { duration: T * 0.5, delay: T * 0.16, easing: 'ease-in' }),
     ];
-    await Promise.all([fly, ...pan]);
+    await Promise.all([fly, clipA, ...pan]);
     stage.classList.remove('panned');
     finish(true);
   }
@@ -415,7 +510,7 @@ window.TomesteadReader = function (api) {
       if (!reduce()) setTimeout(() => el.focus({ preventScroll: true }), 0);
     }
     if (S && S.box) S.box.remove();
-    stage.style.transform = ''; stage.style.filter = ''; stage.classList.remove('panned');
+    stage.style.transform = ''; stage.classList.remove('panned'); scene.style.clipPath = '';
     tableEl.style.transform = ''; dim.style.opacity = ''; shadow.style.opacity = '0';
     root.hidden = true; root.style.opacity = '';
     stage.inert = false;
@@ -553,6 +648,7 @@ window.TomesteadReader = function (api) {
       scene.appendChild(S.box);
       paintCover(b, S.box.querySelector('.cv'));
       stage.style.transform = `translateY(${-g.pan}px)`;
+      drawTable(g);
       if (state === 'open') {
         S.box.style.transform = openT(g);
         openLeaves();

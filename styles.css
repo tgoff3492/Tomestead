@@ -210,7 +210,6 @@ main { max-width: 1180px; margin: 0 auto; padding: 0 14px 40px; }
     linear-gradient(90deg, var(--recess-1), var(--recess-2) 50%, var(--recess-1));
   box-shadow: inset 0 14px 18px -8px rgba(0,0,0,.75), inset 10px 0 14px -10px rgba(0,0,0,.8), inset -10px 0 14px -10px rgba(0,0,0,.8);
 }
-.shelf-row.sparse { justify-content: space-around; }
 .plank {
   height: 20px; position: relative; z-index: 2;
   background: linear-gradient(180deg, var(--wood-hi) 0, var(--wood-lt) 18%, var(--wood) 60%, var(--wood-dk));
@@ -319,14 +318,39 @@ main { max-width: 1180px; margin: 0 auto; padding: 0 14px 40px; }
 .book.ghost:hover, .book.ghost:focus-visible { filter: none; box-shadow: inset 0 0 0 1.5px var(--brass-lt); color: var(--brass-lt); }
 .book.ghost:hover .g-plus, .book.ghost:focus-visible .g-plus { opacity: 1; }
 
-/* lying book, used as decor or to fill a row */
+/* bookends and trinkets */
 .decor { flex: 0 0 auto; align-self: flex-end; pointer-events: none; }
 .decor svg { display: block; }
-.decor.trinket { margin-left: 10px; }
-.decor.trinket.first { margin-left: auto; }
-.shelf-row.sparse .decor.trinket { margin-left: 0; }
 .decor.bookend.left { margin-right: 2px; }
 .decor.bookend.right { margin-left: 2px; transform: scaleX(-1); }
+.shelf-row.sparse { padding: 0; }
+.nook { position: relative; flex: 1 1 auto; align-self: stretch; min-width: 0; z-index: 3; pointer-events: none; }
+.trinket { position: absolute; }
+.trinket > svg { display: block; position: relative; filter: drop-shadow(5px 2px 5px rgba(0,0,0,.4)) brightness(.93) saturate(.92); }
+.trinket.topper > svg { filter: none; }
+.trinket .halo {
+  position: absolute; width: 260px; height: 260px; margin: -130px 0 0 -130px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(255,196,110,.26), rgba(255,170,80,.08) 38%, transparent 66%);
+  mix-blend-mode: screen; animation: flicker 3.2s ease-in-out infinite;
+}
+.trinket .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flame 2.6s ease-in-out infinite; }
+.trinket .steam path { animation: steam 4s ease-in-out infinite; }
+.trinket .steam path + path { animation-delay: -2s; }
+.trinket .breathe { transform-box: fill-box; transform-origin: 50% 100%; animation: breathe-cat 4.2s ease-in-out infinite; }
+@keyframes flicker { 0%,100% { opacity: .9; } 30% { opacity: 1; } 55% { opacity: .78; } 70% { opacity: .95; } }
+@keyframes flame { 0%,100% { transform: scale(1,1) skewX(0); } 25% { transform: scale(.96,1.05) skewX(2deg); } 50% { transform: scale(1.03,.97) skewX(-1.5deg); } 75% { transform: scale(.98,1.03) skewX(1deg); } }
+@keyframes steam { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+@keyframes breathe-cat { 0%,100% { transform: scale(1,1); } 50% { transform: scale(1.006,1.022); } }
+
+/* trophies on top of the bookcase */
+.cases.has-top { padding-top: 116px; }
+.case-top {
+  position: absolute; left: 34px; bottom: 100%; z-index: 3;
+  display: flex; align-items: flex-end; gap: 14px; margin-bottom: -2px;
+}
+.trophy { border: 0; padding: 0; background: none; cursor: pointer; display: block; }
+.trophy svg { display: block; filter: drop-shadow(4px 2px 5px rgba(0,0,0,.45)); transition: transform .2s ease; }
+.trophy:hover svg, .trophy:focus-visible svg { transform: translateY(-3px); }
 
 .empty-note {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -510,6 +534,12 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
   background: rgba(239,227,200,.85); color: transparent; box-shadow: 0 0 0 1px rgba(42,30,22,.3);
 }
 .tile[aria-pressed="true"] .check, .tile[aria-checked="true"] .check { background: var(--ink); color: var(--paper); }
+.tb-preview {
+  position: relative; height: 260px; margin: 0 0 14px; border-radius: 8px; overflow: hidden;
+  background: radial-gradient(ellipse 70% 80% at 40% 0%, rgba(255,196,110,.16), transparent 70%), linear-gradient(180deg, #24170e, #120b06);
+  box-shadow: inset 0 0 0 1px rgba(42,30,22,.25);
+}
+.tile .tile-art.table-art { position: relative; place-items: stretch; background: linear-gradient(180deg, #24170e, #120b06); }
 .wood-swatch { height: 100%; display: grid; grid-template-rows: 1fr 14px 1fr 14px; }
 .cz-foot { display: flex; justify-content: flex-end; padding-top: 16px; border-top: 1px solid rgba(42,30,22,.14); margin-top: 10px; }
 
@@ -520,9 +550,12 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
 }
 .celebrate[hidden] { display: none; }
 .celebrate-card {
-  position: relative; z-index: 2; width: min(440px, 100%); text-align: center; padding: 30px 26px 22px;
+  position: relative; z-index: 2; width: min(440px, 100%); text-align: center; padding: 30px 26px 22px; margin-top: 90px;
   animation: pop .5s cubic-bezier(.2,.9,.3,1.3) both;
 }
+.celebrate-trophy { margin: -110px auto 4px; width: max-content; filter: drop-shadow(0 10px 14px rgba(0,0,0,.45)); animation: rise .7s .15s cubic-bezier(.2,.9,.3,1.2) both; }
+.celebrate-trophy svg { display: block; }
+@keyframes rise { from { transform: translateY(30px) scale(.8); opacity: 0; } }
 .celebrate-seal {
   width: 74px; height: 74px; margin: -66px auto 8px; border-radius: 50%;
   display: grid; place-items: center; font-size: 2.2rem; color: #fff6dc;
@@ -546,6 +579,8 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
 /* ---------- Small screens ---------- */
 @media (max-width: 640px) {
   :root { --row-h: 218px; }
+  .cases.has-top { padding-top: 94px; }
+  .case-top { left: 20px; }
   body { font-size: 16px; }
   .topbar { padding-left: 14px; padding-right: 14px; }
   .toolbar { padding-left: 14px; padding-right: 14px; }
@@ -559,6 +594,7 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
   .goalbar { flex-wrap: wrap; }
   .goal-meter { order: 3; flex-basis: 100%; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .tb-preview { height: 200px; }
   .cz-head h2 { font-size: 1.6rem; }
   .cz-preview { zoom: .5; }
   .ledger { background-image: none; }
@@ -580,51 +616,22 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
    ========================================================= */
 html.reading, html.reading body { overflow: hidden; }
 #stage { transform-origin: 50% 0; }
-#stage.panned { will-change: transform, filter; }
+#stage.panned { will-change: transform; }
 
 .reader { position: fixed; inset: 0; z-index: 60; overflow: hidden; }
 .reader[hidden] { display: none; }
 .rd-dim {
   position: absolute; inset: 0; z-index: 1; opacity: 0; pointer-events: none;
-  background: radial-gradient(ellipse 80% 60% at 50% 25%, rgba(8,10,9,.05), rgba(8,10,9,.55));
+  background: radial-gradient(ellipse 80% 60% at 50% 25%, rgba(8,10,9,.5), rgba(8,10,9,.82));
 }
 
 /* the table rises into view as the camera pans down */
-.rd-table {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 66vh; z-index: 2;
-  transform: translateY(100%);
-  perspective: 1100px; perspective-origin: 50% -30%;
-  pointer-events: none; overflow: hidden;
-}
-.rd-surface {
-  position: absolute; left: -45%; right: -45%; bottom: 0; height: 175%;
-  transform-origin: 50% 100%; transform: rotateX(56deg);
-  background:
-    /* grain */
-    repeating-linear-gradient(90deg, rgba(0,0,0,0) 0 9px, rgba(0,0,0,.05) 10px, rgba(0,0,0,0) 12px 23px),
-    repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 3px, rgba(0,0,0,0) 3px 41px),
-    /* board seams */
-    repeating-linear-gradient(90deg, rgba(0,0,0,0) 0 158px, rgba(0,0,0,.45) 158px 160px, rgba(255,255,255,.07) 160px 161px),
-    /* tone */
-    linear-gradient(180deg, var(--wood-dk), var(--wood) 35%, var(--wood-lt) 80%, var(--wood-hi));
-  box-shadow: 0 -30px 60px rgba(0,0,0,.45);
-}
-.rd-surface::before { /* far edge of the table */
-  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26px;
-  background: linear-gradient(180deg, var(--wood-hi), var(--wood-dk));
-}
-.rd-pool { /* lamplight on the table */
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(ellipse 55% 60% at 50% 45%, rgba(255,205,130,.30), rgba(255,205,130,0) 70%),
-    radial-gradient(ellipse 120% 90% at 50% 120%, rgba(0,0,0,0) 40%, rgba(0,0,0,.45));
-  mix-blend-mode: soft-light;
-}
-.rd-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 90% 80% at 50% 50%, transparent 55%, rgba(0,0,0,.4)); }
-.rd-prop { position: absolute; z-index: 1; }
-.rd-prop.candle { left: 6%; bottom: 30%; }
-.rd-prop.tea { right: 7%; bottom: 20%; }
-.rd-prop svg { display: block; filter: drop-shadow(0 10px 8px rgba(0,0,0,.45)); }
+.rd-table { position: absolute; inset: 0; z-index: 2; transform: translateY(100%); pointer-events: none; overflow: hidden; }
+.rd-table .tprop, .tb-preview .tprop { position: absolute; }
+.rd-table .tprop svg, .tb-preview .tprop svg { display: block; }
+.tprop .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flame 2.6s ease-in-out infinite; }
+.tprop .steam path { animation: steam 4s ease-in-out infinite; }
+.tprop .steam path + path { animation-delay: -2s; }
 
 .rd-shadow {
   position: absolute; z-index: 3; opacity: 0; pointer-events: none;
@@ -839,11 +846,36 @@ html.reading, html.reading body { overflow: hidden; }
 }
 
 @media (max-width: 720px) {
-  .rd-prop.candle { display: none; }
-  .rd-prop.tea { right: 4%; bottom: 8%; }
   .rd-btn { padding: 8px 12px; }
   .rd-hint { font-size: 1.05rem; }
 }
 @media (max-width: 640px) {
   .ledger-item .thumb { width: 26px; height: 38px; grid-row: span 3; }
+}
+
+/* =========================================================
+   Startup
+   ========================================================= */
+.intro {
+  position: fixed; inset: 0; z-index: 300; overflow: hidden; cursor: pointer;
+  background: radial-gradient(ellipse 70% 60% at 50% 45%, #1d1610, #080604);
+}
+.no-intro .intro { display: none; }
+html.intro-on, html.intro-on body { overflow: hidden; }
+.intro-room { position: absolute; inset: 0; opacity: 0; }
+.intro-room svg { display: block; width: 100%; height: 100%; will-change: transform; }
+.intro-titlecard {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 0 20px; text-align: center;
+}
+.intro-title {
+  margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(3rem, 11vw, 6.2rem); line-height: 1;
+  letter-spacing: .12em; padding-left: .12em; color: var(--brass-lt); opacity: 0;
+  text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 40px rgba(242,182,90,.35);
+}
+.intro-rule { width: min(260px, 50vw); height: 1px; background: linear-gradient(90deg, transparent, var(--brass), transparent); transform: scaleX(0); }
+.intro-sub { margin: 0; font-family: var(--serif); font-style: italic; font-size: clamp(1rem, 3.6vw, 1.3rem); color: #e6dcc4; opacity: 0; }
+.intro-skip {
+  position: absolute; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom)); margin: 0; text-align: center;
+  font-size: .85rem; color: rgba(230,220,196,.45); letter-spacing: .06em;
 }

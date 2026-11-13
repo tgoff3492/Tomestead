@@ -3,6 +3,7 @@
   'use strict';
 
   const D = window.TomesteadDecor;
+  const Art = window.TomesteadArt;
   const STORE = 'tomestead.books.v1';
   const PREFS = 'tomestead.prefs.v1';
   const SHELVES_PER_CASE = 3;
@@ -37,10 +38,11 @@
   let books = load();
   let prefs = Object.assign({
     view: 'shelf', sort: 'added', year: 'all', iosTipDismissed: false,
-    theme: { ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets] }, goals: {},
+    theme: { ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, goals: {},
   }, loadJSON(PREFS, {}));
-  prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets] }, prefs.theme || {});
+  prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, prefs.theme || {});
   prefs.goals = prefs.goals || {};
+  prefs.trophies = prefs.trophies || {};
   let query = '';
   let justAdded = null;
   let editingId = null;
@@ -97,6 +99,24 @@
   }
   const countInYear = (y) => books.filter(b => yearOf(b) === y).length;
   const goalFor = (y) => (prefs.goals[y] > 0 ? prefs.goals[y] : 0);
+
+  // a trophy is earned the moment a year's goal is met, and stays earned
+  function syncTrophies() {
+    let changed = false;
+    Object.keys(prefs.goals).forEach(y => {
+      const g = goalFor(y);
+      if (!g || countInYear(y) < g) return;
+      const t = prefs.trophies[y];
+      if (!t || t.goal < g) { prefs.trophies[y] = { goal: g, at: (t && t.at) || today() }; changed = true; }
+    });
+    if (changed) savePrefs();
+  }
+  function trophiesShown() {
+    const y = prefs.year;
+    const all = Object.keys(prefs.trophies).sort().map(yr => ({ year: yr, ...prefs.trophies[yr] }));
+    if (y === 'none' || query.trim()) return [];
+    return y === 'all' ? all : all.filter(t => t.year === y);
+  }
 
   // ---------- sorting & filtering ----------
   function visibleBooks() {
@@ -173,7 +193,6 @@
     const theme = prefs.theme;
     const be = D.BOOKENDS[theme.bookend] || D.BOOKENDS.none;
     const bookendW = be.w ? be.w * s + 2 : 0;
-    const trinkets = theme.trinkets.filter(k => D.TRINKETS[k]);
     const gap = 3;
 
     container.innerHTML = '';
@@ -185,6 +204,7 @@
     probe.querySelector('.shelves').appendChild(rowEl);
     const cs = getComputedStyle(rowEl);
     const inner = rowEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const rowH = rowEl.clientHeight;
     container.removeChild(probe);
     const avail = Math.max(100, inner - bookendW * 2);
 
@@ -200,11 +220,17 @@
     const maxRows = opts.maxRows || Infinity;
     if (rows.length > maxRows) rows.length = maxRows;
     const minRows = opts.minRows ?? SHELVES_PER_CASE;
-    while (rows.length < minRows || rows.length % (opts.perCase || SHELVES_PER_CASE)) rows.push([]);
-
-    let tIdx = 0;
-    const cases = [];
     const perCase = opts.perCase || SHELVES_PER_CASE;
+    while (rows.length < minRows || rows.length % perCase) rows.push([]);
+
+    // where each trinket goes: every piece appears once, somewhere sensible
+    const info = rows.map((row, ri) => {
+      const w = row.reduce((t, it) => t + width(it) + gap, 0) + (row.length ? bookendW * 2 : 0);
+      return { ri, books: row.length > 0, free: inner - w, caseIdx: Math.floor(ri / perCase) };
+    });
+    const plan = planTrinkets(info, s, rowH);
+
+    const cases = [];
     rows.forEach((row, ri) => {
       if (ri % perCase === 0) {
         const c = makeCase(opts.plate ? opts.plate(Math.floor(ri / perCase)) : '');
@@ -216,26 +242,10 @@
       shelf.className = 'shelf';
       const r = document.createElement('div');
       r.className = 'shelf-row' + (row.length ? '' : ' sparse');
-      let w = 0;
       if (row.length && be.w) r.appendChild(decorEl(D.sized(be.svg, s), 'bookend left'));
-      row.forEach(it => {
-        r.appendChild(it.type === 'book' ? spine(it.b) : ghostSpine(it));
-        w += width(it) + gap;
-      });
+      row.forEach(it => r.appendChild(it.type === 'book' ? spine(it.b) : ghostSpine(it)));
       if (row.length && be.w) r.appendChild(decorEl(D.sized(be.svg, s), 'bookend right'));
-
-      // trinkets fill the empty spots
-      let free = avail - w;
-      const max = row.length ? 2 : 3;
-      const placed = [];
-      for (let tries = 0; trinkets.length && placed.length < max && tries < trinkets.length; tries++) {
-        const key = trinkets[(tIdx + tries) % trinkets.length];
-        if (placed.includes(key)) continue;
-        const need = D.TRINKETS[key].w * s + 14;
-        const room = row.length ? (placed.length ? need + 60 : need + 12) : need;
-        if (free >= room) { placed.push(key); free -= need; tIdx = (tIdx + tries + 1) % trinkets.length; tries = -1; }
-      }
-      placed.forEach((key, i) => r.appendChild(decorEl(D.sized(D.TRINKETS[key].svg, s), 'trinket' + (i === 0 ? ' first' : ''))));
+      if (plan[ri].length) r.appendChild(nookEl(plan[ri], info[ri], s));
 
       shelf.appendChild(r);
       const plank = document.createElement('div');
@@ -243,8 +253,119 @@
       shelf.appendChild(plank);
       shelves.appendChild(shelf);
     });
+
+    // trophies stand on top of the first bookcase
+    const tro = opts.trophies || [];
+    container.classList.toggle('has-top', tro.length > 0);
+    if (tro.length && cases[0]) {
+      const top = document.createElement('div');
+      top.className = 'case-top';
+      top.innerHTML = tro.map(t => `<button type="button" class="trophy" data-trophy="${esc(t.year)}" aria-label="${esc(t.year)} reading goal trophy: ${t.goal} books">${Art.drawTrophy(t.year, t.goal, 0.72 * s)}</button>`).join('');
+      cases[0].appendChild(top);
+    }
     fitSpines(container);
     return cases;
+  }
+
+  // ---------- trinket placement ----------
+  const tsize = (key, s) => { const z = Art.size(key); return { w: z.w * s, h: z.h * s, base: z.base * s, top: z.top && { y: z.top.y * s, x0: z.top.x0 * s, x1: z.top.x1 * s }, glow: z.glow && { x: z.glow.x * s, y: z.glow.y * s } }; };
+
+  function planTrinkets(info, s, rowH) {
+    const picks = [...new Set(prefs.theme.trinkets)].filter(k => D.TRINKETS[k] && Art.A[k]);
+    const plan = info.map(() => []);
+    if (!picks.length) return plan;
+    // a stack of books makes a riser for one small piece (the last small one picked)
+    const piles = [];
+    const used = new Set();
+    let stackTop = null;
+    if (picks.includes('stack')) {
+      const st = tsize('stack', s), room = st.top.x1 - st.top.x0;
+      stackTop = picks.filter(o => o !== 'stack' && D.TRINKETS[o].topper && tsize(o, s).w <= room && st.h - st.top.y + tsize(o, s).h < rowH - 20 * s).pop() || null;
+      if (stackTop) used.add(stackTop);
+    }
+    for (const k of picks) {
+      if (used.has(k)) continue;
+      used.add(k);
+      const sz = tsize(k, s);
+      const pile = { key: k, w: sz.w, h: sz.h };
+      if (k === 'stack' && stackTop) { pile.topper = stackTop; pile.h = sz.h - sz.top.y + tsize(stackTop, s).h; }
+      if (pile.h > rowH - 10 * s) continue;
+      piles.push(pile);
+    }
+    const count = info.map(() => 0);
+    const taken = info.map(() => 0);
+    for (const p of piles) {
+      let best = -1, bestScore = Infinity;
+      info.forEach((row, i) => {
+        const cap = row.books ? 2 : 3;
+        if (count[i] >= cap) return;
+        const lead = row.books ? 30 * s : 24 * s;
+        const need = taken[i] + p.w + lead + (count[i] ? 26 * s : 0) + 12 * s;
+        if (need > row.free) return;
+        // fill the first bookcase before moving on; big pieces prefer an empty shelf
+        let score = count[i] + row.caseIdx * 1.6 + i * 0.01;
+        if (D.TRINKETS[p.key].wide && row.books) score += 0.8;
+        if (score < bestScore) { bestScore = score; best = i; }
+      });
+      if (best < 0) continue;
+      plan[best].push(p);
+      count[best]++;
+      taken[best] += p.w + 26 * s;
+    }
+    return plan;
+  }
+
+  function nookEl(piles, row, s) {
+    const nook = document.createElement('div');
+    nook.className = 'nook';
+    const free = row.free;
+    const total = piles.reduce((t, p) => t + p.w, 0);
+    const h = hash(piles.map(p => p.key).join('|') + row.ri);
+    let xs = [];
+    if (row.books) {
+      const lead = (24 + (h % 16)) * s;
+      if (piles.length === 1) {
+        const room = free - lead - total;
+        // sometimes beside the books, sometimes given a little space of its own
+        xs = [room > 220 * s && (h >> 4) % 3 === 0 ? lead + room * (.45 + ((h >> 6) % 20) / 100) : lead];
+      } else {
+        const spare = free - lead - total;
+        xs = spare > 200 * s
+          ? [lead, free - piles[1].w - (24 + ((h >> 5) % 40)) * s]
+          : [lead, lead + piles[0].w + Math.min(28 * s, spare * .5)];
+      }
+    } else {
+      const anchors = { 1: [[.34, .62][h % 2]], 2: [[.18, .64], [.26, .72]][h % 2], 3: [[.1, .44, .78], [.14, .5, .8]][h % 2] }[piles.length];
+      let edge = 0;
+      xs = piles.map((p, i) => {
+        let x = anchors[i] * free - p.w / 2;
+        x = Math.max(x, edge + (i ? 22 * s : 16 * s));
+        x = Math.min(x, free - p.w - 16 * s - piles.slice(i + 1).reduce((t, q) => t + q.w + 22 * s, 0));
+        edge = x + p.w;
+        return x;
+      });
+    }
+    piles.forEach((p, i) => {
+      const el = document.createElement('div');
+      el.className = `trinket t-${p.key}`;
+      const sz = tsize(p.key, s);
+      el.style.left = `${Math.round(xs[i])}px`;
+      el.style.bottom = `${Math.round(sz.base - sz.h)}px`;
+      el.innerHTML = Art.draw(p.key, s);
+      if (sz.glow) el.insertAdjacentHTML('afterbegin', `<span class="halo" style="left:${sz.glow.x}px;top:${sz.glow.y}px"></span>`);
+      if (p.topper) {
+        const tz = tsize(p.topper, s);
+        const top = document.createElement('div');
+        top.className = `trinket topper t-${p.topper}`;
+        top.style.left = `${Math.round(sz.top.x0 + (sz.top.x1 - sz.top.x0 - tz.w) * (.3 + (h % 40) / 100))}px`;
+        top.style.bottom = `${Math.round(sz.h - sz.top.y - (tz.h - tz.base))}px`;
+        top.innerHTML = Art.draw(p.topper, s);
+        if (tz.glow) top.insertAdjacentHTML('afterbegin', `<span class="halo" style="left:${tz.glow.x}px;top:${tz.glow.y}px"></span>`);
+        el.appendChild(top);
+      }
+      nook.appendChild(el);
+    });
+    return nook;
   }
 
   function makeCase(plateText) {
@@ -288,7 +409,7 @@
     for (let i = 0; i < ghostCount; i++) items.push({ type: 'ghost', year: y, n: countInYear(y) + i + 1 });
 
     const plate = plateText();
-    const cases = buildCases(wrap, items, { plate: (i) => plate });
+    const cases = buildCases(wrap, items, { plate: (i) => plate, trophies: trophiesShown() });
 
     if (!items.length) {
       const note = document.createElement('div');
@@ -424,6 +545,7 @@
   const onCustomize = () => location.hash === '#customize';
 
   function render() {
+    syncTrophies();
     const cz = onCustomize();
     $('#libraryPage').hidden = cz;
     $('#customizePage').hidden = !cz;
@@ -475,16 +597,50 @@
 
     $('#czTrinkets').innerHTML = Object.entries(D.TRINKETS).map(([k, tr]) => {
       const on = t.trinkets.includes(k);
-      const sc = Math.min(0.62, 66 / Math.max(...(tr.svg.match(/height="(\d+)"/) || [0, 90]).slice(1).map(Number)));
+      const z = Art.size(k);
+      const sc = Math.min(64 / z.h, 104 / z.w);
       return `<button type="button" class="tile" aria-pressed="${on}" data-trinket="${k}">
-        <span class="tile-art">${D.sized(tr.svg, sc)}</span>
+        <span class="tile-art">${Art.draw(k, sc)}</span>
         <span class="tile-label">${tr.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`;
     }).join('');
     const n = t.trinkets.length;
     $('#czTrinketHint').textContent = n
-      ? `${n} on display. They fill the empty spots on your shelves, in the order you pick them.`
+      ? `${n} picked. Each one appears once, in an open spot on your shelves, starting with the first bookcase. A stack of books will hold one of the small ones on top.`
       : 'No trinkets on display. Pick a few to fill the empty spots on your shelves.';
+
+    renderTablePreview();
+    $('#czTable').innerHTML = Object.entries(D.TABLES).map(([k, tb]) => `
+      <button type="button" class="tile" role="radio" aria-checked="${t.table === k}" data-table="${k}">
+        <span class="tile-art table-art" data-style="${k}"></span>
+        <span class="tile-label">${tb.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('');
+    $('#czTable').querySelectorAll('.table-art').forEach(el => {
+      const w = el.clientWidth || 110, hh = el.clientHeight || 74;
+      el.innerHTML = window.TomesteadTable.drawTable({ W: w, H: hh, cx: w / 2, frontY: hh * .74, farY: hh * .2, frontW: w * .92, ratio: .7, unit: 1.4, style: el.dataset.style, items: [], id: 'tt' + el.dataset.style }).html;
+    });
+    $('#czTableItems').innerHTML = Object.entries(D.TABLE_ITEMS).map(([k, it]) => {
+      const on = t.tableItems.includes(k);
+      const z = Art.size(it.art);
+      const sc = Math.min(64 / z.h, 104 / z.w);
+      return `<button type="button" class="tile" aria-pressed="${on}" data-titem="${k}">
+        <span class="tile-art">${Art.draw(it.art, sc)}</span>
+        <span class="tile-label">${it.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`;
+    }).join('');
+    const m = t.tableItems.length;
+    $('#czTableItemsHint').textContent = m
+      ? `${m} of ${D.MAX_TABLE_ITEMS} on the table${m >= D.MAX_TABLE_ITEMS ? '. Take one off to add another' : ''}. Tall pieces go to the back corners.`
+      : `Pick up to ${D.MAX_TABLE_ITEMS} things to keep beside your book.`;
+  }
+
+  function renderTablePreview() {
+    const el = $('#czTablePreview');
+    const w = el.clientWidth || 600, h = el.clientHeight || 260;
+    const narrow = w < 520;
+    const frontW = narrow ? w * .96 : Math.min(w * .8, 900);
+    const T = window.TomesteadTable.drawTable({ W: w, H: h, cx: w / 2, frontY: h * .8, farY: h * .4, frontW, ratio: .72, narrow, unit: frontW / 100, style: prefs.theme.table, items: prefs.theme.tableItems, maxItems: narrow ? 4 : 5, book: true, id: 'tp' });
+    el.innerHTML = T.html;
   }
 
   function setTheme(patch) {
@@ -699,7 +855,9 @@
 
   function celebrate(y) {
     const el = $('#celebrate');
-    $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}.`;
+    syncTrophies();
+    $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}. Your ${y} trophy now stands on top of your bookcase.`;
+    $('#celebrateTrophy').innerHTML = Art.drawTrophy(y, goalFor(y), 0.9);
     $('#celebrateRaise').dataset.year = y;
     const conf = el.querySelector('.confetti');
     conf.innerHTML = '';
@@ -726,7 +884,7 @@
       for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
     } catch {}
     const clean = books;
-    const payload = { app: 'Tomestead', version: 3, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals }, uploads };
+    const payload = { app: 'Tomestead', version: 3, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -767,8 +925,13 @@
         }
         const st = !Array.isArray(parsed) && parsed.settings;
         if (st) {
-          if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS }, st.theme);
+          if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, st.theme);
           if (st.goals) prefs.goals = Object.assign({}, prefs.goals, st.goals);
+          if (st.trophies && typeof st.trophies === 'object') {
+            for (const [yr, t] of Object.entries(st.trophies)) {
+              if (/^\d{4}$/.test(yr) && t && Number(t.goal) > 0) prefs.trophies[yr] = { goal: Number(t.goal), at: String(t.at || '').slice(0, 10) };
+            }
+          }
           savePrefs();
           D.applyTheme(prefs.theme);
         }
@@ -822,6 +985,11 @@
 
     // shared actions inside the library page
     $('#libraryPage').addEventListener('click', e => {
+      const tr = e.target.closest('[data-trophy]');
+      if (tr) {
+        const y = tr.dataset.trophy, t = prefs.trophies[y];
+        return toast(`${y}: you set out to read ${t.goal} ${t.goal === 1 ? 'book' : 'books'} and did it${t.at ? ` (${fmtDate(t.at)})` : ''}.`);
+      }
       const ghost = e.target.closest('.book.ghost');
       if (ghost) { const y = ghost.dataset.ghost; return openEditor(null, y === thisYear() ? today() : `${y}-12-31`); }
       const b = e.target.closest('.book');
@@ -895,16 +1063,23 @@
       if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
       else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
       else if (t.dataset.bookend) setTheme({ bookend: t.dataset.bookend });
+      else if (t.dataset.table) setTheme({ table: t.dataset.table });
+      else if (t.dataset.titem) {
+        const k = t.dataset.titem, cur = prefs.theme.tableItems;
+        if (!cur.includes(k) && cur.length >= D.MAX_TABLE_ITEMS) { toast(`The table holds ${D.MAX_TABLE_ITEMS} things. Take one off first.`); return; }
+        setTheme({ tableItems: cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k] });
+      }
       else if (t.dataset.trinket) {
         const k = t.dataset.trinket;
         const list = prefs.theme.trinkets.includes(k) ? prefs.theme.trinkets.filter(x => x !== k) : [...prefs.theme.trinkets, k];
         setTheme({ trinkets: list });
       }
-      const sel = t.dataset.wall ? `[data-wall="${t.dataset.wall}"]` : t.dataset.wood ? `[data-wood="${t.dataset.wood}"]` : t.dataset.bookend ? `[data-bookend="${t.dataset.bookend}"]` : `[data-trinket="${t.dataset.trinket}"]`;
+      const attr = ['wall', 'wood', 'bookend', 'table', 'titem', 'trinket'].find(a => t.dataset[a]);
+      const sel = `[data-${attr}="${t.dataset[attr]}"]`;
       const again = $(`#customizePage .tile${sel}`); again && again.focus();
     });
     $('#czReset').addEventListener('click', () => {
-      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets] });
+      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] });
       toast('Back to the original look.');
     });
 
@@ -922,6 +1097,7 @@
   D.applyTheme(prefs.theme);
   reader = window.TomesteadReader({
     esc, colorOf, dims, starsHTML, fmtDate, toast,
+    theme: () => prefs.theme,
     spineEl: (b) => spine(b),
     getBook: (id) => books.find(x => x.id === id),
     saveBook: () => { save(); scheduleListRefresh(); },
@@ -936,8 +1112,6 @@
     },
   });
   // props on the reading table
-  $('#reader .rd-prop.candle').innerHTML = D.sized(D.TRINKETS.candle.svg, 1.25);
-  $('#reader .rd-prop.tea').innerHTML = D.sized(D.TRINKETS.teacup.svg, 1.35);
   wire();
   render();
   setupIosTip();

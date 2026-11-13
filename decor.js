@@ -89,80 +89,51 @@
     none: { name: 'No bookends', w: 0, svg: '' },
   };
 
-  // ---------- trinkets ----------
+  // ---------- trinkets (drawn in art.js) ----------
+  // topper: small enough to sit on top of the book stack. wide: needs an open stretch of shelf.
   const TRINKETS = {
-    plant: { name: 'Potted plant', w: 56, svg: `<svg viewBox="0 0 56 92" width="56" height="92">
-      <path d="M28 54 C10 44 4 26 10 12 C20 22 26 36 28 54Z" fill="#4d7a45"/>
-      <path d="M28 54 C44 46 52 30 48 14 C38 24 30 38 28 54Z" fill="#5f9152"/>
-      <path d="M28 56 C22 40 24 18 32 4 C36 22 34 40 28 56Z" fill="#3f6a3a"/>
-      <path d="M12 56 h32 l-4 34 h-24 z" fill="#b5653b"/><rect x="10" y="54" width="36" height="7" rx="2" fill="#c97a4b"/></svg>` },
-    candle: { name: 'Candle', w: 40, svg: `<svg viewBox="0 0 40 100" width="40" height="100">
-      <defs><radialGradient id="tg-candle" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>
-      <circle cx="20" cy="22" r="20" fill="url(#tg-candle)"/>
-      <path d="M20 10 C24 17 25 22 20 28 C15 22 16 17 20 10Z" fill="#ffcf6b"/><path d="M20 17 C22 21 22 24 20 27 C18 24 18 21 20 17Z" fill="#fff4c9"/>
-      <rect x="19" y="27" width="2" height="5" fill="#2a1e16"/>
-      <rect x="12" y="32" width="16" height="56" rx="2" fill="#efe3c8"/><path d="M12 36 q4 6 0 12" stroke="#d9cba8" stroke-width="3" fill="none"/>
-      <ellipse cx="20" cy="92" rx="18" ry="5" fill="#c9a15b"/><rect x="8" y="86" width="24" height="6" rx="2" fill="#b08a48"/></svg>` },
-    teacup: { name: 'Cup of tea', w: 64, svg: `<svg viewBox="0 0 64 70" width="64" height="70">
-      <path d="M22 8 q-4 6 0 12 q4 6 0 12" stroke="#efe3c8" stroke-width="2" fill="none" opacity=".35"/>
-      <path d="M32 4 q-4 6 0 12 q4 6 0 12" stroke="#efe3c8" stroke-width="2" fill="none" opacity=".25"/>
-      <path d="M8 34 h40 v10 q0 18 -20 18 q-20 0 -20 -18z" fill="#2e5e5e"/><path d="M48 40 q12 0 10 9 q-2 7 -12 6" stroke="#2e5e5e" stroke-width="5" fill="none"/>
-      <rect x="8" y="34" width="40" height="4" fill="#e8c766" opacity=".6"/><ellipse cx="28" cy="66" rx="26" ry="4" fill="#efe3c8"/></svg>` },
-    globe: { name: 'Globe', w: 62, svg: `<svg viewBox="0 0 62 100" width="62" height="100">
-      <circle cx="31" cy="40" r="26" fill="#2e5e5e"/><path d="M18 26 q8 4 10 14 q-6 6 -2 14 q-10-6-8-28Z M38 20 q10 6 12 18 q-8-2-10 6 q-6-10-2-24Z" fill="#c2a26a"/>
-      <path d="M8 40 a23 26 0 0 0 46 0" stroke="#c9a15b" stroke-width="3" fill="none"/>
-      <rect x="29" y="66" width="4" height="20" fill="#7a5232"/><ellipse cx="31" cy="92" rx="18" ry="6" fill="#5a3a22"/></svg>` },
-    stack: { name: 'Book stack', w: 96, svg: `<svg viewBox="0 0 96 46" width="96" height="46">
-      <rect x="6" y="30" width="86" height="16" rx="2" fill="#1f3350"/><rect x="6" y="34" width="86" height="2" fill="#e8c766" opacity=".6"/>
-      <rect x="12" y="16" width="74" height="14" rx="2" fill="#6e1f24"/><rect x="12" y="20" width="74" height="1.5" fill="#e8c766" opacity=".6"/>
-      <rect x="2" y="3" width="80" height="13" rx="2" fill="#4f6b3a"/><rect x="2" y="7" width="80" height="1.5" fill="#f4e7c8" opacity=".5"/></svg>` },
-    cat: { name: 'Sleeping cat', w: 86, svg: `<svg viewBox="0 0 86 56" width="86" height="56">
-      <path d="M10 54 C2 54 2 36 16 30 C28 24 48 22 62 28 C74 33 80 44 78 54Z" fill="#c46e2f"/>
-      <path d="M26 30 q2 8 0 22 M38 26 q2 10 0 26 M50 26 q-2 10 0 26" stroke="#9c5220" stroke-width="3" fill="none" opacity=".7"/>
-      <circle cx="66" cy="36" r="14" fill="#c46e2f"/>
-      <path d="M55 30 L57 15 L65 25Z M70 24 L78 14 L79 31Z" fill="#c46e2f"/>
-      <path d="M58 26 L58.8 19 L62.5 24Z" fill="#e8a37e"/>
-      <path d="M59 38 q3 2.5 6 0 M68 38 q3 2.5 6 0" stroke="#4a2410" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-      <path d="M66 42 l-1.5 1.5 h3z" fill="#7a3a1a"/>
-      <path d="M12 52 C-2 48 4 38 20 46" stroke="#c46e2f" stroke-width="7" fill="none" stroke-linecap="round"/>
-      <text x="76" y="12" font-family="Georgia,serif" font-size="10" fill="#efe3c8" opacity=".55">z</text>
-      <text x="81" y="5" font-family="Georgia,serif" font-size="7" fill="#efe3c8" opacity=".4">z</text></svg>` },
-    lantern: { name: 'Lantern', w: 46, svg: `<svg viewBox="0 0 46 100" width="46" height="100">
-      <defs><radialGradient id="tg-lantern" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".6"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>
-      <circle cx="23" cy="56" r="23" fill="url(#tg-lantern)"/>
-      <circle cx="23" cy="7" r="5" fill="none" stroke="#2f2f33" stroke-width="2.5"/>
-      <path d="M9 23 L23 12 L37 23Z" fill="#2f2f33"/><rect x="7" y="23" width="32" height="5" fill="#3a3a3f"/>
-      <rect x="11" y="28" width="24" height="52" fill="#ffd27a" opacity=".22"/>
-      <path d="M23 44 C27 50 27 57 23 63 C19 57 19 50 23 44Z" fill="#ffcf6b"/><path d="M23 52 C24.5 55 24.5 58 23 61 C21.5 58 21.5 55 23 52Z" fill="#fff4c9"/>
-      <rect x="10" y="28" width="3" height="52" fill="#2f2f33"/><rect x="33" y="28" width="3" height="52" fill="#2f2f33"/>
-      <rect x="7" y="80" width="32" height="7" fill="#3a3a3f"/><rect x="9" y="87" width="28" height="13" rx="1" fill="#2f2f33"/></svg>` },
-    frame: { name: 'Photo frame', w: 58, svg: `<svg viewBox="0 0 58 72" width="58" height="72">
-      <rect x="2" y="2" width="54" height="68" rx="2" fill="#b08a48"/><rect x="6" y="6" width="46" height="60" fill="#efe3c8"/>
-      <rect x="11" y="11" width="36" height="50" fill="#9cc0c8"/><circle cx="37" cy="22" r="5" fill="#f4d58a"/>
-      <path d="M11 48 Q22 36 31 46 T47 42 V61 H11Z" fill="#5f8a55"/><path d="M11 54 Q26 46 47 54 V61 H11Z" fill="#4d7a45"/></svg>` },
-    hourglass: { name: 'Hourglass', w: 40, svg: `<svg viewBox="0 0 40 84" width="40" height="84">
-      <path d="M10 8 H30 C30 26 22 34 21 42 C22 50 30 58 30 76 H10 C10 58 18 50 19 42 C18 34 10 26 10 8Z" fill="#dfeceb" opacity=".3"/>
-      <path d="M14 20 H26 C25 30 21 36 20 40 C19 36 15 30 14 20Z" fill="#d9b26a"/>
-      <path d="M20 42 V66" stroke="#d9b26a" stroke-width="1"/><path d="M12 76 C14 66 26 66 28 76Z" fill="#d9b26a"/>
-      <rect x="2" y="0" width="36" height="8" rx="2" fill="#7a5232"/><rect x="2" y="76" width="36" height="8" rx="2" fill="#7a5232"/>
-      <rect x="4" y="8" width="3" height="68" fill="#5a3a22"/><rect x="33" y="8" width="3" height="68" fill="#5a3a22"/></svg>` },
-    succulent: { name: 'Succulent', w: 44, svg: `<svg viewBox="0 0 44 56" width="44" height="56">
-      <path d="M22 30 C12 28 6 22 8 16 C14 18 19 22 22 30Z M22 30 C32 28 38 22 36 16 C30 18 25 22 22 30Z" fill="#7fa88a"/>
-      <path d="M22 30 C16 22 16 12 22 6 C28 12 28 22 22 30Z" fill="#94bca0"/>
-      <path d="M22 30 C14 26 10 26 4 28 C10 32 16 32 22 30Z M22 30 C30 26 34 26 40 28 C34 32 28 32 22 30Z" fill="#6b9677"/>
-      <path d="M8 31 H36 L33 55 H11Z" fill="#efe3c8"/><rect x="7" y="29" width="30" height="5" rx="2" fill="#d9cba8"/></svg>` },
-    crystal: { name: 'Amethyst', w: 50, svg: `<svg viewBox="0 0 50 52" width="50" height="52">
-      <path d="M6 50 L10 26 L16 20 L20 50Z" fill="#7d5a9e"/><path d="M16 50 L20 12 L26 4 L32 14 L34 50Z" fill="#9b78bd"/>
-      <path d="M26 4 L32 14 L34 50 L26 50Z" fill="#7d5a9e"/><path d="M30 50 L36 22 L42 18 L44 50Z" fill="#8a67ad"/>
-      <path d="M20 12 L26 4 L24 30Z" fill="#c9b2e0" opacity=".7"/><ellipse cx="25" cy="50" rx="23" ry="3" fill="#5b4a3a"/></svg>` },
-    clock: { name: 'Mantel clock', w: 56, svg: `<svg viewBox="0 0 56 70" width="56" height="70">
-      <path d="M4 66 V34 Q4 6 28 4 Q52 6 52 34 V66Z" fill="#6f3222"/><rect x="2" y="62" width="52" height="8" rx="2" fill="#4c2116"/>
-      <circle cx="28" cy="32" r="17" fill="#c9a15b"/><circle cx="28" cy="32" r="14" fill="#efe3c8"/>
-      <path d="M28 20 v3 M28 41 v3 M16 32 h3 M37 32 h3" stroke="#5b4634" stroke-width="1.5"/>
-      <path d="M28 32 V23 M28 32 L34 35" stroke="#2a1e16" stroke-width="2" stroke-linecap="round"/><circle cx="28" cy="32" r="1.6" fill="#2a1e16"/></svg>` },
+    plant:     { name: 'Trailing pothos' },
+    candle:    { name: 'Candlestick', topper: true },
+    teacup:    { name: 'Cup of tea', topper: true },
+    globe:     { name: 'Desk globe' },
+    stack:     { name: 'Stack of books' },
+    cat:       { name: 'Sleeping cat', wide: true },
+    lantern:   { name: 'Lantern' },
+    frame:     { name: 'Photo frame' },
+    hourglass: { name: 'Hourglass', topper: true },
+    succulent: { name: 'Succulent', topper: true },
+    crystal:   { name: 'Amethyst geode', topper: true },
+    clock:     { name: 'Mantel clock' },
   };
 
-  const DEFAULTS = { wall: 'forest', wood: 'walnut', bookend: 'brass', trinkets: ['plant', 'candle', 'teacup', 'globe', 'stack'] };
+  // ---------- reading table ----------
+  const TABLES = {
+    walnut:  { name: 'Walnut reading table' },
+    leather: { name: 'Leather-top desk' },
+    oak:     { name: 'Farmhouse oak' },
+    round:   { name: 'Round cherry table' },
+    marble:  { name: 'Marble and brass' },
+  };
+  // cm = real-world height, so everything sits at the right size next to the book
+  const TABLE_ITEMS = {
+    lamp:    { name: "Banker's lamp", art: 'lamp', cm: 32, tall: true },
+    candle:  { name: 'Candlestick', art: 'candle', cm: 24, tall: true },
+    tea:     { name: 'Cup of tea', art: 'teacup', cm: 9 },
+    mug:     { name: 'Coffee mug', art: 'mug', cm: 10 },
+    glasses: { name: 'Reading glasses', art: 'glasses', cm: 6, flat: true },
+    inkwell: { name: 'Ink and quill', art: 'inkwell', cm: 26, tall: true },
+    plant:   { name: 'Succulent', art: 'succulent', cm: 11 },
+    books:   { name: 'Stack of books', art: 'stack', cm: 9 },
+    watch:   { name: 'Pocket watch', art: 'watch', cm: 5, flat: true },
+    journal: { name: 'Journal and pencil', art: 'journal', cm: 8, flat: true },
+  };
+  const MAX_TABLE_ITEMS = 5;
+
+  const DEFAULTS = {
+    wall: 'forest', wood: 'walnut', bookend: 'brass',
+    trinkets: ['plant', 'candle', 'cat', 'globe', 'stack', 'teacup'],
+    table: 'walnut', tableItems: ['lamp', 'tea', 'glasses'],
+  };
 
   function sized(svg, s) {
     return svg.replace(/width="(\d+)" height="(\d+)"/, (_, w, h) => `width="${(w * s).toFixed(1)}" height="${(h * s).toFixed(1)}" aria-hidden="true" focusable="false"`);
@@ -180,5 +151,5 @@
     if (meta) meta.setAttribute('content', wall.color);
   }
 
-  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, DEFAULTS, sized, svgURL, applyTheme };
+  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, sized, svgURL, applyTheme };
 })();
