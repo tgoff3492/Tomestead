@@ -299,7 +299,9 @@ window.TomesteadReader = function (api) {
 
   function drawTable(g) {
     const th = api.theme();
-    const out = window.TomesteadTable.drawTable({ ...g.table, style: th.table, items: th.tableItems, maxItems: g.narrow ? 4 : 5, id: 'rt' });
+    // phones have no room beside the book, so only the lamp stays out
+    const items = g.narrow ? th.tableItems.filter(k => k === 'lamp') : th.tableItems;
+    const out = window.TomesteadTable.drawTable({ ...g.table, style: th.table, items, maxItems: 5, id: 'rt' });
     tableEl.innerHTML = out.html;
   }
 

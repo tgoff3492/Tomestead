@@ -632,14 +632,16 @@
     $('#czTableItemsHint').textContent = m
       ? `${m} of ${D.MAX_TABLE_ITEMS} on the table${m >= D.MAX_TABLE_ITEMS ? '. Take one off to add another' : ''}. Tall pieces go to the back corners.`
       : `Pick up to ${D.MAX_TABLE_ITEMS} things to keep beside your book.`;
+    if (window.innerWidth < 720) $('#czTableItemsHint').textContent += ' On a phone there’s only room for the lamp beside your book, so these show on larger screens.';
   }
 
   function renderTablePreview() {
     const el = $('#czTablePreview');
     const w = el.clientWidth || 600, h = el.clientHeight || 260;
     const narrow = w < 520;
+    const phone = window.innerWidth < 720;
     const frontW = narrow ? w * .96 : Math.min(w * .8, 900);
-    const T = window.TomesteadTable.drawTable({ W: w, H: h, cx: w / 2, frontY: h * .8, farY: h * .4, frontW, ratio: .72, narrow, unit: frontW / 100, style: prefs.theme.table, items: prefs.theme.tableItems, maxItems: narrow ? 4 : 5, book: true, id: 'tp' });
+    const T = window.TomesteadTable.drawTable({ W: w, H: h, cx: w / 2, frontY: h * .8, farY: h * .4, frontW, ratio: .72, narrow, unit: frontW / 100, style: prefs.theme.table, items: phone ? prefs.theme.tableItems.filter(k => k === 'lamp') : prefs.theme.tableItems, maxItems: 5, book: true, id: 'tp' });
     el.innerHTML = T.html;
   }
 
