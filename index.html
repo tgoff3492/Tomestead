@@ -44,6 +44,7 @@
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
         </summary>
         <div class="menu">
+          <button id="recBtn">What should I read next?</button>
           <button id="customizeBtn">Customize library</button>
           <button id="goalMenuBtn">Set a reading goal</button>
           <hr>
@@ -229,6 +230,16 @@
     </form>
   </dialog>
 
+  <!-- What to read next -->
+  <dialog id="recDialog" class="paper rec-dialog" aria-labelledby="recTitle">
+    <div class="rec-head">
+      <h2 id="recTitle">What to read next</h2>
+      <button type="button" class="rec-x" data-close aria-label="Close">×</button>
+    </div>
+    <div id="recBody" class="rec-body"></div>
+    <p class="rec-foot">Picked from the subjects and authors you rate highest, using Open Library.</p>
+  </dialog>
+
   <!-- Reading goal -->
   <dialog id="goalDialog" class="paper narrow">
     <form id="goalForm" method="dialog" novalidate>
@@ -276,6 +287,7 @@
   <script src="covers.js"></script>
   <script src="table.js"></script>
   <script src="reader.js"></script>
+  <script src="recommend.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

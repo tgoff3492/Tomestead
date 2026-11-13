@@ -43,6 +43,7 @@
   prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, prefs.theme || {});
   prefs.goals = prefs.goals || {};
   prefs.trophies = prefs.trophies || {};
+  prefs.recs = prefs.recs || { dismissed: [] };
   let query = '';
   let justAdded = null;
   let editingId = null;
@@ -804,7 +805,7 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  function openEditor(id = null, finished = null) {
+  function openEditor(id = null, finished = null, prefill = null) {
     editingId = id;
     const b = id ? books.find(x => x.id === id) : null;
     const f = $('#bookForm');
@@ -812,10 +813,10 @@
     $('#formError').hidden = true;
     $('#formTitle').textContent = b ? 'Edit book' : 'Add a book';
     $('#saveBtn').textContent = b ? 'Save changes' : 'Put it on the shelf';
-    $('#fTitle').value = b?.title || '';
-    $('#fAuthor').value = b?.author || '';
+    $('#fTitle').value = b?.title || prefill?.title || '';
+    $('#fAuthor').value = b?.author || prefill?.author || '';
     $('#fFinished').value = b ? (b.finished || '') : (finished || today());
-    $('#fPages').value = b?.pages || '';
+    $('#fPages').value = b?.pages || prefill?.pages || '';
     $('#fGenre').value = b?.genre || '';
     $('#fReview').value = b?.review || '';
     const cv = b && Number.isInteger(b.color) ? String(b.color) : 'auto';
@@ -1106,6 +1107,7 @@
     document.addEventListener('click', e => { if (more.open && !more.contains(e.target)) more.open = false; });
     $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoal(); });
+    $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     window.addEventListener('online', runLookupQueue);
     $('#importBtn').addEventListener('click', () => { more.open = false; $('#importFile').click(); });
@@ -1180,6 +1182,14 @@
       save(); render();
       toast(b ? `Removed “${b.title}”.` : 'Removed.');
     },
+  });
+  const recommender = window.TomesteadRecommend({
+    esc, toast,
+    books: () => books,
+    save,
+    recs: () => prefs.recs,
+    dismiss: (key) => { if (!prefs.recs.dismissed.includes(key)) { prefs.recs.dismissed.push(key); savePrefs(); } },
+    addBook: (p) => openEditor(null, today(), p),
   });
   // props on the reading table
   wire();
