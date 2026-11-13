@@ -441,7 +441,7 @@
 
     $('#czWall').innerHTML = D.WALLPAPERS.map(w => `
       <button type="button" class="tile" role="radio" aria-checked="${t.wall === w.key}" data-wall="${w.key}">
-        <span class="tile-art wall" style="background-color:${w.color};background-image:${D.svgURL(w.tile)};background-size:${w.size}px ${w.h || w.size}px"></span>
+        <span class="tile-art wall" style="background-color:${w.color};background-image:radial-gradient(ellipse at 30% 0%, rgba(242,182,90,.22), transparent 75%),${D.svgURL(w.tile)};background-size:100% 100%,${Math.round(w.size * .75)}px ${Math.round((w.h || w.size) * .75)}px"></span>
         <span class="tile-label">${w.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
 

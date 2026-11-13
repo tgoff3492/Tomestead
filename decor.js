@@ -1,7 +1,7 @@
 /* Tomestead decor catalog: wallpapers, wood finishes, bookends and trinkets */
 (() => {
   'use strict';
-  const svgURL = (svg) => `url("data:image/svg+xml,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim())}")`;
+  const svgURL = (svg) => `url('data:image/svg+xml,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim()).replace(/'/g, '%27')}')`;
 
   // ---------- wallpapers (tiled SVG) ----------
   const WALLPAPERS = [
