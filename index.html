@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tomestead</title>
+  <meta name="description" content="A cozy home for every book you've read.">
+  <meta name="theme-color" content="#1d2e27">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tomestead">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Tomestead</h1>
+      <p id="stats" class="stats">Every book you've read, on one shelf.</p>
+    </div>
+    <div class="controls">
+      <div class="viewtoggle" role="tablist" aria-label="View">
+        <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">Shelf</button>
+        <button role="tab" id="tab-list" aria-selected="false" data-view="list">List</button>
+      </div>
+      <button id="addBtn" class="btn btn-brass">Add a book</button>
+      <details class="more">
+        <summary aria-label="More options">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </summary>
+        <div class="menu">
+          <button id="installBtn" hidden>Install app</button>
+          <button id="exportBtn">Back up my library</button>
+          <button id="importBtn">Restore from backup</button>
+          <input id="importFile" type="file" accept="application/json,.json" hidden>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <label class="search">
+      <span class="sr-only">Search your books</span>
+      <input id="search" type="search" placeholder="Find a title or author" autocomplete="off">
+    </label>
+    <label class="sort">
+      <span>Arrange by</span>
+      <select id="sort">
+        <option value="added">Recently added</option>
+        <option value="finished">Date finished</option>
+        <option value="author">Author</option>
+        <option value="title">Title</option>
+        <option value="rating">Rating</option>
+      </select>
+    </label>
+  </div>
+
+  <main>
+    <section id="shelfView" class="bookcase" aria-label="Bookshelf">
+      <div class="crown"><span class="plate" id="plate">0 read</span></div>
+      <div class="lamp" aria-hidden="true"></div>
+      <div id="shelves" class="shelves"></div>
+      <div class="plinth"></div>
+    </section>
+
+    <section id="listView" class="ledger" aria-label="Book list" hidden>
+      <ol id="list" class="ledger-list"></ol>
+      <p id="listEmpty" class="ledger-empty" hidden></p>
+    </section>
+  </main>
+
+  <div id="iosTip" class="ios-tip" hidden>
+    <p>To keep Tomestead on your Home Screen, tap the Share button, then <strong>Add to Home Screen</strong>.</p>
+    <button id="iosTipClose" class="btn btn-ghost">Got it</button>
+  </div>
+
+  <!-- Book details -->
+  <dialog id="detail" class="paper">
+    <article>
+      <div class="detail-head">
+        <span id="dChip" class="chip" aria-hidden="true"></span>
+        <div>
+          <h2 id="dTitle"></h2>
+          <p id="dAuthor" class="byline"></p>
+        </div>
+      </div>
+      <p id="dStars" class="stars-lg"></p>
+      <p id="dMeta" class="meta"></p>
+      <div id="dReview" class="review"></div>
+      <div class="actions">
+        <button id="dRemove" class="btn btn-ghost danger">Remove</button>
+        <span class="spacer"></span>
+        <button id="dEdit" class="btn btn-ink">Edit</button>
+        <button class="btn btn-ghost" data-close>Close</button>
+      </div>
+    </article>
+  </dialog>
+
+  <!-- Add / edit form -->
+  <dialog id="editor" class="paper">
+    <form id="bookForm" method="dialog" novalidate>
+      <h2 id="formTitle">Add a book</h2>
+      <div class="field">
+        <label for="fTitle">Title</label>
+        <input id="fTitle" name="title" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="fAuthor">Author</label>
+        <input id="fAuthor" name="author" required autocomplete="off">
+      </div>
+      <fieldset class="field">
+        <legend>Your rating</legend>
+        <div id="starPicker" class="star-picker" role="radiogroup" aria-label="Rating out of 5"></div>
+      </fieldset>
+      <div class="row2">
+        <div class="field">
+          <label for="fFinished">Finished on</label>
+          <input id="fFinished" name="finished" type="date">
+        </div>
+        <div class="field">
+          <label for="fPages">Pages <span class="opt">(sets spine thickness)</span></label>
+          <input id="fPages" name="pages" type="number" min="1" max="5000" inputmode="numeric">
+        </div>
+      </div>
+      <div class="field">
+        <label for="fGenre">Genre <span class="opt">(optional)</span></label>
+        <input id="fGenre" name="genre" autocomplete="off" list="genres">
+        <datalist id="genres"></datalist>
+      </div>
+      <fieldset class="field">
+        <legend>Spine color</legend>
+        <div id="swatches" class="swatches"></div>
+      </fieldset>
+      <div class="field">
+        <label for="fReview">Your review</label>
+        <textarea id="fReview" name="review" rows="5" placeholder="What stayed with you?"></textarea>
+      </div>
+      <p id="formError" class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" id="saveBtn" class="btn btn-ink">Put it on the shelf</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
