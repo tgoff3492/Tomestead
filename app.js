@@ -2,8 +2,10 @@
 (() => {
   'use strict';
 
+  const D = window.TomesteadDecor;
   const STORE = 'tomestead.books.v1';
   const PREFS = 'tomestead.prefs.v1';
+  const SHELVES_PER_CASE = 3;
 
   const PALETTE = [
     { name: 'Oxblood',  bg: '#6E1F24', ink: '#F3E3C3' },
@@ -20,17 +22,32 @@
     { name: 'Brick',    bg: '#8B3A3A', ink: '#F5E2C0' },
   ];
 
+  // shown in the Customize preview when the library is still empty
+  const SAMPLE = [
+    ['Pride and Prejudice', 'Jane Austen', 5], ['Moby-Dick', 'Herman Melville', 3], ['Little Women', 'Louisa May Alcott', 4],
+    ['Treasure Island', 'Robert Louis Stevenson', 5], ['Jane Eyre', 'Charlotte Brontë', 4], ['The Odyssey', 'Homer', 4],
+    ['Walden', 'Henry David Thoreau', 3], ['Frankenstein', 'Mary Shelley', 5], ['Emma', 'Jane Austen', 4],
+  ].map(([title, author, rating], i) => ({ id: 'sample' + i, title, author, rating }));
+
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const thisYear = () => String(new Date().getFullYear());
 
   // ---------- state ----------
   let books = load();
-  let prefs = Object.assign({ view: 'shelf', sort: 'added', iosTipDismissed: false }, loadJSON(PREFS, {}));
+  let prefs = Object.assign({
+    view: 'shelf', sort: 'added', year: 'all', iosTipDismissed: false,
+    theme: { ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets] }, goals: {},
+  }, loadJSON(PREFS, {}));
+  prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets] }, prefs.theme || {});
+  prefs.goals = prefs.goals || {};
   let query = '';
   let justAdded = null;
   let editingId = null;
   let openId = null;
   let pickedRating = 0;
+  let caseIndex = 0;
+  let defaultFinished = null;
 
   function loadJSON(key, fallback) {
     try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
@@ -71,10 +88,23 @@
     return { height, width, variant, fs };
   }
 
+  // ---------- years & goals ----------
+  const yearOf = (b) => (/^\d{4}/.test(b.finished || '') ? b.finished.slice(0, 4) : '');
+  function yearsAvailable() {
+    const ys = new Set(books.map(yearOf).filter(Boolean));
+    ys.add(thisYear());
+    Object.keys(prefs.goals).forEach(y => ys.add(y));
+    return [...ys].sort((a, b) => b.localeCompare(a));
+  }
+  const countInYear = (y) => books.filter(b => yearOf(b) === y).length;
+  const goalFor = (y) => (prefs.goals[y] > 0 ? prefs.goals[y] : 0);
+
   // ---------- sorting & filtering ----------
   function visibleBooks() {
     const q = query.trim().toLowerCase();
     let list = books.filter(b => !q || b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q) || (b.genre || '').toLowerCase().includes(q));
+    if (prefs.year === 'none') list = list.filter(b => !yearOf(b));
+    else if (prefs.year !== 'all') list = list.filter(b => yearOf(b) === prefs.year);
     const byStr = (k) => (a, b) => (a[k] || '').localeCompare(b[k] || '', undefined, { sensitivity: 'base' });
     switch (prefs.sort) {
       case 'title': list.sort(byStr('title')); break;
@@ -95,11 +125,11 @@
   }
   function surname(name = '') { const p = name.trim().split(/\s+/); return (p[p.length - 1] || '').toLowerCase(); }
 
-  // ---------- rendering ----------
-  function starsHTML(n, cls = '') {
+  // ---------- spines ----------
+  function starsHTML(n) {
     let out = '';
     for (let i = 1; i <= 5; i++) out += `<span class="${i <= n ? 'on' : 'off'}">★</span>`;
-    return cls ? `<span class="${cls}">${out}</span>` : out;
+    return out;
   }
 
   function spine(b) {
@@ -118,120 +148,116 @@
     return el;
   }
 
-  const DECOR = {
-    plant: (s) => `<svg width="${56*s}" height="${92*s}" viewBox="0 0 56 92" aria-hidden="true">
-      <path d="M28 54 C10 44 4 26 10 12 C20 22 26 36 28 54Z" fill="#4d7a45"/>
-      <path d="M28 54 C44 46 52 30 48 14 C38 24 30 38 28 54Z" fill="#5f9152"/>
-      <path d="M28 56 C22 40 24 18 32 4 C36 22 34 40 28 56Z" fill="#3f6a3a"/>
-      <path d="M12 56 h32 l-4 34 h-24 z" fill="#b5653b"/><rect x="10" y="54" width="36" height="7" rx="2" fill="#c97a4b"/>
-    </svg>`,
-    candle: (s) => `<svg width="${40*s}" height="${100*s}" viewBox="0 0 40 100" aria-hidden="true">
-      <defs><radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>
-      <circle cx="20" cy="22" r="20" fill="url(#glow)"/>
-      <path d="M20 10 C24 17 25 22 20 28 C15 22 16 17 20 10Z" fill="#ffcf6b"/><path d="M20 17 C22 21 22 24 20 27 C18 24 18 21 20 17Z" fill="#fff4c9"/>
-      <rect x="19" y="27" width="2" height="5" fill="#2a1e16"/>
-      <rect x="12" y="32" width="16" height="56" rx="2" fill="#efe3c8"/><path d="M12 36 q4 6 0 12" stroke="#d9cba8" stroke-width="3" fill="none"/>
-      <ellipse cx="20" cy="92" rx="18" ry="5" fill="#c9a15b"/><rect x="8" y="86" width="24" height="6" rx="2" fill="#b08a48"/>
-    </svg>`,
-    stack: (s) => `<svg width="${96*s}" height="${46*s}" viewBox="0 0 96 46" aria-hidden="true">
-      <rect x="6" y="30" width="86" height="16" rx="2" fill="#1f3350"/><rect x="6" y="34" width="86" height="2" fill="#e8c766" opacity=".6"/>
-      <rect x="12" y="16" width="74" height="14" rx="2" fill="#6e1f24"/><rect x="12" y="20" width="74" height="1.5" fill="#e8c766" opacity=".6"/>
-      <rect x="2" y="3" width="80" height="13" rx="2" fill="#4f6b3a"/><rect x="2" y="7" width="80" height="1.5" fill="#f4e7c8" opacity=".5"/>
-    </svg>`,
-    bookend: (s) => `<svg width="${34*s}" height="${110*s}" viewBox="0 0 34 110" aria-hidden="true">
-      <path d="M4 110 V30 Q4 8 26 6 Q14 22 14 40 V96 H30 V110Z" fill="#b08a48"/>
-      <path d="M8 104 V32 Q8 16 20 11" stroke="#e6c886" stroke-width="2" fill="none" opacity=".7"/>
-    </svg>`,
-    teacup: (s) => `<svg width="${64*s}" height="${70*s}" viewBox="0 0 64 70" aria-hidden="true">
-      <path d="M22 8 q-4 6 0 12 q4 6 0 12" stroke="#efe3c8" stroke-width="2" fill="none" opacity=".35"/>
-      <path d="M32 4 q-4 6 0 12 q4 6 0 12" stroke="#efe3c8" stroke-width="2" fill="none" opacity=".25"/>
-      <path d="M8 34 h40 v10 q0 18 -20 18 q-20 0 -20 -18z" fill="#2e5e5e"/><path d="M48 40 q12 0 10 9 q-2 7 -12 6" stroke="#2e5e5e" stroke-width="5" fill="none"/>
-      <rect x="8" y="34" width="40" height="4" fill="#e8c766" opacity=".6"/><ellipse cx="28" cy="66" rx="26" ry="4" fill="#efe3c8"/>
-    </svg>`,
-    globe: (s) => `<svg width="${62*s}" height="${100*s}" viewBox="0 0 62 100" aria-hidden="true">
-      <circle cx="31" cy="40" r="26" fill="#2e5e5e"/><path d="M18 26 q8 4 10 14 q-6 6 -2 14 q-10-6-8-28Z M38 20 q10 6 12 18 q-8-2-10 6 q-6-10-2-24Z" fill="#c2a26a"/>
-      <path d="M8 40 a23 26 0 0 0 46 0" stroke="#c9a15b" stroke-width="3" fill="none"/>
-      <rect x="29" y="66" width="4" height="20" fill="#7a5232"/><ellipse cx="31" cy="92" rx="18" ry="6" fill="#5a3a22"/>
-    </svg>`,
-  };
-  const DECOR_ORDER = ['plant', 'candle', 'stack', 'globe', 'teacup'];
-  const DECOR_W = { plant: 56, candle: 40, stack: 96, bookend: 34, globe: 62, teacup: 64 };
+  function ghostSpine(g) {
+    const d = dims({ id: `ghost-${g.year}-${g.n}`, title: 'ghost' });
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'book ghost';
+    el.style.cssText = `--w:${d.width}px;--h:${d.height}px;--fs:${d.fs}px`;
+    el.dataset.ghost = g.year;
+    el.setAttribute('aria-label', `Empty spot for book ${g.n} of your ${g.year} goal. Add a book.`);
+    el.innerHTML = `<span class="g-plus" aria-hidden="true">+</span><span class="g-num" aria-hidden="true">${g.n}</span>`;
+    return el;
+  }
 
-  function renderShelf() {
-    const wrap = $('#shelves');
-    wrap.innerHTML = '';
-    const list = visibleBooks();
+  function decorEl(svg, cls) {
+    const d = document.createElement('div');
+    d.className = 'decor ' + cls;
+    d.innerHTML = svg;
+    return d;
+  }
+
+  // ---------- bookcases ----------
+  // items: [{type:'book', b} | {type:'ghost', year, n}] — packed into rows, 3 rows per bookcase
+  function buildCases(container, items, opts = {}) {
     const s = scale();
-    const rowPad = s < 1 ? 16 : 28;
-    const avail = Math.max(120, wrap.clientWidth - rowPad);
+    const theme = prefs.theme;
+    const be = D.BOOKENDS[theme.bookend] || D.BOOKENDS.none;
+    const bookendW = be.w ? be.w * s + 2 : 0;
+    const trinkets = theme.trinkets.filter(k => D.TRINKETS[k]);
     const gap = 3;
 
-    const rows = [[]];
-    let used = 0;
-    for (const b of list) {
-      const w = dims(b).width;
-      if (rows[rows.length - 1].length && used + w > avail) { rows.push([]); used = 0; }
-      rows[rows.length - 1].push(b);
-      used += w + gap;
-    }
-    const minRows = s < 1 ? 3 : 3;
-    while (rows.length < minRows) rows.push([]);
+    container.innerHTML = '';
+    // measure the inside of one bookcase
+    const probe = makeCase('');
+    container.appendChild(probe);
+    const rowEl = document.createElement('div');
+    rowEl.className = 'shelf-row';
+    probe.querySelector('.shelves').appendChild(rowEl);
+    const cs = getComputedStyle(rowEl);
+    const inner = rowEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    container.removeChild(probe);
+    const avail = Math.max(100, inner - bookendW * 2);
 
+    const width = (it) => (it.type === 'book' ? dims(it.b).width : dims({ id: `ghost-${it.year}-${it.n}`, title: 'ghost' }).width);
+    const rows = [];
+    let cur = [], used = 0;
+    for (const it of items) {
+      const w = width(it);
+      if (cur.length && used + w > avail) { rows.push(cur); cur = []; used = 0; }
+      cur.push(it); used += w + gap;
+    }
+    if (cur.length) rows.push(cur);
+    const maxRows = opts.maxRows || Infinity;
+    if (rows.length > maxRows) rows.length = maxRows;
+    const minRows = opts.minRows ?? SHELVES_PER_CASE;
+    while (rows.length < minRows || rows.length % (opts.perCase || SHELVES_PER_CASE)) rows.push([]);
+
+    let tIdx = 0;
+    const cases = [];
+    const perCase = opts.perCase || SHELVES_PER_CASE;
     rows.forEach((row, ri) => {
+      if (ri % perCase === 0) {
+        const c = makeCase(opts.plate ? opts.plate(Math.floor(ri / perCase)) : '');
+        container.appendChild(c);
+        cases.push(c);
+      }
+      const shelves = cases[cases.length - 1].querySelector('.shelves');
       const shelf = document.createElement('div');
       shelf.className = 'shelf';
       const r = document.createElement('div');
-      r.className = 'shelf-row';
-      let width = 0;
-      row.forEach(b => { r.appendChild(spine(b)); width += dims(b).width + gap; });
-
-      // a little life on the shelves: decor where there's room
-      let free = avail - width;
-      const picks = [];
-      if (row.length && free > DECOR_W.bookend * s + 120) {
-        const be = document.createElement('div');
-        be.className = 'decor bookend';
-        be.innerHTML = DECOR.bookend(s);
-        r.appendChild(be);
-        free -= DECOR_W.bookend * s + 6;
-      }
-      const start = (ri * 3 + (row.length ? 0 : 1)) % DECOR_ORDER.length;
-      for (let k = 0; k < 2; k++) {
-        const name = DECOR_ORDER[(start + k * 2) % DECOR_ORDER.length];
-        const need = DECOR_W[name] * s + 16;
-        if (free > need && (row.length === 0 || k === 0 || free > 220)) { picks.push(name); free -= need; }
-      }
-      if (row.length && ri % 3 === 1) picks.reverse();
-      picks.forEach(name => {
-        const d = document.createElement('div');
-        d.className = 'decor';
-        d.innerHTML = DECOR[name](s);
-        r.appendChild(d);
+      r.className = 'shelf-row' + (row.length ? '' : ' sparse');
+      let w = 0;
+      if (row.length && be.w) r.appendChild(decorEl(D.sized(be.svg, s), 'bookend left'));
+      row.forEach(it => {
+        r.appendChild(it.type === 'book' ? spine(it.b) : ghostSpine(it));
+        w += width(it) + gap;
       });
+      if (row.length && be.w) r.appendChild(decorEl(D.sized(be.svg, s), 'bookend right'));
+
+      // trinkets fill the empty spots
+      let free = avail - w;
+      const max = row.length ? 2 : 3;
+      const placed = [];
+      for (let tries = 0; trinkets.length && placed.length < max && tries < trinkets.length; tries++) {
+        const key = trinkets[(tIdx + tries) % trinkets.length];
+        if (placed.includes(key)) continue;
+        const need = D.TRINKETS[key].w * s + 14;
+        const room = row.length ? (placed.length ? need + 60 : need + 12) : need;
+        if (free >= room) { placed.push(key); free -= need; tIdx = (tIdx + tries + 1) % trinkets.length; tries = -1; }
+      }
+      placed.forEach((key, i) => r.appendChild(decorEl(D.sized(D.TRINKETS[key].svg, s), 'trinket' + (i === 0 ? ' first' : ''))));
 
       shelf.appendChild(r);
       const plank = document.createElement('div');
       plank.className = 'plank';
       shelf.appendChild(plank);
-      wrap.appendChild(shelf);
+      shelves.appendChild(shelf);
     });
+    fitSpines(container);
+    return cases;
+  }
 
-    if (!list.length) {
-      const note = document.createElement('div');
-      note.className = 'empty-note';
-      if (books.length) {
-        note.innerHTML = `<p>No books match “${esc(query)}”.</p><button class="btn btn-brass" data-clear>Clear search</button>`;
-      } else {
-        note.innerHTML = `<p>Your shelves are waiting. Add the first book you’ve read.</p><button class="btn btn-brass" data-add>Add a book</button>`;
-      }
-      wrap.firstChild.querySelector('.shelf-row').appendChild(note);
-    }
-    fitSpines(wrap);
+  function makeCase(plateText) {
+    const c = document.createElement('div');
+    c.className = 'bookcase';
+    c.innerHTML = `<div class="crown">${plateText ? `<span class="plate">${esc(plateText)}</span>` : ''}</div><div class="lamp" aria-hidden="true"></div><div class="shelves"></div><div class="plinth"></div>`;
+    return c;
   }
 
   // shrink long titles until they fit on the spine
   function fitSpines(root) {
-    root.querySelectorAll('.book').forEach(bk => {
+    root.querySelectorAll('.book:not(.ghost)').forEach(bk => {
       const t = bk.querySelector('.s-title');
       if (!t) return;
       let fs = parseFloat(getComputedStyle(t).fontSize);
@@ -244,6 +270,76 @@
     });
   }
 
+  function plateText() {
+    const y = prefs.year;
+    if (y === 'all') return `${books.length} read`;
+    if (y === 'none') return `${books.filter(b => !yearOf(b)).length} undated`;
+    const done = countInYear(y), goal = goalFor(y);
+    return goal ? `${y}: ${done} of ${goal}` : `${done} read in ${y}`;
+  }
+
+  function renderShelf() {
+    const wrap = $('#cases');
+    const list = visibleBooks();
+    const items = list.map(b => ({ type: 'book', b }));
+    const y = prefs.year;
+    const goal = (y !== 'all' && y !== 'none' && !query.trim()) ? goalFor(y) : 0;
+    const remaining = Math.max(0, goal - countInYear(y));
+    const ghostCount = Math.min(remaining, 300);
+    for (let i = 0; i < ghostCount; i++) items.push({ type: 'ghost', year: y, n: countInYear(y) + i + 1 });
+
+    const plate = plateText();
+    const cases = buildCases(wrap, items, { plate: (i) => plate });
+
+    if (!items.length) {
+      const note = document.createElement('div');
+      note.className = 'empty-note';
+      if (query.trim()) {
+        note.innerHTML = `<p>No books match “${esc(query)}”.</p><button class="btn btn-brass" data-clear>Clear search</button>`;
+      } else if (y === 'none') {
+        note.innerHTML = `<p>Every book on your shelves has a finish date.</p><button class="btn btn-brass" data-all>Show all years</button>`;
+      } else if (y !== 'all') {
+        note.innerHTML = `<p>No books finished in ${esc(y)} yet.</p><button class="btn btn-brass" data-goal>Set a ${esc(y)} reading goal</button>`;
+      } else {
+        note.innerHTML = `<p>Your shelves are waiting. Add the first book you’ve read.</p><button class="btn btn-brass" data-add>Add a book</button>`;
+      }
+      cases[0].querySelector('.shelf-row').appendChild(note);
+    }
+
+    // pager
+    const n = cases.length;
+    $('#pager').hidden = n < 2;
+    if (justAdded) {
+      const el = wrap.querySelector(`.book[data-id="${CSS.escape(justAdded)}"]`);
+      if (el) caseIndex = cases.indexOf(el.closest('.bookcase'));
+    }
+    caseIndex = Math.min(Math.max(0, caseIndex), n - 1);
+    wrap.style.scrollBehavior = 'auto';
+    wrap.scrollLeft = caseIndex * caseStep();
+    wrap.style.scrollBehavior = '';
+    updatePager();
+  }
+
+  function caseCount() { return $('#cases').children.length || 1; }
+  function caseStep() {
+    const kids = $('#cases').children;
+    return kids.length > 1 ? kids[1].offsetLeft - kids[0].offsetLeft : ($('#cases').clientWidth || 1);
+  }
+  function currentCase() { return Math.round($('#cases').scrollLeft / caseStep()); }
+  function updatePager() {
+    const n = caseCount();
+    caseIndex = Math.min(currentCase(), n - 1);
+    $('#pagerLabel').textContent = `Bookcase ${caseIndex + 1} of ${n}`;
+    $('#prevCase').disabled = caseIndex <= 0;
+    $('#nextCase').disabled = caseIndex >= n - 1;
+  }
+  function goCase(i) {
+    const wrap = $('#cases');
+    const n = caseCount();
+    i = Math.min(Math.max(0, i), n - 1);
+    wrap.scrollTo({ left: i * caseStep(), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+
   function fmtDate(iso) {
     if (!iso) return '';
     const [y, m, d] = iso.split('-').map(Number);
@@ -251,6 +347,7 @@
     return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
+  // ---------- list ----------
   function renderList() {
     const ol = $('#list');
     const list = visibleBooks();
@@ -265,24 +362,66 @@
     }).join('');
     const empty = $('#listEmpty');
     empty.hidden = list.length > 0;
-    empty.textContent = books.length ? `No books match “${query}”.` : 'Nothing logged yet. Add a book you’ve read and it will appear here.';
+    if (query.trim()) empty.textContent = `No books match “${query}”.`;
+    else if (prefs.year === 'none') empty.textContent = 'Every book has a finish date.';
+    else if (prefs.year !== 'all') empty.textContent = `No books finished in ${prefs.year} yet.`;
+    else empty.textContent = 'Nothing logged yet. Add a book you’ve read and it will appear here.';
   }
 
+  // ---------- header, years, goal bar ----------
   function renderStats() {
     const n = books.length;
     const rated = books.filter(b => b.rating);
     const avg = rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : 0;
-    const year = new Date().getFullYear().toString();
-    const thisYear = books.filter(b => (b.finished || '').startsWith(year)).length;
+    const y = thisYear();
     $('#stats').textContent = n
-      ? `${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${thisYear} finished in ${year}.`
+      ? `${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`
       : 'Every book you’ve read, on one shelf.';
-    $('#plate').textContent = `${n} read`;
     $('#genres').innerHTML = [...new Set(books.map(b => b.genre).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
   }
 
+  function renderYears() {
+    const years = yearsAvailable();
+    const hasUndated = books.some(b => !yearOf(b));
+    if (prefs.year !== 'all' && prefs.year !== 'none' && !years.includes(prefs.year)) prefs.year = 'all';
+    if (prefs.year === 'none' && !hasUndated) prefs.year = 'all';
+    const opts = [['all', 'All'], ...years.map(y => [y, y]), ...(hasUndated ? [['none', 'No date']] : [])];
+    $('#years').innerHTML = opts.map(([v, label]) =>
+      `<button role="tab" data-year="${v}" aria-selected="${prefs.year === v}">${label}</button>`).join('');
+  }
+
+  function renderGoalBar() {
+    const bar = $('#goalBar');
+    const y = prefs.year;
+    if (y === 'all' || y === 'none') { bar.hidden = true; return; }
+    bar.hidden = false;
+    const goal = goalFor(y), done = countInYear(y);
+    if (!goal) {
+      bar.className = 'goalbar';
+      bar.innerHTML = `<p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} finished in ${esc(y)}. Set a goal and empty spots will hold space on the shelf.</p><span class="spacer"></span><button class="btn btn-brass" data-goal>Set a ${esc(y)} goal</button>`;
+      return;
+    }
+    const pct = Math.min(100, Math.round((done / goal) * 100));
+    const met = done >= goal;
+    bar.className = 'goalbar' + (met ? ' met' : '');
+    const left = goal - done;
+    bar.innerHTML = `<p class="goal-text"><strong>${done} of ${goal}</strong> books for ${esc(y)}. ${met ? 'Goal reached.' : `${left} to go.`}</p>
+      <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(done, goal)}"><span style="width:${pct}%"></span></div>
+      <button class="btn btn-ghost" data-goal>Change goal</button>`;
+  }
+
+  // ---------- page routing ----------
+  const onCustomize = () => location.hash === '#customize';
+
   function render() {
+    const cz = onCustomize();
+    $('#libraryPage').hidden = cz;
+    $('#customizePage').hidden = !cz;
+    $('.controls').style.visibility = cz ? 'hidden' : '';
     renderStats();
+    if (cz) { renderCustomize(); return; }
+    renderYears();
+    renderGoalBar();
     const shelf = prefs.view === 'shelf';
     $('#shelfView').hidden = !shelf;
     $('#listView').hidden = shelf;
@@ -291,6 +430,58 @@
     $('#sort').value = prefs.sort;
     if (shelf) renderShelf(); else renderList();
     justAdded = null;
+  }
+
+  // ---------- customize ----------
+  function renderCustomize() {
+    const t = prefs.theme;
+    // preview: one bookcase with the newest books (or sample classics)
+    const src = books.length ? [...books].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 14) : SAMPLE;
+    buildCases($('#czPreview'), src.map(b => ({ type: 'book', b })), { maxRows: 1, minRows: 2, perCase: 2, plate: () => 'Preview' });
+
+    $('#czWall').innerHTML = D.WALLPAPERS.map(w => `
+      <button type="button" class="tile" role="radio" aria-checked="${t.wall === w.key}" data-wall="${w.key}">
+        <span class="tile-art wall" style="background-color:${w.color};background-image:${D.svgURL(w.tile)};background-size:${w.size}px ${w.h || w.size}px"></span>
+        <span class="tile-label">${w.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('');
+
+    $('#czWood').innerHTML = D.WOODS.map(w => {
+      const [hi, lt, mid, dk, , r1, r2] = w.v;
+      const plank = `linear-gradient(180deg, ${hi}, ${lt} 20%, ${mid} 60%, ${dk})`;
+      const recess = `linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.2)), linear-gradient(90deg, ${r1}, ${r2}, ${r1})`;
+      return `<button type="button" class="tile" role="radio" aria-checked="${t.wood === w.key}" data-wood="${w.key}">
+        <span class="tile-art wood" style="background:${mid}"><span class="wood-swatch">
+          <span style="background:${recess}"></span><span style="background:${plank}"></span>
+          <span style="background:${recess}"></span><span style="background:${plank}"></span></span></span>
+        <span class="tile-label">${w.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`;
+    }).join('');
+
+    $('#czBookend').innerHTML = Object.entries(D.BOOKENDS).map(([k, b]) => `
+      <button type="button" class="tile" role="radio" aria-checked="${t.bookend === k}" data-bookend="${k}">
+        <span class="tile-art">${b.svg ? D.sized(b.svg, 0.6) : '<span style="align-self:center;color:#cdbf9f;font-size:.85rem">None</span>'}</span>
+        <span class="tile-label">${b.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('');
+
+    $('#czTrinkets').innerHTML = Object.entries(D.TRINKETS).map(([k, tr]) => {
+      const on = t.trinkets.includes(k);
+      const sc = Math.min(0.62, 66 / Math.max(...(tr.svg.match(/height="(\d+)"/) || [0, 90]).slice(1).map(Number)));
+      return `<button type="button" class="tile" aria-pressed="${on}" data-trinket="${k}">
+        <span class="tile-art">${D.sized(tr.svg, sc)}</span>
+        <span class="tile-label">${tr.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`;
+    }).join('');
+    const n = t.trinkets.length;
+    $('#czTrinketHint').textContent = n
+      ? `${n} on display. They fill the empty spots on your shelves, in the order you pick them.`
+      : 'No trinkets on display. Pick a few to fill the empty spots on your shelves.';
+  }
+
+  function setTheme(patch) {
+    Object.assign(prefs.theme, patch);
+    savePrefs();
+    D.applyTheme(prefs.theme);
+    renderCustomize();
   }
 
   // ---------- details ----------
@@ -364,7 +555,7 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  function openEditor(id = null) {
+  function openEditor(id = null, finished = null) {
     editingId = id;
     const b = id ? books.find(x => x.id === id) : null;
     const f = $('#bookForm');
@@ -374,7 +565,7 @@
     $('#saveBtn').textContent = b ? 'Save changes' : 'Put it on the shelf';
     $('#fTitle').value = b?.title || '';
     $('#fAuthor').value = b?.author || '';
-    $('#fFinished').value = b ? (b.finished || '') : today();
+    $('#fFinished').value = b ? (b.finished || '') : (finished || today());
     $('#fPages').value = b?.pages || '';
     $('#fGenre').value = b?.genre || '';
     $('#fReview').value = b?.review || '';
@@ -408,6 +599,8 @@
       review: $('#fReview').value.trim(),
       color: colorVal && colorVal !== 'auto' ? Number(colorVal) : null,
     };
+    const y = yearOf(data);
+    const before = y ? countInYear(y) : 0;
     if (editingId) {
       const b = books.find(x => x.id === editingId);
       Object.assign(b, data, { updatedAt: Date.now() });
@@ -423,12 +616,72 @@
     save();
     $('#editor').close();
     render();
-    if (wasEditing) setTimeout(() => openDetail(wasEditing), 0);
+    const goal = y ? goalFor(y) : 0;
+    if (goal && before < goal && countInYear(y) >= goal) celebrate(y);
+    else if (wasEditing) setTimeout(() => openDetail(wasEditing), 0);
   }
+
+  // ---------- goals ----------
+  function openGoal(year) {
+    const y = year || (prefs.year !== 'all' && prefs.year !== 'none' ? prefs.year : thisYear());
+    const years = [...new Set([thisYear(), String(+thisYear() + 1), ...yearsAvailable()])].sort((a, b) => b.localeCompare(a));
+    $('#gYear').innerHTML = years.map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('');
+    syncGoalForm();
+    $('#goalError').hidden = true;
+    $('#goalDialog').showModal();
+    setTimeout(() => $('#gCount').focus(), 30);
+  }
+  function syncGoalForm() {
+    const y = $('#gYear').value;
+    const g = goalFor(y);
+    $('#gCount').value = g || '';
+    $('#goalTitle').textContent = `${y} reading goal`;
+    $('#goalSub').textContent = `${countInYear(y)} finished so far. Empty spots on the ${y} shelf hold space for the rest.`;
+    $('#goalRemove').hidden = !g;
+  }
+  function saveGoal(e) {
+    e.preventDefault();
+    const y = $('#gYear').value;
+    const n = parseInt($('#gCount').value, 10);
+    if (!(n > 0)) {
+      $('#goalError').textContent = 'Enter how many books you want to read, 1 or more.';
+      $('#goalError').hidden = false;
+      return;
+    }
+    prefs.goals[y] = n;
+    prefs.year = y;
+    caseIndex = 0;
+    savePrefs();
+    $('#goalDialog').close();
+    render();
+    const left = n - countInYear(y);
+    toast(left > 0 ? `Goal saved: ${n} books in ${y}. ${left} to go.` : `Goal saved. You’ve already read ${countInYear(y)} in ${y}.`);
+  }
+
+  function celebrate(y) {
+    const el = $('#celebrate');
+    $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}.`;
+    $('#celebrateRaise').dataset.year = y;
+    const conf = el.querySelector('.confetti');
+    conf.innerHTML = '';
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const colors = ['#e6c886', '#f3e3c3', '#c97a4b', '#9cc0c8', '#c4dba0', '#e8a37e'];
+      for (let i = 0; i < 46; i++) {
+        const s = document.createElement('i');
+        s.textContent = i % 3 ? '★' : '✦';
+        s.style.cssText = `left:${Math.random() * 100}%;--c:${colors[i % colors.length]};--s:${12 + Math.random() * 18}px;--d:${2.4 + Math.random() * 2.2}s;--delay:${Math.random() * 1.2}s;--x:${(Math.random() - .5) * 160}px;--r:${(Math.random() - .5) * 720}deg`;
+        conf.appendChild(s);
+      }
+    }
+    el.hidden = false;
+    setTimeout(() => $('#celebrateClose').focus(), 50);
+  }
+  function closeCelebrate() { $('#celebrate').hidden = true; $('#celebrate .confetti').innerHTML = ''; }
 
   // ---------- backup ----------
   function exportBooks() {
-    const blob = new Blob([JSON.stringify({ app: 'Tomestead', version: 1, exportedAt: new Date().toISOString(), books }, null, 2)], { type: 'application/json' });
+    const payload = { app: 'Tomestead', version: 2, exportedAt: new Date().toISOString(), books, settings: { theme: prefs.theme, goals: prefs.goals } };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `tomestead-backup-${today()}.json`;
@@ -457,8 +710,15 @@
           if (i >= 0) books[i] = clean; else books.push(clean);
           n++;
         }
+        const st = !Array.isArray(parsed) && parsed.settings;
+        if (st) {
+          if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS }, st.theme);
+          if (st.goals) prefs.goals = Object.assign({}, prefs.goals, st.goals);
+          savePrefs();
+          D.applyTheme(prefs.theme);
+        }
         save(); render();
-        toast(`Restored ${n} ${n === 1 ? 'book' : 'books'}.`);
+        toast(`Restored ${n} ${n === 1 ? 'book' : 'books'}${st ? ' and your library settings' : ''}.`);
       } catch {
         toast('That file isn’t a Tomestead backup. Choose a .json file made with “Back up my library”.');
       }
@@ -473,7 +733,7 @@
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
   }
 
   // ---------- install ----------
@@ -498,18 +758,37 @@
     document.querySelectorAll('.viewtoggle button').forEach(btn => btn.addEventListener('click', () => {
       prefs.view = btn.dataset.view; savePrefs(); render();
     }));
-    $('#sort').addEventListener('change', e => { prefs.sort = e.target.value; savePrefs(); render(); });
-    $('#search').addEventListener('input', e => { query = e.target.value; render(); });
+    $('#sort').addEventListener('change', e => { prefs.sort = e.target.value; savePrefs(); caseIndex = 0; render(); });
+    $('#search').addEventListener('input', e => { query = e.target.value; caseIndex = 0; render(); });
+    $('#years').addEventListener('click', e => {
+      const b = e.target.closest('[data-year]'); if (!b) return;
+      prefs.year = b.dataset.year; caseIndex = 0; savePrefs(); render();
+    });
 
-    $('#shelves').addEventListener('click', e => {
+    // shared actions inside the library page
+    $('#libraryPage').addEventListener('click', e => {
+      const ghost = e.target.closest('.book.ghost');
+      if (ghost) { const y = ghost.dataset.ghost; return openEditor(null, y === thisYear() ? today() : `${y}-12-31`); }
       const b = e.target.closest('.book');
       if (b) return openDetail(b.dataset.id);
+      const it = e.target.closest('.ledger-item');
+      if (it) return openDetail(it.dataset.id);
       if (e.target.closest('[data-add]')) return openEditor();
+      if (e.target.closest('[data-goal]')) return openGoal();
+      if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
       if (e.target.closest('[data-clear]')) { query = ''; $('#search').value = ''; render(); }
     });
-    $('#list').addEventListener('click', e => {
-      const it = e.target.closest('.ledger-item');
-      if (it) openDetail(it.dataset.id);
+
+    // bookcase paging
+    $('#prevCase').addEventListener('click', () => goCase(currentCase() - 1));
+    $('#nextCase').addEventListener('click', () => goCase(currentCase() + 1));
+    let st;
+    $('#cases').addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(updatePager, 60); }, { passive: true });
+    document.addEventListener('keydown', e => {
+      if (onCustomize() || prefs.view !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+      if (e.key === 'ArrowRight') goCase(currentCase() + 1);
+      if (e.key === 'ArrowLeft') goCase(currentCase() - 1);
     });
 
     document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => btn.closest('dialog').close()));
@@ -528,8 +807,25 @@
 
     $('#bookForm').addEventListener('submit', submitEditor);
 
+    // goals
+    $('#goalForm').addEventListener('submit', saveGoal);
+    $('#gYear').addEventListener('change', syncGoalForm);
+    $('#goalRemove').addEventListener('click', () => {
+      const y = $('#gYear').value;
+      delete prefs.goals[y]; savePrefs();
+      $('#goalDialog').close(); render();
+      toast(`Removed your ${y} goal.`);
+    });
+    $('#celebrateClose').addEventListener('click', closeCelebrate);
+    $('#celebrateRaise').addEventListener('click', e => { const y = e.currentTarget.dataset.year; closeCelebrate(); openGoal(y); });
+    $('#celebrate').addEventListener('click', e => { if (e.target.id === 'celebrate') closeCelebrate(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#celebrate').hidden) closeCelebrate(); });
+
+    // menu
     const more = $('.more');
     document.addEventListener('click', e => { if (more.open && !more.contains(e.target)) more.open = false; });
+    $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
+    $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoal(); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     $('#importBtn').addEventListener('click', () => { more.open = false; $('#importFile').click(); });
     $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importBooks(f); e.target.value = ''; });
@@ -543,18 +839,47 @@
     });
     $('#iosTipClose').addEventListener('click', () => { $('#iosTip').hidden = true; prefs.iosTipDismissed = true; savePrefs(); });
 
+    // customize page
+    window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+    $('#czDone').addEventListener('click', () => {
+      history.pushState(null, '', location.pathname + location.search);
+      render(); window.scrollTo(0, 0);
+      toast('Your library has its new look.');
+    });
+    $('#customizePage').addEventListener('click', e => {
+      const t = e.target.closest('.tile'); if (!t) return;
+      if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
+      else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
+      else if (t.dataset.bookend) setTheme({ bookend: t.dataset.bookend });
+      else if (t.dataset.trinket) {
+        const k = t.dataset.trinket;
+        const list = prefs.theme.trinkets.includes(k) ? prefs.theme.trinkets.filter(x => x !== k) : [...prefs.theme.trinkets, k];
+        setTheme({ trinkets: list });
+      }
+      const sel = t.dataset.wall ? `[data-wall="${t.dataset.wall}"]` : t.dataset.wood ? `[data-wood="${t.dataset.wood}"]` : t.dataset.bookend ? `[data-bookend="${t.dataset.bookend}"]` : `[data-trinket="${t.dataset.trinket}"]`;
+      const again = $(`#customizePage .tile${sel}`); again && again.focus();
+    });
+    $('#czReset').addEventListener('click', () => {
+      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets] });
+      toast('Back to the original look.');
+    });
+
     let rt; let lastW = window.innerWidth;
     window.addEventListener('resize', () => {
       clearTimeout(rt);
-      rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; if (prefs.view === 'shelf') renderShelf(); } }, 120);
+      rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; render(); } }, 120);
     });
-    window.addEventListener('storage', e => { if (e.key === STORE) { books = load(); render(); } });
+    window.addEventListener('storage', e => {
+      if (e.key === STORE) { books = load(); render(); }
+      if (e.key === PREFS) { prefs = Object.assign(prefs, loadJSON(PREFS, {})); D.applyTheme(prefs.theme); render(); }
+    });
   }
 
+  D.applyTheme(prefs.theme);
   wire();
   render();
   setupIosTip();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => prefs.view === 'shelf' && renderShelf());
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => render());
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

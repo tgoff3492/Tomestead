@@ -35,6 +35,9 @@
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
         </summary>
         <div class="menu">
+          <button id="customizeBtn">Customize library</button>
+          <button id="goalMenuBtn">Set a reading goal</button>
+          <hr>
           <button id="installBtn" hidden>Install app</button>
           <button id="exportBtn">Back up my library</button>
           <button id="importBtn">Restore from backup</button>
@@ -44,36 +47,80 @@
     </div>
   </header>
 
-  <div class="toolbar">
-    <label class="search">
-      <span class="sr-only">Search your books</span>
-      <input id="search" type="search" placeholder="Find a title or author" autocomplete="off">
-    </label>
-    <label class="sort">
-      <span>Arrange by</span>
-      <select id="sort">
-        <option value="added">Recently added</option>
-        <option value="finished">Date finished</option>
-        <option value="author">Author</option>
-        <option value="title">Title</option>
-        <option value="rating">Rating</option>
-      </select>
-    </label>
+  <div id="libraryPage">
+    <div class="toolbar">
+      <div id="years" class="years" role="tablist" aria-label="Year read"></div>
+      <div class="toolbar-right">
+        <label class="search">
+          <span class="sr-only">Search your books</span>
+          <input id="search" type="search" placeholder="Find a title or author" autocomplete="off">
+        </label>
+        <label class="sort">
+          <span>Arrange by</span>
+          <select id="sort">
+            <option value="added">Recently added</option>
+            <option value="finished">Date finished</option>
+            <option value="author">Author</option>
+            <option value="title">Title</option>
+            <option value="rating">Rating</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <main>
+      <div id="goalBar" class="goalbar" hidden></div>
+
+      <section id="shelfView" aria-label="Bookshelves">
+        <div id="cases" class="cases"></div>
+        <nav id="pager" class="pager" aria-label="Bookcases" hidden>
+          <button id="prevCase" class="pager-btn" aria-label="Previous bookcase">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <span id="pagerLabel" class="pager-label"></span>
+          <button id="nextCase" class="pager-btn" aria-label="Next bookcase">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </nav>
+      </section>
+
+      <section id="listView" class="ledger" aria-label="Book list" hidden>
+        <ol id="list" class="ledger-list"></ol>
+        <p id="listEmpty" class="ledger-empty" hidden></p>
+      </section>
+    </main>
   </div>
 
-  <main>
-    <section id="shelfView" class="bookcase" aria-label="Bookshelf">
-      <div class="crown"><span class="plate" id="plate">0 read</span></div>
-      <div class="lamp" aria-hidden="true"></div>
-      <div id="shelves" class="shelves"></div>
-      <div class="plinth"></div>
-    </section>
-
-    <section id="listView" class="ledger" aria-label="Book list" hidden>
-      <ol id="list" class="ledger-list"></ol>
-      <p id="listEmpty" class="ledger-empty" hidden></p>
-    </section>
-  </main>
+  <!-- Customize page -->
+  <div id="customizePage" class="customize" hidden>
+    <div class="cz-head">
+      <h2>Customize your library</h2>
+      <button id="czDone" class="btn btn-brass">Done</button>
+    </div>
+    <div id="czPreview" class="cz-preview cases" aria-label="Preview"></div>
+    <div class="cz-panel paper-panel">
+      <section class="cz-section">
+        <h3>Wallpaper</h3>
+        <div id="czWall" class="tiles" role="radiogroup" aria-label="Wallpaper"></div>
+      </section>
+      <section class="cz-section">
+        <h3>Shelf wood</h3>
+        <div id="czWood" class="tiles" role="radiogroup" aria-label="Shelf wood"></div>
+      </section>
+      <section class="cz-section">
+        <h3>Bookends</h3>
+        <div id="czBookend" class="tiles" role="radiogroup" aria-label="Bookends"></div>
+      </section>
+      <section class="cz-section">
+        <h3>Trinkets</h3>
+        <p class="cz-hint" id="czTrinketHint">Choose what sits in the empty spots on your shelves.</p>
+        <div id="czTrinkets" class="tiles" aria-label="Trinkets"></div>
+      </section>
+      <div class="cz-foot">
+        <button id="czReset" class="btn btn-ghost">Reset to the original look</button>
+      </div>
+    </div>
+  </div>
 
   <div id="iosTip" class="ios-tip" hidden>
     <p>To keep Tomestead on your Home Screen, tap the Share button, then <strong>Add to Home Screen</strong>.</p>
@@ -150,8 +197,48 @@
     </form>
   </dialog>
 
+  <!-- Reading goal -->
+  <dialog id="goalDialog" class="paper narrow">
+    <form id="goalForm" method="dialog" novalidate>
+      <h2 id="goalTitle">Reading goal</h2>
+      <p class="meta" id="goalSub">How many books do you want to read this year? Empty spots on your shelf will hold space for them.</p>
+      <div class="row2">
+        <div class="field">
+          <label for="gYear">Year</label>
+          <select id="gYear"></select>
+        </div>
+        <div class="field">
+          <label for="gCount">Books</label>
+          <input id="gCount" type="number" min="1" max="999" inputmode="numeric" required>
+        </div>
+      </div>
+      <p id="goalError" class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" id="goalRemove" class="btn btn-ghost danger" hidden>Remove goal</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-ink">Save goal</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Goal reached -->
+  <div id="celebrate" class="celebrate" hidden>
+    <div class="confetti" aria-hidden="true"></div>
+    <div class="celebrate-card paper-panel" role="alertdialog" aria-labelledby="celebrateTitle" aria-describedby="celebrateText">
+      <div class="celebrate-seal" aria-hidden="true">★</div>
+      <h2 id="celebrateTitle">You did it!</h2>
+      <p id="celebrateText"></p>
+      <div class="actions center">
+        <button id="celebrateRaise" class="btn btn-ghost">Raise my goal</button>
+        <button id="celebrateClose" class="btn btn-ink">Back to my shelf</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="decor.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
