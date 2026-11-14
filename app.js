@@ -61,6 +61,19 @@
   prefs.goals = prefs.goals || {};
   prefs.trophies = prefs.trophies || {};
   prefs.recs = prefs.recs || { dismissed: [] };
+  // tags: a starter set you can change, plus any you make yourself
+  const TAG_PRESETS = ['Favorite', 'Comfort read', 'Book club', 'Cozy', 'Dark', 'Funny', 'Hopeful', 'Emotional', 'Mysterious', 'Adventurous', 'Thought-provoking', 'Fast-paced'];
+  function cleanTags(arr) {
+    const out = [];
+    for (const t of Array.isArray(arr) ? arr : []) {
+      const v = String(t || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+      if (v && !out.some(x => x.toLowerCase() === v.toLowerCase())) out.push(v);
+    }
+    return out;
+  }
+  prefs.tagList = cleanTags(Array.isArray(prefs.tagList) ? prefs.tagList : TAG_PRESETS);
+  let tagFilter = null;        // show only books with this tag
+  let reviewFilter = false;    // show only books still waiting for a review
   let query = '';
   let justAdded = null;
   let editingId = null;
@@ -102,7 +115,8 @@
     const s = scale();
     const height = Math.round((176 + (h % 66)) * s);           // 176–241px
     let width;
-    if (b.pages && b.pages > 0) width = Math.min(66, Math.max(24, 18 + b.pages / 16));
+    const pages = pagesOf(b);
+    if (pages > 0) width = Math.min(66, Math.max(24, 18 + pages / 16));
     else width = 26 + ((h >>> 5) % 30);                         // 26–55px
     width = Math.round(width * (s < 1 ? 0.86 : 1));
     const variant = (h >>> 9) % 4;
@@ -110,15 +124,58 @@
     return { height, width, variant, fs };
   }
 
+  // ---------- reading status, finish dates, format ----------
+  // status: 'read' (the default, also older books with none), 'reading', 'want' or 'dnf'.
+  // `finished` is the latest time you finished it; `rereads` holds the earlier times.
+  const STATUSES = ['read', 'reading', 'want', 'dnf'];
+  const statusOf = (b) => (STATUSES.includes(b.status) ? b.status : 'read');
+  function datesOf(b) {
+    const out = [];
+    [b.finished, ...(Array.isArray(b.rereads) ? b.rereads : [])].forEach(d => { d = String(d || ''); if (/^\d{4}/.test(d) && !out.includes(d)) out.push(d); });
+    return out;
+  }
+  // on your read shelves: finished at least once (a book you're rereading stays there too)
+  const isRead = (b) => statusOf(b) === 'read' || datesOf(b).length > 0;
+  const readBooks = () => books.filter(isRead);
+  const needsReview = (b) => statusOf(b) === 'read' && !String(b.review || '').trim();
+  const FORMATS = { print: 'Print', ebook: 'Ebook', audio: 'Audiobook' };
+  const formatOf = (b) => (FORMATS[b.format] ? b.format : 'print');
+  const PAGES_PER_HOUR = 30;   // so an audiobook gets a spine about as thick as the printed book
+  const pagesOf = (b) => (formatOf(b) === 'audio' && b.hours > 0 ? Math.round(b.hours * PAGES_PER_HOUR) : (b.pages > 0 ? b.pages : 0));
+  // how far along a book you're reading is, 0–100 (null if unknown)
+  function pctOf(b) {
+    const v = Number(b.progress);
+    if (!(v >= 0)) return null;
+    if (formatOf(b) === 'print') return b.pages > 0 ? Math.min(100, Math.round((v / b.pages) * 100)) : null;
+    return Math.min(100, Math.round(v));
+  }
+  function progressText(b) {
+    const v = Number(b.progress) || 0;
+    if (!v) return 'Just started';
+    if (formatOf(b) === 'print') return b.pages > 0 ? `p. ${v} of ${b.pages}` : `p. ${v}`;
+    return `${Math.round(v)}%`;
+  }
+  const seriesText = (b) => (b.series ? `${b.series}${b.seriesNo != null && b.seriesNo !== '' ? ` #${b.seriesNo}` : ''}` : '');
+  const tagsOf = (b) => (Array.isArray(b.tags) ? b.tags : []);
+  // every tag you know: your list first, then any only found on books (from an import, another device)
+  function tagVocab() {
+    const all = [...prefs.tagList];
+    for (const b of books) for (const t of tagsOf(b)) if (!all.some(x => x.toLowerCase() === t.toLowerCase())) all.push(t);
+    return all;
+  }
+
   // ---------- years & goals ----------
   const yearOf = (b) => (/^\d{4}/.test(b.finished || '') ? b.finished.slice(0, 4) : '');
+  const inYear = (b, y) => datesOf(b).some(d => d.slice(0, 4) === y);
   function yearsAvailable() {
-    const ys = new Set(books.map(yearOf).filter(Boolean));
+    const ys = new Set();
+    books.forEach(b => datesOf(b).forEach(d => ys.add(d.slice(0, 4))));
     ys.add(thisYear());
     Object.keys(prefs.goals).forEach(y => ys.add(y));
     return [...ys].sort((a, b) => b.localeCompare(a));
   }
-  const countInYear = (y) => books.filter(b => yearOf(b) === y).length;
+  // every time you finished a book counts (a reread in a new year counts again)
+  const countInYear = (y) => books.reduce((n, b) => n + datesOf(b).filter(d => d.slice(0, 4) === y).length, 0);
   const goalFor = (y) => (prefs.goals[y] > 0 ? prefs.goals[y] : 0);
 
   // ---------- goals with your own timeline ----------
@@ -135,8 +192,12 @@
   }
   const dayNum = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); };
   const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
-  const finishedOn = (b) => (ISO.test(String(b.finished || '').slice(0, 10)) ? b.finished.slice(0, 10) : '');
-  const booksBetween = (a, z) => books.filter(b => { const f = finishedOn(b); return f && f >= a && f <= z; });
+  // the finish dates that fall in a window, oldest first (one per time a book was finished)
+  function finishesBetween(a, z) {
+    const out = [];
+    for (const b of books) for (const d of datesOf(b)) { const f = d.slice(0, 10); if (ISO.test(f) && f >= a && f <= z) out.push(f); }
+    return out.sort();
+  }
   function shortDate(iso, withYear) {
     const [y, m, d] = iso.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined, withYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
@@ -152,7 +213,7 @@
 
   // where a goal stands today
   function goalInfo(g) {
-    const done = g.done ?? booksBetween(g.start, g.end).length;
+    const done = g.done ?? finishesBetween(g.start, g.end).length;
     const t = dayNum(today()), a = dayNum(g.start), z = dayNum(g.end);
     const status = t < a ? 'upcoming' : t > z ? 'ended' : 'active';
     const met = done >= g.target;
@@ -177,7 +238,7 @@
   function syncGoalMarks() {
     let changed = false;
     for (const g of prefs.customGoals) {
-      const hits = booksBetween(g.start, g.end).map(finishedOn).sort();
+      const hits = finishesBetween(g.start, g.end);
       const at = hits.length >= g.target ? hits[g.target - 1] : '';
       if ((g.metAt || '') !== at) { if (at) g.metAt = at; else delete g.metAt; changed = true; }
     }
@@ -200,22 +261,34 @@
   function trophiesShown() {
     const y = prefs.year;
     const all = Object.keys(prefs.trophies).sort().map(yr => ({ year: yr, ...prefs.trophies[yr] }));
-    if (y === 'none' || query.trim()) return [];
+    if (y === 'none' || STATUSES.includes(y) || query.trim() || tagFilter || reviewFilter) return [];
     return y === 'all' ? all : all.filter(t => t.year === y);
   }
 
   // ---------- sorting & filtering ----------
+  // which shelf you're looking at: all you've read, one year, no date, or a status
+  function shelfBooks(y = prefs.year) {
+    if (y === 'reading' || y === 'want' || y === 'dnf') return books.filter(b => statusOf(b) === y);
+    const read = readBooks();
+    if (y === 'all') return read;
+    if (y === 'none') return read.filter(b => !datesOf(b).length);
+    return read.filter(b => inYear(b, y));
+  }
+  const filtering = () => !!(query.trim() || tagFilter || reviewFilter);
   function visibleBooks() {
     const q = query.trim().toLowerCase();
-    let list = books.filter(b => !q || b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q) || (b.genre || '').toLowerCase().includes(q));
-    if (prefs.year === 'none') list = list.filter(b => !yearOf(b));
-    else if (prefs.year !== 'all') list = list.filter(b => yearOf(b) === prefs.year);
+    const has = (v) => String(v || '').toLowerCase().includes(q);
+    let list = shelfBooks().filter(b => !q || has(b.title) || has(b.author) || has(b.genre) || has(b.series) || tagsOf(b).some(has));
+    if (tagFilter) list = list.filter(b => tagsOf(b).some(t => t.toLowerCase() === tagFilter.toLowerCase()));
+    if (reviewFilter) list = list.filter(needsReview);
     const byStr = (k) => (a, b) => (a[k] || '').localeCompare(b[k] || '', undefined, { sensitivity: 'base' });
     switch (prefs.sort) {
       case 'title': list.sort(byStr('title')); break;
       case 'author': list.sort((a, b) => surname(a.author).localeCompare(surname(b.author)) || byStr('title')(a, b)); break;
       case 'rating': list.sort((a, b) => (b.rating || 0) - (a.rating || 0) || byStr('title')(a, b)); break;
       case 'finished': list.sort((a, b) => (b.finished || '').localeCompare(a.finished || '')); break;
+      // each series together, in order; books outside a series after them, by author
+      case 'series': list.sort((a, b) => (!a.series - !b.series) || byStr('series')(a, b) || ((Number(a.seriesNo) || 0) - (Number(b.seriesNo) || 0)) || surname(a.author).localeCompare(surname(b.author)) || byStr('title')(a, b)); break;
       default: list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     }
     return list;
@@ -237,19 +310,30 @@
     return out;
   }
 
-  function spine(b) {
+  const FORMAT_MARK = {
+    audio: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 9.5V8a5 5 0 0 1 10 0v1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2" y="9" width="3" height="5" rx="1.2" fill="currentColor"/><rect x="11" y="9" width="3" height="5" rx="1.2" fill="currentColor"/></svg>',
+    ebook: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="1.5" width="9" height="13" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 12.2h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  };
+  function spine(b, opts = {}) {
     const d = dims(b), c = colorOf(b);
+    const st = statusOf(b);
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = `book v${d.variant}${c.light ? ' light' : ''}${b.id === justAdded ? ' arrive' : ''}`;
+    // a slip of paper sticks up from books waiting for a review; a ribbon marks your place in one you're reading
+    const mark = opts.plain ? '' : st === 'reading' ? ' ribbon' : needsReview(b) ? ' slip' : '';
+    el.className = `book v${d.variant}${c.light ? ' light' : ''}${b.id === justAdded ? ' arrive' : ''}${mark}`;
     el.style.cssText = `--w:${d.width}px;--h:${d.height}px;--bg:${c.bg};--ink:${c.ink};--fs:${d.fs}px`;
     el.dataset.id = b.id;
     const r = b.rating || 0;
-    el.setAttribute('aria-label', `${b.title} by ${b.author || 'unknown author'}${r ? `, ${r} of 5 stars` : ''}`);
+    const note = st === 'reading' ? ', reading now' : st === 'want' ? ', want to read' : st === 'dnf' ? ', set aside' : needsReview(b) ? ', waiting for your review' : '';
+    el.setAttribute('aria-label', `${b.title} by ${b.author || 'unknown author'}${r ? `, ${r} of 5 stars` : ''}${note}`);
+    const fm = FORMAT_MARK[formatOf(b)];
     el.innerHTML =
       (r ? `<span class="s-stars" aria-hidden="true">${starsHTML(r)}</span>` : '') +
       `<span class="s-title">${esc(b.title)}</span>` +
-      (b.author ? `<span class="s-author">${esc(spineAuthor(b.author))}</span>` : '');
+      (b.author ? `<span class="s-author">${esc(spineAuthor(b.author))}</span>` : '') +
+      (fm ? `<span class="s-format">${fm}</span>` : '') +
+      (mark ? `<span class="s-mark" aria-hidden="true"></span>` : '');
     return el;
   }
 
@@ -558,8 +642,11 @@
 
   function plateText() {
     const y = prefs.year;
-    if (y === 'all') return `${books.length} read`;
-    if (y === 'none') return `${books.filter(b => !yearOf(b)).length} undated`;
+    if (y === 'reading') return `${shelfBooks(y).length} reading`;
+    if (y === 'want') return `${shelfBooks(y).length} to read`;
+    if (y === 'dnf') return `${shelfBooks(y).length} set aside`;
+    if (y === 'all') return `${readBooks().length} read`;
+    if (y === 'none') return `${shelfBooks('none').length} undated`;
     const done = countInYear(y), goal = goalFor(y);
     return goal ? `${y}: ${done} of ${goal}` : `${done} read in ${y}`;
   }
@@ -569,7 +656,7 @@
     const list = visibleBooks();
     const items = list.map(b => ({ type: 'book', b }));
     const y = prefs.year;
-    const goal = (y !== 'all' && y !== 'none' && !query.trim()) ? goalFor(y) : 0;
+    const goal = (/^\d{4}$/.test(y) && !filtering()) ? goalFor(y) : 0;
     const remaining = Math.max(0, goal - countInYear(y));
     const ghostCount = Math.min(remaining, 300);
     for (let i = 0; i < ghostCount; i++) items.push({ type: 'ghost', year: y, n: countInYear(y) + i + 1 });
@@ -580,8 +667,14 @@
     if (!items.length) {
       const note = document.createElement('div');
       note.className = 'empty-note';
-      if (query.trim()) {
-        note.innerHTML = `<p>No books match “${esc(query)}”.</p><button class="btn btn-brass" data-clear>Clear search</button>`;
+      if (filtering()) {
+        note.innerHTML = `<p>${query.trim() ? `No books match “${esc(query)}”` : 'No books here'}${tagFilter || reviewFilter ? ' with that filter' : ''}.</p><button class="btn btn-brass" data-clear>Clear ${query.trim() ? 'search' : 'filter'}</button>`;
+      } else if (y === 'reading') {
+        note.innerHTML = `<p>Nothing on the go right now.</p><button class="btn btn-brass" data-add="reading">Start a book</button>`;
+      } else if (y === 'want') {
+        note.innerHTML = `<p>Your to-read pile is empty.</p><button class="btn btn-brass" data-add="want">Add a book you want to read</button>`;
+      } else if (y === 'dnf') {
+        note.innerHTML = `<p>No books set aside. Books you stop partway through rest here.</p><button class="btn btn-brass" data-all>Back to your shelves</button>`;
       } else if (y === 'none') {
         note.innerHTML = `<p>Every book on your shelves has a finish date.</p><button class="btn btn-brass" data-all>Show all years</button>`;
       } else if (y !== 'all') {
@@ -634,32 +727,53 @@
   }
 
   // ---------- list ----------
+  // a small cover (or a cloth chip when there isn't one); wireThumbs() loads photos and falls back
+  function thumbHTML(b, size = 'S') {
+    const c = colorOf(b);
+    const a = b.art || {};
+    return a.status === 'found' && a.ids && a.ids.length
+      ? `<img class="thumb" alt="" loading="lazy" src="${Covers.coverURL(a.ids[a.i || 0], size)}" data-bg="${c.bg}">`
+      : a.status === 'upload' ? `<img class="thumb" alt="" data-upload="${esc(b.id)}" data-url="${esc(a.url || '')}" data-bg="${c.bg}">`
+      : `<span class="chip" style="--bg:${c.bg}" aria-hidden="true"></span>`;
+  }
+  function wireThumbs(root) {
+    const toChip = (img) => { const sp = document.createElement('span'); sp.className = 'chip'; sp.style.setProperty('--bg', img.dataset.bg); sp.setAttribute('aria-hidden', 'true'); img.replaceWith(sp); };
+    root.querySelectorAll('img.thumb').forEach(img => img.addEventListener('error', () => toChip(img), { once: true }));
+    root.querySelectorAll('img[data-upload]').forEach(async img => {
+      const u = (await Covers.uploadURL(img.dataset.upload)) || img.dataset.url;
+      if (u) img.src = u; else toChip(img);
+    });
+  }
+  function listRight(b) {
+    const st = statusOf(b);
+    const stars = b.rating ? `<span class="stars-sm" aria-label="${b.rating} of 5 stars">${starsHTML(b.rating)}</span>` : '';
+    if (st === 'reading') { const p = pctOf(b); return `<span class="tag-pill reading">Reading</span><br><span class="date">${esc(progressText(b))}${p != null && formatOf(b) === 'print' ? ` · ${p}%` : ''}</span>`; }
+    if (st === 'want') return `<span class="tag-pill">To read</span>`;
+    if (st === 'dnf') return `${stars || '<span class="tag-pill">Set aside</span>'}<br><span class="date">${b.stopped ? `Stopped ${esc(fmtDate(b.stopped))}` : 'Set aside'}</span>`;
+    const times = datesOf(b).length;
+    return `${stars || '<span class="date">Not rated</span>'}<br><span class="date">${esc(fmtDate(b.finished))}${times > 1 ? ` · read ${times}×` : ''}</span>`;
+  }
   function renderList() {
     const ol = $('#list');
     const list = visibleBooks();
     ol.innerHTML = list.map(b => {
-      const c = colorOf(b);
-      const a = b.art || {};
-      const thumb = a.status === 'found' && a.ids && a.ids.length
-        ? `<img class="thumb" alt="" loading="lazy" src="${Covers.coverURL(a.ids[a.i || 0], 'S')}" data-bg="${c.bg}">`
-        : a.status === 'upload' ? `<img class="thumb" alt="" data-upload="${esc(b.id)}" data-url="${esc(a.url || '')}" data-bg="${c.bg}">`
-        : `<span class="chip" style="--bg:${c.bg}" aria-hidden="true"></span>`;
+      const extra = [b.genre, seriesText(b), formatOf(b) !== 'print' ? FORMATS[formatOf(b)] : ''].filter(Boolean).map(esc).join(', ');
+      const tags = tagsOf(b);
       return `<li><button type="button" class="ledger-item" data-id="${esc(b.id)}">
-        ${thumb}
-        <span><h3>${esc(b.title)}</h3><span class="by">${esc(b.author || '')}${b.genre ? `, ${esc(b.genre)}` : ''}</span></span>
-        <span class="right">${b.rating ? `<span class="stars-sm" aria-label="${b.rating} of 5 stars">${starsHTML(b.rating)}</span>` : '<span class="date">Not rated</span>'}<br><span class="date">${esc(fmtDate(b.finished))}</span></span>
-        ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : ''}
+        ${thumbHTML(b)}
+        <span><h3>${esc(b.title)}</h3><span class="by">${esc(b.author || '')}${extra ? `, ${extra}` : ''}</span></span>
+        <span class="right">${listRight(b)}</span>
+        ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : needsReview(b) ? `<p class="excerpt muted">Waiting for your review</p>` : ''}
+        ${tags.length ? `<span class="ledger-tags">${tags.map(t => `<span class="tag-pill">${esc(t)}</span>`).join('')}</span>` : ''}
       </button></li>`;
     }).join('');
-    const toChip = (img) => { const sp = document.createElement('span'); sp.className = 'chip'; sp.style.setProperty('--bg', img.dataset.bg); sp.setAttribute('aria-hidden', 'true'); img.replaceWith(sp); };
-    ol.querySelectorAll('img.thumb').forEach(img => img.addEventListener('error', () => toChip(img), { once: true }));
-    ol.querySelectorAll('img[data-upload]').forEach(async img => {
-      const u = (await Covers.uploadURL(img.dataset.upload)) || img.dataset.url;
-      if (u) img.src = u; else toChip(img);
-    });
+    wireThumbs(ol);
     const empty = $('#listEmpty');
     empty.hidden = list.length > 0;
-    if (query.trim()) empty.textContent = `No books match “${query}”.`;
+    if (filtering()) empty.textContent = query.trim() ? `No books match “${query}”.` : 'No books with that filter.';
+    else if (prefs.year === 'reading') empty.textContent = 'Nothing on the go right now. Add a book you’re reading and choose “Reading now”.';
+    else if (prefs.year === 'want') empty.textContent = 'Your to-read pile is empty.';
+    else if (prefs.year === 'dnf') empty.textContent = 'No books set aside.';
     else if (prefs.year === 'none') empty.textContent = 'Every book has a finish date.';
     else if (prefs.year !== 'all') empty.textContent = `No books finished in ${prefs.year} yet.`;
     else empty.textContent = 'Nothing logged yet. Add a book you’ve read and it will appear here.';
@@ -667,31 +781,77 @@
 
   // ---------- header, years, goal bar ----------
   function renderStats() {
-    const n = books.length;
-    const rated = books.filter(b => b.rating);
+    const read = readBooks();
+    const n = read.length;
+    const rated = read.filter(b => b.rating);
     const avg = rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : 0;
     const y = thisYear();
-    $('#stats').textContent = n
-      ? `${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`
-      : 'Every book you’ve read, on one shelf.';
+    const waiting = onCustomize() || onYear() ? 0 : books.filter(needsReview).length;
+    $('#stats').innerHTML = n
+      ? `${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}${waiting ? ` <button type="button" class="linkbtn stats-link" data-review>${waiting} waiting for a review</button>` : ''}`
+      : (books.length ? 'Your first finished book goes on the shelf.' : 'Every book you’ve read, on one shelf.');
     $('#genres').innerHTML = [...new Set(books.map(b => b.genre).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
+    $('#seriesList').innerHTML = [...new Set(books.map(b => b.series).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
   }
 
   function renderYears() {
     const years = yearsAvailable();
-    const hasUndated = books.some(b => !yearOf(b));
-    if (prefs.year !== 'all' && prefs.year !== 'none' && !years.includes(prefs.year)) prefs.year = 'all';
-    if (prefs.year === 'none' && !hasUndated) prefs.year = 'all';
-    const opts = [['all', 'All'], ...years.map(y => [y, y]), ...(hasUndated ? [['none', 'No date']] : [])];
-    $('#years').innerHTML = opts.map(([v, label]) =>
-      `<button role="tab" data-year="${v}" aria-selected="${prefs.year === v}">${label}</button>`).join('');
+    const hasUndated = readBooks().some(b => !datesOf(b).length);
+    const counts = { reading: shelfBooks('reading').length, want: shelfBooks('want').length, dnf: shelfBooks('dnf').length };
+    const y = prefs.year;
+    if (/^\d{4}$/.test(y) && !years.includes(y)) prefs.year = 'all';
+    if (y === 'none' && !hasUndated) prefs.year = 'all';
+    if (STATUSES.includes(y) && y !== 'read' && !counts[y]) prefs.year = 'all';
+    const pill = ([v, label]) => `<button role="tab" data-year="${v}" aria-selected="${prefs.year === v}">${label}</button>`;
+    const gap = '<span class="pill-gap" aria-hidden="true"></span>';
+    // All, then your piles (they're used more than old years), then each year
+    const more = [['reading', 'Reading'], ['want', 'To read'], ['dnf', 'Set aside']].filter(([k]) => counts[k]);
+    $('#years').innerHTML = pill(['all', 'All']) +
+      (more.length ? gap + more.map(([v, label]) =>
+        `<button role="tab" class="st-pill" data-year="${v}" aria-selected="${prefs.year === v}">${label} <span class="pill-n">${counts[v]}</span></button>`).join('') + gap : '') +
+      [...years.map(y => [y, y]), ...(hasUndated ? [['none', 'No date']] : [])].map(pill).join('');
+    // keep the chosen pill in view on a phone
+    const on = $('#years [aria-selected="true"]');
+    if (on && on.offsetLeft + on.offsetWidth > $('#years').clientWidth) $('#years').scrollLeft = on.offsetLeft - 40;
+  }
+
+  // active filters (a tag, books waiting for a review), each with a way out
+  function renderFilters() {
+    const bar = $('#filterBar');
+    const chips = [];
+    if (tagFilter) chips.push(`<button type="button" class="filter-chip" data-unfilter="tag" aria-label="Stop showing only “${esc(tagFilter)}”">Tagged <strong>${esc(tagFilter)}</strong> <span aria-hidden="true">✕</span></button>`);
+    if (reviewFilter) chips.push(`<button type="button" class="filter-chip" data-unfilter="review" aria-label="Show all books again">Waiting for a review <span aria-hidden="true">✕</span></button>`);
+    bar.hidden = !chips.length;
+    bar.innerHTML = chips.join('');
+  }
+
+  // books you're in the middle of, with how far along you are
+  function renderNow() {
+    const bar = $('#nowBar');
+    const now = books.filter(b => statusOf(b) === 'reading').sort((a, b) => (b.progressAt || b.addedAt || 0) - (a.progressAt || a.addedAt || 0));
+    const show = now.length && !filtering() && prefs.year !== 'reading';
+    bar.hidden = !show;
+    if (!show) { bar.innerHTML = ''; return; }
+    bar.innerHTML = now.map(b => {
+      const p = pctOf(b);
+      return `<button type="button" class="now-card" data-now="${esc(b.id)}" aria-label="${esc(b.title)}: ${esc(progressText(b))}. Update your progress.">
+        <span class="now-cover">${thumbHTML(b, 'M')}</span>
+        <span class="now-body">
+          <span class="now-label">Reading now</span>
+          <span class="now-title">${esc(b.title)}</span>
+          <span class="now-meta">${esc(progressText(b))}${p != null && formatOf(b) === 'print' ? ` · ${p}%` : ''}</span>
+          <span class="goal-meter" aria-hidden="true"><span style="width:${p || 0}%"></span></span>
+        </span>
+      </button>`;
+    }).join('');
+    wireThumbs(bar);
   }
 
   function renderGoalBar() {
     const bar = $('#goalBar');
     const y = prefs.year;
     const rows = [];
-    if (y !== 'all' && y !== 'none') {
+    if (/^\d{4}$/.test(y)) {
       const goal = goalFor(y), done = countInYear(y);
       if (!goal) {
         rows.push(`<div class="goal-row"><p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button></div>`);
@@ -720,17 +880,22 @@
 
   // ---------- page routing ----------
   const onCustomize = () => location.hash === '#customize';
+  const onYear = () => location.hash === '#year';
 
   function render() {
     syncTrophies();
     syncGoalMarks();
-    const cz = onCustomize();
-    $('#libraryPage').hidden = cz;
+    const cz = onCustomize(), yr = onYear();
+    $('#libraryPage').hidden = cz || yr;
     $('#customizePage').hidden = !cz;
-    $('.controls').style.visibility = cz ? 'hidden' : '';
+    $('#yearPage').hidden = !yr;
+    $('.controls').style.visibility = cz || yr ? 'hidden' : '';
     renderStats();
-    if (cz) { renderCustomize(); return; }
+    if (cz) { renderCustomize(); placeFloor(); return; }
+    if (yr) { yearReview.render(); placeFloor(); return; }
     renderYears();
+    renderFilters();
+    renderNow();
     renderGoalBar();
     const shelf = prefs.view === 'shelf';
     $('#shelfView').hidden = !shelf;
@@ -755,7 +920,7 @@
   }
   function placeFloor() {
     const fl = $('#floor');
-    const show = !onCustomize() && prefs.view === 'shelf';
+    const show = !onCustomize() && !onYear() && prefs.view === 'shelf';
     fl.hidden = !show;
     if (!show) return;
     const stage = $('#stage'), cases = $('#cases');
@@ -805,8 +970,11 @@
   function renderCustomize() {
     const t = prefs.theme;
     // preview: one bookcase with the newest books (or sample classics)
-    const src = books.length ? [...books].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 14) : SAMPLE;
+    const read = readBooks();
+    const src = read.length ? [...read].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 14) : SAMPLE;
     buildCases($('#czPreview'), src.map(b => ({ type: 'book', b })), { maxRows: 1, minRows: 2, perCase: 2, plate: () => 'Preview' });
+    const im = introMode();
+    document.querySelectorAll('#czIntro [data-intro]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.intro === im)));
 
     $('#czWall').innerHTML = D.WALLPAPERS.map(w => `
       <button type="button" class="tile" role="radio" aria-checked="${t.wall === w.key}" data-wall="${w.key}">
@@ -899,6 +1067,14 @@
     el.innerHTML = T.html;
   }
 
+  // the opening scene: once a day (the default), every time, or never — kept per device
+  const introMode = () => { try { return localStorage.getItem('tomestead.intro.mode') || 'day'; } catch { return 'day'; } };
+  function setIntroMode(m) {
+    try { localStorage.setItem('tomestead.intro.mode', m); } catch {}
+    renderCustomize();
+    toast(m === 'day' ? 'The opening scene plays the first time you open Tomestead each day.' : m === 'always' ? 'The opening scene plays every time you open Tomestead.' : 'Tomestead opens straight to your shelves.');
+  }
+
   function setTheme(patch) {
     Object.assign(prefs.theme, patch);
     savePrefs();
@@ -933,14 +1109,18 @@
     if (queueRunning || navigator.onLine === false) return;
     queueRunning = true;
     let n = 0;
-    for (const b of [...books].sort((a, c) => (c.addedAt || 0) - (a.addedAt || 0))) {
-      if (n >= 40) break;
+    const snapshot = [...books].sort((a, c) => (c.addedAt || 0) - (a.addedAt || 0));
+    const had = new Set(snapshot.map(b => b.id));
+    for (const b of snapshot) {
+      if (n >= 600) break;
       if (b.lookedUp || (b.art && (b.art.status === 'upload' || b.art.status === 'plain'))) continue;
       await lookup(b);
       n++;
       await new Promise(r => setTimeout(r, 450));
     }
     queueRunning = false;
+    // books that arrived while this ran (an import) get their turn next
+    if (books.some(b => !had.has(b.id) && !b.lookedUp)) setTimeout(runLookupQueue, 500);
   }
   let listTimer;
   function scheduleListRefresh() {
@@ -999,30 +1179,215 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  function openEditor(id = null, finished = null, prefill = null) {
+  // the same book, however it was typed ("The Hobbit" by J.R.R. Tolkien = "hobbit" by Tolkien)
+  const normTitle = (t) => String(t || '').toLowerCase().replace(/\s*[(:].*$/, '').replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, '');
+  const dupKey = (b) => normTitle(b.title) + '|' + surname(String(b.author || '').split(/\s*(?:&|,| and )\s*/)[0]).replace(/[^a-z]/g, '');
+  const findDuplicate = (title, author, except) => { const k = dupKey({ title, author }); return books.find(b => b.id !== except && dupKey(b) === k); };
+
+  // ---------- add / edit a book ----------
+  let editStatus = 'read', editFormat = 'print', editTags = [], editRereads = [];
+  let pick = null;               // the Open Library match you chose: { olKey, cover, isbn }
+  let finishing = false;         // opened from "I finished it"
+
+  function setStatus(st) {
+    editStatus = st;
+    document.querySelectorAll('#fStatus [data-status]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.status === st)));
+    document.querySelectorAll('#bookForm [data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(st); });
+    const lbl = { read: 'Your review', reading: 'Thoughts so far', want: 'Why you want to read it', dnf: 'Why you put it down' }[st];
+    $('#fReviewLabel').innerHTML = `${lbl} <span class="opt">(${st === 'read' ? 'you can add it later' : 'optional'})</span>`;
+    $('#fReview').placeholder = st === 'read' ? 'What stayed with you?' : st === 'want' ? 'Who recommended it, what caught your eye…' : '';
+    if (!editingId) $('#saveBtn').textContent = { read: 'Put it on the shelf', reading: 'Start reading', want: 'Add to my to-read pile', dnf: 'Set it aside' }[st];
+    if (st === 'read' && !$('#fFinished').value) $('#fFinished').value = defaultFinished || today();
+    if (st === 'reading' && !$('#fStarted').value && !editingId) $('#fStarted').value = today();
+    if (st === 'dnf' && !$('#fStopped').value) $('#fStopped').value = today();
+    setProgressLabel();
+  }
+  function setFormat(f) {
+    editFormat = FORMATS[f] ? f : 'print';
+    document.querySelectorAll('#fFormat [data-format]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.format === editFormat)));
+    $('#fPagesField').hidden = editFormat === 'audio';
+    $('#fHoursField').hidden = editFormat !== 'audio';
+    setProgressLabel();
+    updateDetailsSum();
+  }
+  function setProgressLabel() {
+    const print = editFormat === 'print';
+    $('#fProgressLabel').textContent = print ? 'I’m on page' : 'How far along (%)';
+    $('#fProgress').max = print ? 5000 : 100;
+  }
+  // a short line on the closed "More details" so you can see what's set without opening it
+  function updateDetailsSum() {
+    const pages = parseInt($('#fPages').value, 10), hours = parseFloat($('#fHours').value);
+    const sn = $('#fSeriesNo').value;
+    const bits = [
+      editFormat !== 'print' ? FORMATS[editFormat] : '',
+      editFormat === 'audio' ? (hours > 0 ? `${hours} hours` : '') : (pages > 0 ? `${pages} pages` : ''),
+      $('#fGenre').value.trim(),
+      $('#fSeries').value.trim() ? `${$('#fSeries').value.trim()}${sn ? ` #${sn}` : ''}` : '',
+    ].filter(Boolean);
+    $('#fDetailsSum').textContent = bits.length ? bits.join(' · ') : 'Format, pages, genre, series, spine color';
+  }
+
+  function renderRereads() {
+    $('#fRereads').innerHTML = editRereads.map((d, i) => `<div class="reread">
+        <label for="rr${i}" class="rr-label">Also read</label>
+        <input type="date" id="rr${i}" data-rr="${i}" value="${esc(d)}">
+        <button type="button" class="rr-x" data-rr-x="${i}" aria-label="Remove this date">✕</button>
+      </div>`).join('');
+    $('#addReread').textContent = editRereads.length ? '+ Another time' : '+ I read it before, too';
+  }
+
+  function renderTagPick() {
+    const vocab = tagVocab();
+    editTags.forEach(t => { if (!vocab.some(x => x.toLowerCase() === t.toLowerCase())) vocab.push(t); });
+    const on = (t) => editTags.some(x => x.toLowerCase() === t.toLowerCase());
+    $('#fTags').innerHTML = vocab.map(t => `<button type="button" class="tag-toggle" aria-pressed="${on(t)}" data-tag="${esc(t)}">${esc(t)}</button>`).join('') +
+      `<input id="fTagNew" class="tag-new" maxlength="30" autocomplete="off" placeholder="+ New tag" aria-label="Make a new tag" enterkeyhint="done">`;
+  }
+  function addTagFromInput() {
+    const inp = $('#fTagNew');
+    const v = cleanTags([inp.value])[0];
+    if (!v) return;
+    const known = tagVocab().find(x => x.toLowerCase() === v.toLowerCase());
+    const name = known || v;
+    if (!known) { prefs.tagList.push(name); savePrefs(); }
+    if (!editTags.some(x => x.toLowerCase() === name.toLowerCase())) editTags.push(name);
+    renderTagPick();
+    setTimeout(() => $('#fTagNew').focus(), 0);
+  }
+
+  // ---------- finding the book on Open Library as you type ----------
+  let findTimer = null, findSeq = 0, findItems = [], findActive = -1;
+  function closeSuggest() {
+    clearTimeout(findTimer); findSeq++;
+    findItems = []; findActive = -1;
+    $('#fSuggest').hidden = true; $('#fSuggest').innerHTML = '';
+    $('#fTitle').setAttribute('aria-expanded', 'false');
+    $('#fTitle').removeAttribute('aria-activedescendant');
+  }
+  function onTitleInput() {
+    if (pick) { pick = null; $('#fMatch').hidden = true; }
+    const q = $('#fTitle').value.trim();
+    clearTimeout(findTimer);
+    if (editingId || q.length < 3 || navigator.onLine === false) { closeSuggest(); return; }
+    findTimer = setTimeout(async () => {
+      const seq = ++findSeq;
+      const ul = $('#fSuggest');
+      if (ul.hidden) { ul.innerHTML = '<li class="sg-note">Searching Open Library…</li>'; ul.hidden = false; }
+      try {
+        const res = await Covers.search(q);
+        if (seq !== findSeq) return;
+        findItems = res; findActive = -1;
+        renderSuggest();
+      } catch { if (seq === findSeq) closeSuggest(); }
+    }, 320);
+  }
+  function renderSuggest() {
+    const ul = $('#fSuggest');
+    ul.innerHTML = findItems.map((it, i) => {
+      const by = [it.author, it.year, it.pages ? `${it.pages} pages` : ''].filter(Boolean).map(esc).join(' · ');
+      return `<li role="option" id="sg${i}" data-i="${i}" aria-selected="${i === findActive}">
+        <span class="sg-cover">${it.cover ? `<img alt="" loading="lazy" src="${Covers.coverURL(it.cover, 'S')}">` : ''}</span>
+        <span class="sg-text"><span class="sg-title">${esc(it.title)}</span><span class="sg-by">${by}</span></span></li>`;
+    }).join('') + `<li class="sg-note">${findItems.length ? 'Not here? Keep typing, or fill in the rest yourself.' : 'Nothing found on Open Library. Fill in the rest yourself.'}</li>`;
+    ul.querySelectorAll('img').forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
+    ul.hidden = false;
+    $('#fTitle').setAttribute('aria-expanded', String(findItems.length > 0));
+    if (findActive >= 0) $('#fTitle').setAttribute('aria-activedescendant', `sg${findActive}`); else $('#fTitle').removeAttribute('aria-activedescendant');
+  }
+  function knownGenres() { return [...new Set(books.map(b => b.genre).filter(Boolean))]; }
+  function applyPick(it) {
+    pick = { olKey: it.olKey || null, cover: it.cover || null, isbn: it.isbn || '' };
+    $('#fTitle').value = it.title;
+    if (it.author) $('#fAuthor').value = it.author;
+    if (it.pages && !$('#fPages').value) $('#fPages').value = it.pages;
+    if (!$('#fGenre').value) { const g = Covers.genreFrom(it.subjects, knownGenres()); if (g) $('#fGenre').value = g; }
+    closeSuggest();
+    const m = $('#fMatch');
+    const bits = [it.year ? `first published ${it.year}` : '', it.pages ? `${it.pages} pages` : ''].filter(Boolean).join(', ');
+    m.innerHTML = `${it.cover ? `<img alt="" src="${Covers.coverURL(it.cover, 'S')}">` : '<span class="match-tick" aria-hidden="true">✓</span>'}
+      <span class="match-text">Found on Open Library${bits ? ` (${esc(bits)})` : ''}. The cover and summary come with it.</span>
+      <button type="button" class="linkbtn ink" data-unpick>Not this one</button>`;
+    m.querySelectorAll('img').forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
+    m.hidden = false;
+    updateDetailsSum();
+    const dup = findDuplicate(it.title, it.author, editingId);
+    if (dup) toast(`“${dup.title}” is already in your library${statusOf(dup) === 'want' ? ', on your to-read pile' : ''}.`);
+    // on to the next thing worth filling in
+    const next = editStatus === 'read' || editStatus === 'dnf' ? $('#starPicker button[aria-checked="true"]') || $('#starPicker button') : $('#saveBtn');
+    setTimeout(() => next && next.focus(), 30);
+  }
+  async function scanBarcode() {
+    closeSuggest();
+    const got = await window.TomesteadScan.scan();
+    if (got === 'type') { $('#fTitle').placeholder = 'Type the title, the author or the ISBN'; $('#fTitle').focus(); return; }
+    if (!got) return;
+    $('#fTitle').value = got;
+    toast('Looking it up…');
+    const it = await Covers.byISBN(got).catch(() => null);
+    if (!it) {
+      $('#fTitle').value = '';
+      pick = { olKey: null, cover: null, isbn: got };
+      toast(`Couldn’t find ISBN ${got} on Open Library. Type the title instead.`);
+      $('#fTitle').focus();
+      return;
+    }
+    applyPick(it);
+  }
+
+  function openEditor(id = null, finished = null, prefill = null, opts = {}) {
     editingId = id;
+    finishing = !!opts.finish;
     const b = id ? books.find(x => x.id === id) : null;
     const f = $('#bookForm');
     f.reset();
+    closeSuggest();
     $('#formError').hidden = true;
-    $('#formTitle').textContent = b ? 'Edit book' : 'Add a book';
-    $('#saveBtn').textContent = b ? 'Save changes' : 'Put it on the shelf';
+    $('#fMatch').hidden = true;
+    pick = prefill && (prefill.olKey || prefill.cover) ? { olKey: prefill.olKey || null, cover: prefill.cover || null, isbn: '' } : null;
+    defaultFinished = finished;
+    $('#formTitle').textContent = finishing ? 'You finished it!' : b ? 'Edit book' : 'Add a book';
+    $('#fTitle').placeholder = b ? '' : 'Start typing to search, or scan it';
     $('#fTitle').value = b?.title || prefill?.title || '';
     $('#fAuthor').value = b?.author || prefill?.author || '';
+    $('#fStarted').value = b?.started || '';
     $('#fFinished').value = b ? (b.finished || '') : (finished || today());
+    $('#fStopped').value = b?.stopped || '';
+    $('#fProgress').value = b && b.progress != null ? b.progress : '';
     $('#fPages').value = b?.pages || prefill?.pages || '';
+    $('#fHours').value = b?.hours || '';
     $('#fGenre').value = b?.genre || '';
+    $('#fSeries').value = b?.series || '';
+    $('#fSeriesNo').value = b && b.seriesNo != null ? b.seriesNo : '';
     $('#fReview').value = b?.review || '';
+    editTags = [...tagsOf(b || {})];
+    editRereads = b && Array.isArray(b.rereads) ? [...b.rereads] : [];
     const cv = b && Number.isInteger(b.color) ? String(b.color) : 'auto';
     const radio = f.querySelector(`input[name="color"][value="${cv}"]`);
     if (radio) radio.checked = true;
     setRating(b?.rating || 0);
+    setFormat(b ? formatOf(b) : 'print');
+    let st = opts.status || (b ? statusOf(b) : 'read');
+    if (finishing && b) {
+      // finishing a reread: the time before moves down to "Also read"
+      st = 'read';
+      if (b.finished && statusOf(b) === 'reading') editRereads = [b.finished, ...editRereads];
+      $('#fFinished').value = today();
+    }
+    setStatus(st);
+    if (b) $('#saveBtn').textContent = finishing ? 'Put it on the shelf' : 'Save changes';
+    renderRereads();
+    renderTagPick();
+    updateDetailsSum();
+    $('#fDetails').open = false;
+    $('#scanBtn').hidden = !!b || !(window.TomesteadScan && window.TomesteadScan.supported());
     $('#editor').showModal();
-    setTimeout(() => $('#fTitle').focus(), 30);
+    setTimeout(() => (finishing ? $('#starPicker button') : $('#fTitle')).focus(), 30);
   }
 
   function submitEditor(e) {
     e.preventDefault();
+    closeSuggest();
     const title = $('#fTitle').value.trim();
     const author = $('#fAuthor').value.trim();
     const err = $('#formError');
@@ -1032,39 +1397,76 @@
       (!title ? $('#fTitle') : $('#fAuthor')).focus();
       return;
     }
+    const st = editStatus;
+    const old = editingId ? books.find(x => x.id === editingId) : null;
     const colorVal = $('#bookForm').querySelector('input[name="color"]:checked')?.value;
     const pages = parseInt($('#fPages').value, 10);
+    const hours = parseFloat($('#fHours').value);
+    const prog = parseFloat($('#fProgress').value);
+    const sn = $('#fSeriesNo').value === '' ? null : parseFloat($('#fSeriesNo').value);
+    // every time you finished it, newest first: the newest is "finished", the rest are rereads
+    let finished = old ? (old.finished || '') : '', rereads = old && Array.isArray(old.rereads) ? old.rereads : [];
+    if (st === 'read') {
+      const fin = $('#fFinished').value || '';
+      const all = [...new Set([fin, ...editRereads].filter(d => ISO.test(d)))].sort().reverse();
+      finished = fin && !ISO.test(fin) ? fin : (all[0] || '');
+      rereads = all.filter(d => d !== finished);
+    }
     const data = {
-      title, author,
-      rating: pickedRating || 0,
-      finished: $('#fFinished').value || '',
+      title, author, status: st,
+      rating: st === 'read' || st === 'dnf' ? (pickedRating || 0) : (old?.rating || 0),
+      finished, rereads,
+      started: st === 'want' ? '' : ($('#fStarted').value || ''),
+      stopped: st === 'dnf' ? ($('#fStopped').value || '') : '',
       pages: pages > 0 ? pages : null,
       genre: $('#fGenre').value.trim(),
       review: $('#fReview').value.trim(),
       color: colorVal && colorVal !== 'auto' ? Number(colorVal) : null,
+      format: editFormat,
+      hours: editFormat === 'audio' && hours > 0 ? Math.min(300, Math.round(hours * 10) / 10) : null,
+      series: $('#fSeries').value.trim().slice(0, 120),
+      seriesNo: sn != null && Number.isFinite(sn) ? sn : null,
+      tags: cleanTags(editTags),
     };
+    if (st === 'reading') {
+      const v = prog >= 0 ? (editFormat === 'print' ? Math.round(prog) : Math.min(100, prog)) : 0;
+      if (!old || old.progress !== v || statusOf(old) !== 'reading') data.progressAt = Date.now();
+      data.progress = v;
+    } else if (st === 'dnf') data.progress = old?.progress ?? null;
+    else data.progress = null;
+    if (pick && pick.isbn) data.isbn = pick.isbn;
     const y = yearOf(data);
     const before = y ? countInYear(y) : 0;
     const metBefore = customMet();
     let target;
-    if (editingId) {
-      const b = target = books.find(x => x.id === editingId);
+    if (old) {
+      const b = target = old;
       const renamed = b.title !== data.title || (b.author || '') !== data.author;
       Object.assign(b, data, { updatedAt: Date.now() });
-      if (renamed) {
+      if (renamed || pick) {
         const keep = b.art && (b.art.status === 'upload' || b.art.status === 'plain') ? Object.assign({ status: b.art.status }, photoFields(b.art)) : null;
-        b.art = keep; b.about = null; b.lookedUp = 0;
+        b.art = keep || (pick && pick.cover ? { status: 'found', ids: [pick.cover], i: 0, olKey: pick.olKey } : null);
+        b.about = null; b.lookedUp = 0;
+        b.olKey = pick ? pick.olKey : null;
       }
-      toast('Changes saved.');
+      toast(finishing ? `“${title}” is back on the shelf.` : 'Changes saved.');
     } else {
       const b = target = Object.assign({ id: uid(), addedAt: Date.now() }, data);
+      if (pick) {
+        b.olKey = pick.olKey;
+        if (pick.cover) b.art = { status: 'found', ids: [pick.cover], i: 0, olKey: pick.olKey };
+      }
       books.push(b);
       justAdded = b.id;
-      toast(`“${title}” is on the shelf.`);
+      // make sure you can see where it went
+      if (st === 'read' && !shelfBooks().includes(b)) { prefs.year = 'all'; savePrefs(); }
+      if (st === 'want' && prefs.year !== 'want' && STATUSES.includes(prefs.year)) { prefs.year = 'want'; savePrefs(); }
+      toast({ read: `“${title}” is on the shelf.`, reading: `Enjoy “${title}”! It’s up top under Reading now.`, want: `“${title}” is on your to-read pile.`, dnf: `“${title}” is set aside.` }[st]);
     }
     if (!target.lookedUp) lookup(target).then(() => { if (reader && reader.currentId() === target.id) reader.refresh(); });
     const wasEditing = editingId;
     editingId = null;
+    finishing = false;
     save();
     $('#editor').close();
     render();
@@ -1075,6 +1477,196 @@
       const won = prefs.customGoals.find(g => !metBefore.has(g.id) && goalInfo(g).met);
       if (won) celebrateGoal(won);
     }
+  }
+
+  // ---------- moving a book between piles ----------
+  function addWant(p) {
+    const dup = findDuplicate(p.title, p.author);
+    if (dup) { toast(`“${dup.title}” is already in your library.`); return; }
+    const b = { id: uid(), addedAt: Date.now(), title: p.title, author: p.author || '', status: 'want', rating: 0, finished: '', pages: p.pages || null, genre: '', review: '', color: null };
+    if (p.olKey) b.olKey = p.olKey;
+    if (p.cover) b.art = { status: 'found', ids: [p.cover], i: 0, olKey: p.olKey || null };
+    books.push(b);
+    save(); render(); lookup(b);
+    toast(`“${b.title}” is on your to-read pile.`);
+  }
+  function startReading(b) {
+    const again = datesOf(b).length > 0;
+    Object.assign(b, { status: 'reading', started: today(), progress: 0, progressAt: Date.now(), stopped: '', updatedAt: Date.now() });
+    save(); render();
+    if (reader && reader.currentId() === b.id) reader.refresh();
+    toast(again ? `Back into “${b.title}”. It’s up top under Reading now.` : `Enjoy “${b.title}”! It’s up top under Reading now.`);
+  }
+  function setAside(b) {
+    if (datesOf(b).length) {
+      // stopping a reread: it's still a book you've read
+      Object.assign(b, { status: 'read', progress: null, updatedAt: Date.now() });
+      toast(`Stopped rereading “${b.title}”.`);
+    } else {
+      Object.assign(b, { status: 'dnf', stopped: today(), updatedAt: Date.now() });
+      toast(`“${b.title}” is set aside. It’s under Set aside if you come back to it.`);
+    }
+    save(); render();
+    if (reader && reader.currentId() === b.id) reader.refresh();
+  }
+
+  // ---------- where you are in a book ----------
+  let progressId = null, progressFrom = null;
+  function openProgress(id, fromEl) {
+    const b = books.find(x => x.id === id);
+    if (!b) return;
+    progressId = id; progressFrom = fromEl || null;
+    const print = formatOf(b) === 'print';
+    $('#prTitle').textContent = b.title;
+    $('#prBy').textContent = b.author ? `by ${b.author}` : '';
+    $('#prCover').innerHTML = thumbHTML(b, 'M');
+    wireThumbs($('#prCover'));
+    $('#prLabel').textContent = print ? 'I’m on page' : 'How far along (%)';
+    $('#prOfWrap').hidden = !print;
+    $('#prTotal').value = b.pages || '';
+    $('#prValue').value = Number(b.progress) || 0;
+    $('#prValue').max = print ? 5000 : 100;
+    progressChanged('value');
+    $('#progressDialog').showModal();
+    setTimeout(() => { $('#prValue').focus(); $('#prValue').select(); }, 30);
+  }
+  function progressChanged(from) {
+    const b = books.find(x => x.id === progressId);
+    if (!b) return;
+    const print = formatOf(b) === 'print';
+    const total = parseInt($('#prTotal').value, 10) || 0;
+    const range = $('#prRange');
+    if (print) {
+      range.hidden = !total;
+      range.max = total || 100;
+    } else { range.hidden = false; range.max = 100; }
+    if (from === 'range') $('#prValue').value = range.value;
+    else range.value = Math.min(Number(range.max), Number($('#prValue').value) || 0);
+    const v = Number($('#prValue').value) || 0;
+    const pct = print ? (total ? Math.min(100, Math.round((v / total) * 100)) : null) : Math.min(100, Math.round(v));
+    $('#prPct').textContent = print && pct != null ? `${pct}%` : '';
+    // how it's going, and when you might finish at this pace
+    let line = '';
+    if (b.started && ISO.test(b.started)) {
+      const days = Math.max(1, dayNum(today()) - dayNum(b.started) + 1);
+      line = `Started ${shortDate(b.started, b.started.slice(0, 4) !== thisYear())} · day ${days}`;
+      if (v > 0 && pct != null && pct < 100) {
+        const perDay = v / days;
+        if (print) line += ` · about ${Math.max(1, Math.round(perDay))} pages a day`;
+        const left = print ? (total - v) / perDay : (100 - v) / perDay;
+        if (left > 0 && left < 3650) line += ` · on track to finish around ${shortDate(isoOf(dayNum(today()) + Math.ceil(left)), false)}`;
+      }
+      line += '.';
+    }
+    $('#prSub').textContent = line;
+  }
+  function saveProgress(e) {
+    e.preventDefault();
+    const b = books.find(x => x.id === progressId);
+    if (!b) return;
+    const print = formatOf(b) === 'print';
+    const total = parseInt($('#prTotal').value, 10);
+    if (print && total > 0) b.pages = total;
+    let v = Math.max(0, Number($('#prValue').value) || 0);
+    v = print ? Math.round(b.pages ? Math.min(v, b.pages) : v) : Math.min(100, v);
+    b.progress = v; b.progressAt = Date.now(); b.updatedAt = Date.now();
+    save();
+    $('#progressDialog').close();
+    render();
+    if (reader && reader.currentId() === b.id) reader.refresh();
+    const done = print ? (b.pages && v >= b.pages) : v >= 100;
+    if (done) openEditor(b.id, null, null, { finish: true });
+    else toast(`Saved: ${progressText(b)}${print && pctOf(b) != null ? ` (${pctOf(b)}%)` : ''}.`);
+  }
+
+  // ---------- favorite lines ----------
+  let quoteBook = null, quoteId = null;
+  function openQuote(bookId, qid = null) {
+    const b = books.find(x => x.id === bookId);
+    if (!b) return;
+    quoteBook = bookId; quoteId = qid;
+    const q = qid && (b.quotes || []).find(x => x.id === qid);
+    $('#qTitle').textContent = q ? 'Edit quote' : 'Save a quote';
+    $('#qBook').textContent = `from ${b.title}`;
+    $('#qText').value = q ? q.text : '';
+    $('#qWhere').value = q ? (q.where || '') : (statusOf(b) === 'reading' && formatOf(b) === 'print' && b.progress ? `p. ${b.progress}` : '');
+    $('#qError').hidden = true;
+    $('#qRemove').hidden = !q;
+    $('#qRemove').textContent = 'Delete'; delete $('#qRemove').dataset.confirm;
+    $('#quoteDialog').showModal();
+    setTimeout(() => $('#qText').focus(), 30);
+  }
+  function saveQuote(e) {
+    e.preventDefault();
+    const b = books.find(x => x.id === quoteBook);
+    const text = $('#qText').value.trim();
+    if (!text) { $('#qError').textContent = 'Type or paste the line you want to keep.'; $('#qError').hidden = false; $('#qText').focus(); return; }
+    if (!b) return;
+    b.quotes = Array.isArray(b.quotes) ? b.quotes : [];
+    const where = $('#qWhere').value.trim().slice(0, 30);
+    const q = quoteId && b.quotes.find(x => x.id === quoteId);
+    if (q) Object.assign(q, { text, where });
+    else b.quotes.push({ id: uid(), text, where, at: today() });
+    b.updatedAt = Date.now();
+    save();
+    $('#quoteDialog').close();
+    if (reader && reader.currentId() === b.id) reader.refresh();
+    toast(q ? 'Quote updated.' : `Saved. It’s on the pages of “${b.title}”.`);
+  }
+  function removeQuote() {
+    const btn = $('#qRemove');
+    if (!btn.dataset.confirm) { btn.dataset.confirm = '1'; btn.textContent = 'Delete for good?'; return; }
+    const b = books.find(x => x.id === quoteBook);
+    if (b) { b.quotes = (b.quotes || []).filter(x => x.id !== quoteId); b.updatedAt = Date.now(); save(); }
+    $('#quoteDialog').close();
+    if (b && reader && reader.currentId() === b.id) reader.refresh();
+    toast('Quote deleted.');
+  }
+
+  // ---------- tags ----------
+  function showTag(t) {
+    tagFilter = t;
+    reviewFilter = false;
+    // look on the pile that has the most books with this tag (your read shelves when it's a tie)
+    const has = (y) => shelfBooks(y).filter(b => tagsOf(b).some(x => x.toLowerCase() === t.toLowerCase())).length;
+    const here = STATUSES.includes(prefs.year) || prefs.year === 'all' ? prefs.year : 'all';
+    const best = ['all', 'reading', 'want', 'dnf'].reduce((a, y) => (has(y) > has(a) ? y : a), here === 'read' ? 'all' : here);
+    prefs.year = has(here) ? here : best;
+    caseIndex = 0;
+    savePrefs();
+    render();
+    window.scrollTo(0, 0);
+  }
+  function openTags() { renderTagsList(); $('#tagsDialog').showModal(); }
+  function renderTagsList() {
+    const vocab = tagVocab();
+    const count = (t) => books.filter(b => tagsOf(b).some(x => x.toLowerCase() === t.toLowerCase())).length;
+    $('#tagsList').innerHTML = vocab.length ? vocab.map((t, i) => { const n = count(t); return `<li data-ti="${i}">
+        <button type="button" class="tl-name" data-tl-show="${esc(t)}" ${n ? '' : 'disabled'}>${esc(t)} <span class="tl-n">${n ? plural(n, 'book') : 'no books yet'}</span></button>
+        <button type="button" class="tl-act" data-tl-rename="${esc(t)}" aria-label="Rename ${esc(t)}">Rename</button>
+        <button type="button" class="tl-act danger" data-tl-del="${esc(t)}" aria-label="Delete ${esc(t)}">Delete</button>
+      </li>`; }).join('') : '<li class="tl-empty">No tags yet. Make one below.</li>';
+  }
+  function renameTag(from, to) {
+    to = cleanTags([to])[0];
+    if (!to || to === from) return;
+    const same = (x) => x.toLowerCase() === from.toLowerCase();
+    const i = prefs.tagList.findIndex(same);
+    if (i >= 0) prefs.tagList[i] = to; else prefs.tagList.push(to);
+    prefs.tagList = cleanTags(prefs.tagList);
+    for (const b of books) if (tagsOf(b).some(same)) { b.tags = cleanTags(b.tags.map(x => (same(x) ? to : x))); b.updatedAt = Date.now(); }
+    if (tagFilter && same(tagFilter)) tagFilter = to;
+    savePrefs(); save(); render();
+    toast(`Renamed to “${to}”.`);
+  }
+  function deleteTag(t) {
+    const same = (x) => x.toLowerCase() === t.toLowerCase();
+    prefs.tagList = prefs.tagList.filter(x => !same(x));
+    let n = 0;
+    for (const b of books) if (tagsOf(b).some(same)) { b.tags = b.tags.filter(x => !same(x)); b.updatedAt = Date.now(); n++; }
+    if (tagFilter && same(tagFilter)) tagFilter = null;
+    savePrefs(); save(); render();
+    toast(n ? `Deleted “${t}” and took it off ${plural(n, 'book')}.` : `Deleted “${t}”.`);
   }
 
   // ---------- goals ----------
@@ -1151,7 +1743,7 @@
     const a = $('#gStart').value, z = $('#gEnd').value;
     if (!ISO.test(a) || !ISO.test(z) || z < a) { sub.textContent = 'Pick when it starts and ends.'; return; }
     const days = dayNum(z) - dayNum(a) + 1;
-    const already = booksBetween(a, z).length;
+    const already = finishesBetween(a, z).length;
     const n = parseInt($('#gCount').value, 10);
     let line = `${rangeText(a, z)} · ${plural(days, 'day')}.`;
     if (already) line += ` ${plural(already, 'book')} you’ve logged already ${already === 1 ? 'counts' : 'count'}.`;
@@ -1316,7 +1908,7 @@
       for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
     } catch {}
     const clean = books;
-    const payload = { app: 'Tomestead', version: 3, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals }, uploads };
+    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1325,6 +1917,40 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     toast('Backup downloaded.');
   }
+  // a book from a backup or an import, with only the fields Tomestead knows, in the shapes it expects
+  function cleanBook(b) {
+    const day = (d) => (/^\d{4}(-\d{2}(-\d{2})?)?$/.test(String(d || '')) ? String(d) : '');
+    const num = (v, max) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(max, n) : null; };
+    const out = {
+      id: validId(String(b.id || '')) ? String(b.id) : uid(), title: String(b.title).slice(0, 500), author: String(b.author || ''),
+      status: statusOf(b),
+      rating: Math.max(0, Math.min(5, parseInt(b.rating, 10) || 0)),
+      finished: day(b.finished), pages: parseInt(b.pages, 10) > 0 ? Math.min(5000, parseInt(b.pages, 10)) : null,
+      genre: String(b.genre || ''), review: String(b.review || ''),
+      color: Number.isInteger(b.color) ? b.color : null, addedAt: Number(b.addedAt) || Date.now(),
+    };
+    const rr = (Array.isArray(b.rereads) ? b.rereads : []).map(day).filter(d => d && d !== out.finished);
+    if (rr.length) out.rereads = [...new Set(rr)];
+    if (FORMATS[b.format] && b.format !== 'print') out.format = b.format;
+    if (num(b.hours, 300) > 0) out.hours = num(b.hours, 300);
+    if (b.series) out.series = String(b.series).slice(0, 120);
+    if (b.series && num(b.seriesNo, 999) != null && b.seriesNo !== '') out.seriesNo = num(b.seriesNo, 999);
+    const tags = cleanTags(b.tags);
+    if (tags.length) out.tags = tags;
+    if (Array.isArray(b.quotes)) {
+      const qs = b.quotes.filter(q => q && String(q.text || '').trim()).map(q => ({ id: validId(String(q.id || '')) ? String(q.id) : uid(), text: String(q.text).slice(0, 4000), where: String(q.where || '').slice(0, 30), at: day(q.at) }));
+      if (qs.length) out.quotes = qs;
+    }
+    if (day(b.started)) out.started = day(b.started);
+    if (day(b.stopped)) out.stopped = day(b.stopped);
+    if (num(b.progress, 5000) != null && (out.status === 'reading' || out.status === 'dnf')) out.progress = num(b.progress, 5000);
+    if (Number(b.progressAt) > 0) out.progressAt = Number(b.progressAt);
+    const isbn = Covers.isbnOf(b.isbn);
+    if (isbn) out.isbn = isbn;
+    if (/^\/works\/OL\d+W$/.test(String(b.olKey || ''))) out.olKey = String(b.olKey);
+    return out;
+  }
+
   function importBooks(file) {
     const reader = new FileReader();
     reader.onload = async () => {
@@ -1335,13 +1961,7 @@
         let n = 0;
         for (const b of incoming) {
           if (!b || !b.title) continue;
-          const clean = {
-            id: validId(String(b.id || '')) ? String(b.id) : uid(), title: String(b.title), author: String(b.author || ''),
-            rating: Math.max(0, Math.min(5, parseInt(b.rating, 10) || 0)),
-            finished: String(b.finished || ''), pages: parseInt(b.pages, 10) || null,
-            genre: String(b.genre || ''), review: String(b.review || ''),
-            color: Number.isInteger(b.color) ? b.color : null, addedAt: Number(b.addedAt) || Date.now(),
-          };
+          const clean = cleanBook(b);
           if (b.art && typeof b.art === 'object') clean.art = Object.assign({ status: String(b.art.status || ''), ids: Array.isArray(b.art.ids) ? b.art.ids.filter(Number.isFinite) : [], i: parseInt(b.art.i, 10) || 0, olKey: b.art.olKey ? String(b.art.olKey) : null }, photoFields(b.art));
           if (b.about && b.about.text) clean.about = { text: String(b.about.text), source: String(b.about.source || 'Open Library'), url: String(b.about.url || '') };
           if (b.lookedUp) clean.lookedUp = Number(b.lookedUp) || 0;
@@ -1360,6 +1980,7 @@
         if (st) {
           if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(st.theme));
           if (st.goals) prefs.goals = Object.assign({}, prefs.goals, st.goals);
+          if (Array.isArray(st.tagList)) prefs.tagList = cleanTags([...prefs.tagList, ...st.tagList]);
           if (Array.isArray(st.customGoals)) {
             for (const g of cleanGoals(st.customGoals)) {
               const i = prefs.customGoals.findIndex(x => x.id === g.id);
@@ -1381,6 +2002,72 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  // ---------- bring in a Goodreads or StoryGraph library ----------
+  let incoming = null;
+  function openImport() {
+    incoming = null;
+    $('#imTitle').textContent = 'Bring in your books';
+    $('#imBody').innerHTML = `<p>Keep track of your reading on Goodreads or StoryGraph? Bring it all over: ratings, reviews, dates read, what you’re reading now, your to-read list and your shelves (as tags).</p>
+      <ol class="im-steps">
+        <li><strong>Goodreads:</strong> on the website, open <em>My Books</em>, then <em>Import and export</em>, then <em>Export library</em>. Download the file when it’s ready.</li>
+        <li><strong>StoryGraph:</strong> open <em>Manage account</em>, then <em>Export StoryGraph library</em>, and download the file.</li>
+        <li>Choose that .csv file here.</li>
+      </ol>
+      <p class="im-note">Books already in your library are skipped, so it’s safe to do this again later.</p>`;
+    $('#imGo').hidden = false;
+    $('#imGo').textContent = 'Choose the file';
+    $('#imGo').dataset.step = 'choose';
+    $('#importDialog').showModal();
+  }
+  async function readImport(file) {
+    let parsed;
+    try { parsed = window.TomesteadImport.parse(await file.text()); }
+    catch {
+      $('#imBody').innerHTML = '<p class="form-error">That file doesn’t look like a Goodreads or StoryGraph export. Choose the .csv file they let you download.</p>';
+      return;
+    }
+    const have = new Set(books.map(dupKey));
+    const seen = new Set();
+    const fresh = [];
+    let skipped = 0;
+    for (const b of parsed.books) {
+      const k = dupKey(b);
+      if (have.has(k) || seen.has(k)) { skipped++; continue; }
+      seen.add(k); fresh.push(b);
+    }
+    const n = (st) => fresh.filter(b => b.status === st).length;
+    const parts = [[n('read'), 'read'], [n('reading'), 'reading now'], [n('want'), 'to read'], [n('dnf'), 'set aside']].filter(([c]) => c).map(([c, l]) => `<li><strong>${c}</strong> ${l}</li>`);
+    const reviews = fresh.filter(b => b.review).length, rated = fresh.filter(b => b.rating).length;
+    const tagged = new Set(fresh.flatMap(b => b.tags || []));
+    incoming = fresh;
+    $('#imTitle').textContent = `Your ${parsed.source} library`;
+    $('#imBody').innerHTML = fresh.length
+      ? `<p>Found <strong>${plural(fresh.length, 'book')}</strong> to bring in:</p><ul class="im-counts">${parts.join('')}</ul>
+        <p>${[rated ? `${rated} with ratings` : '', reviews ? `${plural(reviews, 'review')}` : '', tagged.size ? `${plural(tagged.size, 'tag')} from your shelves${parsed.source === 'StoryGraph' ? ' and moods' : ''}` : ''].filter(Boolean).join(', ') || 'Titles and authors'} come along too.</p>
+        ${skipped ? `<p class="im-note">${plural(skipped, 'book is', 'books are')} already in your library and will be skipped.</p>` : ''}
+        <p class="im-note">Covers and summaries fill in on their own over the next few minutes.</p>`
+      : `<p>Everything in that file is already in your library${skipped ? ` (${plural(skipped, 'book')})` : ''}. Nothing new to bring in.</p>`;
+    $('#imGo').hidden = !fresh.length;
+    $('#imGo').textContent = `Add ${plural(fresh.length, 'book')}`;
+    $('#imGo').dataset.step = 'go';
+  }
+  function doImport() {
+    if (!incoming || !incoming.length) return;
+    const now = Date.now();
+    let n = 0;
+    incoming.forEach((raw, i) => {
+      const b = cleanBook(Object.assign({}, raw, { id: '', addedAt: raw.addedAt || now - i }));
+      books.push(b); n++;
+    });
+    incoming = null;
+    save();
+    $('#importDialog').close();
+    prefs.year = 'all'; caseIndex = 0; savePrefs();
+    render();
+    toast(`Added ${plural(n, 'book')} to your library. Covers are on their way.`);
+    setTimeout(runLookupQueue, 400);
   }
 
   // ---------- toast ----------
@@ -1443,13 +2130,18 @@
       if (b) return openDetail(b.dataset.id, b);
       const it = e.target.closest('.ledger-item');
       if (it) return openDetail(it.dataset.id, it.querySelector('.thumb, .chip'));
-      if (e.target.closest('[data-add]')) return openEditor();
+      const now = e.target.closest('[data-now]');
+      if (now) return openProgress(now.dataset.now, now.querySelector('.now-cover'));
+      const unf = e.target.closest('[data-unfilter]');
+      if (unf) { if (unf.dataset.unfilter === 'tag') tagFilter = null; else reviewFilter = false; caseIndex = 0; return render(); }
+      const add = e.target.closest('[data-add]');
+      if (add) return openEditor(null, null, null, STATUSES.includes(add.dataset.add) ? { status: add.dataset.add } : {});
       if (e.target.closest('[data-goal]')) return openGoal();
       const cg = e.target.closest('[data-cgoal]');
       if (cg) return openGoalEditor({ id: cg.dataset.cgoal });
       if (e.target.closest('[data-goals]')) return openGoals();
       if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
-      if (e.target.closest('[data-clear]')) { query = ''; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
+      if (e.target.closest('[data-clear]')) { query = ''; tagFilter = null; reviewFilter = false; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
     });
 
     // bookcase paging
@@ -1458,7 +2150,7 @@
     let st;
     $('#cases').addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(updatePager, 60); }, { passive: true });
     document.addEventListener('keydown', e => {
-      if (onCustomize() || prefs.view !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden || (reader && reader.isOpen())) return;
+      if (onCustomize() || onYear() || prefs.view !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden || (reader && reader.isOpen())) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
       if (e.key === 'ArrowRight') goCase(currentCase() + 1);
       if (e.key === 'ArrowLeft') goCase(currentCase() - 1);
@@ -1467,6 +2159,93 @@
     document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => btn.closest('dialog').close()));
     document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
     $('#bookForm').addEventListener('submit', submitEditor);
+    // the add / edit form
+    $('#fStatus').addEventListener('click', e => { const b = e.target.closest('[data-status]'); if (b) setStatus(b.dataset.status); });
+    $('#fFormat').addEventListener('click', e => { const b = e.target.closest('[data-format]'); if (b) setFormat(b.dataset.format); });
+    ['#fPages', '#fHours', '#fGenre', '#fSeries', '#fSeriesNo'].forEach(id => $(id).addEventListener('input', updateDetailsSum));
+    $('#fTitle').addEventListener('input', onTitleInput);
+    $('#fTitle').addEventListener('keydown', e => {
+      if ($('#fSuggest').hidden || !findItems.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (e.key === 'ArrowDown') findActive = findActive < findItems.length - 1 ? findActive + 1 : -1;
+        else findActive = findActive === -1 ? findItems.length - 1 : findActive - 1;
+        renderSuggest();
+      } else if (e.key === 'Enter' && findActive >= 0) { e.preventDefault(); applyPick(findItems[findActive]); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSuggest(); }
+    });
+    $('#fTitle').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#fTitle')) closeSuggest(); }, 250));
+    $('#fSuggest').addEventListener('mousedown', e => e.preventDefault());
+    $('#fSuggest').addEventListener('click', e => { const li = e.target.closest('[data-i]'); if (li) applyPick(findItems[+li.dataset.i]); });
+    $('#fMatch').addEventListener('click', e => {
+      if (!e.target.closest('[data-unpick]')) return;
+      pick = null; $('#fMatch').hidden = true; $('#fTitle').focus();
+    });
+    $('#scanBtn').addEventListener('click', scanBarcode);
+    $('#addReread').addEventListener('click', () => { editRereads.push(''); renderRereads(); const ins = $('#fRereads').querySelectorAll('input'); ins[ins.length - 1].focus(); });
+    $('#fRereads').addEventListener('input', e => { const i = e.target.dataset.rr; if (i != null) editRereads[+i] = e.target.value; });
+    $('#fRereads').addEventListener('click', e => { const x = e.target.closest('[data-rr-x]'); if (x) { editRereads.splice(+x.dataset.rrX, 1); renderRereads(); } });
+    $('#fTags').addEventListener('click', e => {
+      const t = e.target.closest('[data-tag]'); if (!t) return;
+      const name = t.dataset.tag;
+      const on = editTags.some(x => x.toLowerCase() === name.toLowerCase());
+      editTags = on ? editTags.filter(x => x.toLowerCase() !== name.toLowerCase()) : [...editTags, name];
+      t.setAttribute('aria-pressed', String(!on));
+    });
+    $('#fTags').addEventListener('keydown', e => { if (e.target.id === 'fTagNew' && e.key === 'Enter') { e.preventDefault(); addTagFromInput(); } });
+    $('#fTags').addEventListener('focusout', e => { if (e.target.id === 'fTagNew' && e.target.value.trim()) addTagFromInput(); });
+
+    // reading progress
+    $('#progressForm').addEventListener('submit', saveProgress);
+    $('#prValue').addEventListener('input', () => progressChanged('value'));
+    $('#prTotal').addEventListener('input', () => progressChanged('total'));
+    $('#prRange').addEventListener('input', () => progressChanged('range'));
+    $('#progressForm').addEventListener('click', e => {
+      const a = e.target.closest('[data-pr]'); if (!a) return;
+      const b = books.find(x => x.id === progressId); if (!b) return;
+      $('#progressDialog').close();
+      if (a.dataset.pr === 'finish') openEditor(b.id, null, null, { finish: true });
+      else if (a.dataset.pr === 'quote') openQuote(b.id);
+      else if (a.dataset.pr === 'dnf') setAside(b);
+      else if (a.dataset.pr === 'open') openDetail(b.id, progressFrom && progressFrom.isConnected ? progressFrom : null);
+    });
+    // quotes
+    $('#quoteForm').addEventListener('submit', saveQuote);
+    $('#qRemove').addEventListener('click', removeQuote);
+    // tags
+    $('#tagsList').addEventListener('click', e => {
+      const show = e.target.closest('[data-tl-show]');
+      if (show) { $('#tagsDialog').close(); return showTag(show.dataset.tlShow); }
+      const rn = e.target.closest('[data-tl-rename]');
+      if (rn) {
+        const li = rn.closest('li'), t = rn.dataset.tlRename;
+        li.innerHTML = `<form class="tl-edit"><input value="${esc(t)}" maxlength="30" aria-label="New name for ${esc(t)}"><button class="btn btn-ink btn-sm">Save</button></form>`;
+        const inp = li.querySelector('input'); inp.focus(); inp.select();
+        li.querySelector('form').addEventListener('submit', ev => { ev.preventDefault(); renameTag(t, inp.value); renderTagsList(); });
+        return;
+      }
+      const del = e.target.closest('[data-tl-del]');
+      if (del) {
+        if (!del.dataset.confirm) { del.dataset.confirm = '1'; del.textContent = 'Delete?'; return; }
+        deleteTag(del.dataset.tlDel); renderTagsList();
+      }
+    });
+    $('#tagAddForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const v = cleanTags([$('#tagNew').value])[0];
+      if (!v) return;
+      if (tagVocab().some(x => x.toLowerCase() === v.toLowerCase())) { toast(`You already have “${v}”.`); return; }
+      prefs.tagList.push(v); savePrefs();
+      $('#tagNew').value = '';
+      renderTagsList();
+    });
+    // Goodreads / StoryGraph
+    $('#imGo').addEventListener('click', () => { if ($('#imGo').dataset.step === 'go') doImport(); else $('#imFile').click(); });
+    $('#imFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) readImport(f); e.target.value = ''; });
+    $('#stats').addEventListener('click', e => {
+      if (!e.target.closest('[data-review]')) return;
+      reviewFilter = true; tagFilter = null; prefs.year = 'all'; caseIndex = 0; savePrefs(); render();
+    });
 
     // goals
     $('#goalForm').addEventListener('submit', saveGoal);
@@ -1498,6 +2277,11 @@
     $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoals(); });
     $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
+    $('#yearBtn').addEventListener('click', () => { more.open = false; location.hash = 'year'; });
+    $('#tagsBtn').addEventListener('click', () => { more.open = false; openTags(); });
+    $('#csvBtn').addEventListener('click', () => { more.open = false; openImport(); });
+    $('#yrDone').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); render(); window.scrollTo(0, 0); });
+    $('#czIntro').addEventListener('click', e => { const b = e.target.closest('[data-intro]'); if (b) setIntroMode(b.dataset.intro); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     $('#signOutBtn').addEventListener('click', () => { more.open = false; Sync.signOut(); });
     more.addEventListener('toggle', () => {
@@ -1563,7 +2347,7 @@
     if (dq) (dq.addEventListener ? dq.addEventListener('change', relight) : dq.addListener(relight));
     setInterval(relight, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) relight(); });
-    window.addEventListener('tomestead:light', () => { floorKey = ''; if (onCustomize()) renderCustomize(); else placeFloor(); });
+    window.addEventListener('tomestead:light', () => { floorKey = ''; if (onCustomize()) renderCustomize(); else if (!onYear()) placeFloor(); });
 
     if ('ResizeObserver' in window) {
       const ro = new ResizeObserver(() => placeFloor());
@@ -1619,7 +2403,7 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs };
+    return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
@@ -1627,6 +2411,7 @@
     prefs.trophies = s.trophies && typeof s.trophies === 'object' ? s.trophies : {};
     // (a device still on an older version doesn't send these; keep what's here rather than wiping them)
     if (Array.isArray(s.customGoals)) prefs.customGoals = cleanGoals(s.customGoals);
+    if (Array.isArray(s.tagList)) prefs.tagList = cleanTags(s.tagList);
     prefs.recs = s.recs && typeof s.recs === 'object' ? Object.assign({ dismissed: [] }, s.recs) : { dismissed: [] };
     savePrefsHere();
     D.applyTheme(prefs.theme);
@@ -1654,6 +2439,7 @@
     if ((reader && reader.isOpen()) || document.querySelector('dialog[open]')) { renderWait = setTimeout(renderSoon, 800); return; }
     if (onCustomize()) renderCustomize(); else render();
   }
+
 
   // books saved on this device before accounts existed
   function legacyBooks() {
@@ -1686,6 +2472,7 @@
     if (old.goals) for (const [y, g] of Object.entries(old.goals)) if (!(prefs.goals[y] > 0)) prefs.goals[y] = g;
     if (old.trophies) for (const [y, t] of Object.entries(old.trophies)) if (!prefs.trophies[y]) prefs.trophies[y] = t;
     for (const g of cleanGoals(old.customGoals)) if (!prefs.customGoals.some(x => x.id === g.id)) prefs.customGoals.push(g);
+    if (Array.isArray(old.tagList)) prefs.tagList = cleanTags([...prefs.tagList, ...old.tagList]);
     if (old.recs && Array.isArray(old.recs.dismissed)) prefs.recs.dismissed = [...new Set([...prefs.recs.dismissed, ...old.recs.dismissed])];
     syncTrophies();
     savePrefs();
@@ -1708,8 +2495,51 @@
 
   D.applyTheme(prefs.theme);
   if (!Sync.gated) savePrefsHere();   // keeps a migrated look for next time (and for the opening scene)
+  // what the open book's pages say about where this book stands
+  function describeBook(b) {
+    const st = statusOf(b);
+    const f = formatOf(b);
+    const dates = datesOf(b);
+    const d = { statusKey: st, status: '', action: null, pct: null, rated: st === 'read' || st === 'dnf' || !!b.rating, tags: tagsOf(b) };
+    const stamp = (t) => { const x = new Date(t); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+    if (st === 'reading') {
+      const p = pctOf(b);
+      d.status = `${dates.length ? 'Rereading' : 'Reading now'} · ${progressText(b)}${p != null && f === 'print' ? ` (${p}%)` : ''}`;
+      d.pct = p;
+      d.action = { rd: 'progress', label: 'Update my progress' };
+    } else if (st === 'want') {
+      d.status = `On your to-read pile${b.addedAt ? ` since ${fmtDate(stamp(b.addedAt))}` : ''}`;
+      d.action = { rd: 'start', label: 'Start reading' };
+    } else if (st === 'dnf') {
+      const at = b.progress ? (f === 'print' ? ` at p. ${b.progress}` : ` at ${Math.round(b.progress)}%`) : '';
+      d.status = `Set aside${b.stopped ? ` ${fmtDate(b.stopped)}` : ''}${at}`;
+      d.action = { rd: 'start', label: 'Pick it back up', quiet: true };
+    } else {
+      d.action = { rd: 'again', label: 'Read it again', quiet: true };
+    }
+    if (dates.length > 1) d.reads = `Read ${dates.length} times: ${dates.map(x => fmtDate(x)).join(', ')}`;
+    else if (dates.length) d.reads = `Finished ${fmtDate(dates[0])}${b.started && st === 'read' && b.started <= dates[0] ? ` · started ${fmtDate(b.started)}` : ''}`;
+    else if (b.started && st !== 'want') d.reads = `Started ${fmtDate(b.started)}`;
+    d.series = seriesText(b) ? `Series: ${seriesText(b)}` : '';
+    d.details = [f !== 'print' ? FORMATS[f] : '', f === 'audio' ? (b.hours ? `${b.hours} hours` : '') : (b.pages ? `${b.pages} pages` : ''), b.genre].filter(Boolean).join(', ');
+    d.reviewHeading = { read: 'My review', reading: 'Thoughts so far', want: 'Why I want to read it', dnf: 'Why I put it down' }[st];
+    d.reviewEmpty = { read: 'You haven’t written a review yet.', reading: 'Nothing noted yet.', want: 'No note yet.', dnf: 'No note yet.' }[st];
+    d.reviewCta = { read: 'Write my review', reading: 'Add a note', want: 'Add a note', dnf: 'Add a note' }[st];
+    return d;
+  }
+
   reader = window.TomesteadReader({
     esc, colorOf, dims, starsHTML, fmtDate, toast,
+    describe: describeBook,
+    onTag: (t) => showTag(t),
+    onPage: (act, id, el) => {
+      const b = books.find(x => x.id === id);
+      if (!b) return;
+      if (act === 'progress') openProgress(id);
+      else if (act === 'start' || act === 'again') startReading(b);
+      else if (act === 'quote-add') openQuote(id);
+      else if (act === 'quote') openQuote(id, el.dataset.q);
+    },
     theme: () => prefs.theme,
     spineEl: (b) => spine(b),
     getBook: (id) => books.find(x => x.id === id),
@@ -1733,6 +2563,14 @@
     recs: () => prefs.recs,
     dismiss: (key) => { if (!prefs.recs.dismissed.includes(key)) { prefs.recs.dismissed.push(key); savePrefs(); } },
     addBook: (p) => openEditor(null, today(), p),
+    wantBook: (p) => addWant(p),
+  });
+  const yearReview = window.TomesteadYear({
+    esc, plural, fmtDate, starsHTML, thumbHTML, wireThumbs, colorOf,
+    books: () => books, datesOf, statusOf, formatOf, pagesOf, tagsOf, isRead, goalFor, thisYear, yearsAvailable,
+    trophies: () => prefs.trophies,
+    drawTrophy: (y, n, sc) => Art.drawTrophy(y, n, sc),
+    openBook: (id, el) => openDetail(id, el),
   });
   // props on the reading table
   wire();

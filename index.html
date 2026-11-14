@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script>try { if (sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
+  <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'day', d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
 <body>
   <!-- startup: title, the room, then in to the bookcase -->
@@ -45,10 +45,13 @@
         </summary>
         <div class="menu">
           <button id="recBtn">What should I read next?</button>
-          <button id="customizeBtn">Customize library</button>
+          <button id="yearBtn">Year in review</button>
           <button id="goalMenuBtn">Reading goals</button>
+          <button id="tagsBtn">Tags</button>
+          <button id="customizeBtn">Customize library</button>
           <hr>
           <button id="installBtn" hidden>Install app</button>
+          <button id="csvBtn">Import from Goodreads or StoryGraph</button>
           <button id="exportBtn">Back up my library</button>
           <button id="importBtn">Restore from backup</button>
           <input id="importFile" type="file" accept="application/json,.json" hidden>
@@ -84,12 +87,15 @@
             <option value="author">Author</option>
             <option value="title">Title</option>
             <option value="rating">Rating</option>
+            <option value="series">Series</option>
           </select>
         </label>
       </div>
     </div>
 
     <main>
+      <div id="filterBar" class="filterbar" hidden></div>
+      <div id="nowBar" class="nowbar" aria-label="Reading now" hidden></div>
       <div id="goalBar" class="goalbar" hidden></div>
 
       <section id="shelfView" aria-label="Bookshelves">
@@ -120,6 +126,15 @@
     </div>
     <div id="czPreview" class="cz-preview cases" aria-label="Preview"></div>
     <div class="cz-panel paper-panel">
+      <section class="cz-section">
+        <h3>Opening scene</h3>
+        <p class="cz-hint">The walk into your library when you open the app. Tap it any time to skip.</p>
+        <div id="czIntro" class="spans" role="radiogroup" aria-label="Opening scene">
+          <button type="button" role="radio" data-intro="day">Once a day</button>
+          <button type="button" role="radio" data-intro="always">Every time</button>
+          <button type="button" role="radio" data-intro="never">Never</button>
+        </div>
+      </section>
       <section class="cz-section">
         <h3>Wallpaper</h3>
         <div id="czWall" class="tiles" role="radiogroup" aria-label="Wallpaper"></div>
@@ -164,6 +179,16 @@
     </div>
   </div>
 
+  <!-- Year in review -->
+  <div id="yearPage" class="customize yearpage" hidden>
+    <div class="cz-head">
+      <h2>Year in review</h2>
+      <button id="yrDone" class="btn btn-brass">Done</button>
+    </div>
+    <div id="yrYears" class="years pills yr-years" role="tablist" aria-label="Year"></div>
+    <div id="yrBody" class="paper-panel yr-panel"></div>
+  </div>
+
   </div><!-- /stage -->
 
   <!-- Reading table: a book pulled from the shelf -->
@@ -199,41 +224,105 @@
   <dialog id="editor" class="paper">
     <form id="bookForm" method="dialog" novalidate>
       <h2 id="formTitle">Add a book</h2>
-      <div class="field">
+      <div class="field find">
         <label for="fTitle">Title</label>
-        <input id="fTitle" name="title" required autocomplete="off">
+        <div class="find-row">
+          <input id="fTitle" name="title" required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="fSuggest" placeholder="Start typing to search, or scan it">
+          <button type="button" id="scanBtn" class="scan-btn" aria-label="Scan the barcode on the back of the book" title="Scan the barcode">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 7V4.5A1.5 1.5 0 0 1 4.5 3H7M17 3h2.5A1.5 1.5 0 0 1 21 4.5V7M21 17v2.5a1.5 1.5 0 0 1-1.5 1.5H17M7 21H4.5A1.5 1.5 0 0 1 3 19.5V17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 8v8M10 8v8M12.5 8v8M15 8v8M17.5 8v8" stroke="currentColor" stroke-width="1.6"/></svg>
+          </button>
+        </div>
+        <ul id="fSuggest" class="suggest" role="listbox" aria-label="Matching books on Open Library" hidden></ul>
       </div>
+      <div id="fMatch" class="match" hidden></div>
       <div class="field">
         <label for="fAuthor">Author</label>
         <input id="fAuthor" name="author" required autocomplete="off">
       </div>
       <fieldset class="field">
+        <legend>This book is</legend>
+        <div id="fStatus" class="spans" role="radiogroup" aria-label="Reading status">
+          <button type="button" role="radio" data-status="read">Read</button>
+          <button type="button" role="radio" data-status="reading">Reading now</button>
+          <button type="button" role="radio" data-status="want">Want to read</button>
+          <button type="button" role="radio" data-status="dnf">Didn’t finish</button>
+        </div>
+      </fieldset>
+      <fieldset class="field" data-for="read dnf">
         <legend>Your rating</legend>
         <div id="starPicker" class="star-picker" role="radiogroup" aria-label="Rating out of 5"></div>
       </fieldset>
-      <div class="row2">
+      <div class="row2 keep" data-for="read reading dnf">
         <div class="field">
+          <label for="fStarted">Started <span class="opt">(optional)</span></label>
+          <input id="fStarted" type="date">
+        </div>
+        <div class="field" data-for="read">
           <label for="fFinished">Finished on</label>
           <input id="fFinished" name="finished" type="date">
         </div>
-        <div class="field">
-          <label for="fPages">Pages <span class="opt">(sets spine thickness)</span></label>
-          <input id="fPages" name="pages" type="number" min="1" max="5000" inputmode="numeric">
+        <div class="field" data-for="dnf">
+          <label for="fStopped">Put it down on</label>
+          <input id="fStopped" type="date">
+        </div>
+        <div class="field" data-for="reading">
+          <label for="fProgress" id="fProgressLabel">I’m on page</label>
+          <input id="fProgress" type="number" min="0" max="5000" inputmode="numeric">
         </div>
       </div>
+      <div class="field" data-for="read">
+        <div id="fRereads" class="rereads"></div>
+        <button type="button" id="addReread" class="linkbtn ink">+ I read it before, too</button>
+      </div>
       <div class="field">
-        <label for="fGenre">Genre <span class="opt">(optional)</span></label>
-        <input id="fGenre" name="genre" autocomplete="off" list="genres">
-        <datalist id="genres"></datalist>
+        <label for="fReview" id="fReviewLabel">Your review</label>
+        <textarea id="fReview" name="review" rows="4"></textarea>
       </div>
       <fieldset class="field">
-        <legend>Spine color</legend>
-        <div id="swatches" class="swatches"></div>
+        <legend>Tags <span class="opt">(optional)</span></legend>
+        <div id="fTags" class="tagpick"></div>
       </fieldset>
-      <div class="field">
-        <label for="fReview">Your review</label>
-        <textarea id="fReview" name="review" rows="5" placeholder="What stayed with you?"></textarea>
-      </div>
+      <details id="fDetails" class="more-details">
+        <summary><span class="md-label">More details</span> <span id="fDetailsSum" class="md-sum"></span></summary>
+        <fieldset class="field">
+          <legend>Format</legend>
+          <div id="fFormat" class="spans" role="radiogroup" aria-label="Format">
+            <button type="button" role="radio" data-format="print">Print</button>
+            <button type="button" role="radio" data-format="ebook">Ebook</button>
+            <button type="button" role="radio" data-format="audio">Audiobook</button>
+          </div>
+        </fieldset>
+        <div class="row2 keep">
+          <div class="field" id="fPagesField">
+            <label for="fPages">Pages <span class="opt">(spine thickness)</span></label>
+            <input id="fPages" name="pages" type="number" min="1" max="5000" inputmode="numeric">
+          </div>
+          <div class="field" id="fHoursField" hidden>
+            <label for="fHours">Length in hours</label>
+            <input id="fHours" type="number" min="0.1" max="300" step="0.1" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="fGenre">Genre</label>
+            <input id="fGenre" name="genre" autocomplete="off" list="genres">
+            <datalist id="genres"></datalist>
+          </div>
+        </div>
+        <div class="row2 keep series-row">
+          <div class="field">
+            <label for="fSeries">Series</label>
+            <input id="fSeries" autocomplete="off" list="seriesList" placeholder="e.g. Discworld">
+            <datalist id="seriesList"></datalist>
+          </div>
+          <div class="field">
+            <label for="fSeriesNo">Book #</label>
+            <input id="fSeriesNo" type="number" min="0" max="999" step="0.5" inputmode="decimal">
+          </div>
+        </div>
+        <fieldset class="field">
+          <legend>Spine color</legend>
+          <div id="swatches" class="swatches"></div>
+        </fieldset>
+      </details>
       <p id="formError" class="form-error" role="alert" hidden></p>
       <div class="actions">
         <span class="spacer"></span>
@@ -241,6 +330,104 @@
         <button type="submit" id="saveBtn" class="btn btn-ink">Put it on the shelf</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Reading now: where you are in a book -->
+  <dialog id="progressDialog" class="paper narrow">
+    <form id="progressForm" method="dialog" novalidate>
+      <div class="pr-head">
+        <span id="prCover" class="pr-cover" aria-hidden="true"></span>
+        <div><h2 id="prTitle"></h2><p id="prBy" class="byline"></p></div>
+      </div>
+      <div class="field">
+        <label for="prValue" id="prLabel">I’m on page</label>
+        <div class="pr-row">
+          <input id="prValue" type="number" min="0" inputmode="numeric">
+          <span id="prOfWrap" class="pr-of">of <input id="prTotal" type="number" min="1" max="5000" inputmode="numeric" aria-label="Pages in the book" placeholder="?"></span>
+          <span id="prPct" class="pr-pct"></span>
+        </div>
+        <input id="prRange" class="pr-range" type="range" min="0" max="100" step="1" aria-label="How far along">
+      </div>
+      <p id="prSub" class="goal-sub"></p>
+      <button type="button" class="btn btn-brass pr-finish" data-pr="finish">I finished it</button>
+      <div class="pr-links">
+        <button type="button" class="linkbtn ink" data-pr="quote">Save a quote</button>
+        <button type="button" class="linkbtn ink" data-pr="open">Open the book</button>
+        <button type="button" class="linkbtn ink" data-pr="dnf">Set it aside</button>
+      </div>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-ink">Save progress</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- A favorite line -->
+  <dialog id="quoteDialog" class="paper narrow">
+    <form id="quoteForm" method="dialog" novalidate>
+      <h2 id="qTitle">Save a quote</h2>
+      <p id="qBook" class="byline"></p>
+      <div class="field">
+        <label for="qText">The line</label>
+        <textarea id="qText" rows="5" maxlength="4000" placeholder="Type it out or paste it in"></textarea>
+      </div>
+      <div class="field">
+        <label for="qWhere">Page or chapter <span class="opt">(optional)</span></label>
+        <input id="qWhere" maxlength="30" autocomplete="off">
+      </div>
+      <p id="qError" class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" id="qRemove" class="btn btn-ghost danger" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-ink">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Your tags -->
+  <dialog id="tagsDialog" class="paper narrow">
+    <article>
+      <h2>Tags</h2>
+      <p class="goal-sub">Tap a tag to see its books. Add your own here or right in a book.</p>
+      <ul id="tagsList" class="tags-list"></ul>
+      <form id="tagAddForm" class="tag-add">
+        <input id="tagNew" maxlength="30" autocomplete="off" placeholder="A new tag" aria-label="New tag name">
+        <button type="submit" class="btn btn-ink btn-sm">Add</button>
+      </form>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Done</button>
+      </div>
+    </article>
+  </dialog>
+
+  <!-- Import from Goodreads / StoryGraph -->
+  <dialog id="importDialog" class="paper narrow">
+    <article>
+      <h2 id="imTitle">Bring in your books</h2>
+      <div id="imBody" class="im-body"></div>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="button" id="imGo" class="btn btn-ink">Choose the file</button>
+      </div>
+      <input id="imFile" type="file" accept=".csv,text/csv" hidden>
+    </article>
+  </dialog>
+
+  <!-- Barcode scanner -->
+  <dialog id="scanDialog" class="scan" aria-label="Scan a barcode">
+    <div class="scan-view">
+      <video id="scanVideo" playsinline muted autoplay></video>
+      <div class="scan-frame" aria-hidden="true"><span></span></div>
+    </div>
+    <p id="scanMsg" class="scan-msg" role="status"></p>
+    <div class="scan-actions">
+      <button type="button" id="scanType" class="btn btn-ghost">Type it instead</button>
+      <button type="button" id="scanCancel" class="btn btn-brass">Cancel</button>
+    </div>
   </dialog>
 
   <!-- What to read next -->
@@ -356,6 +543,9 @@
   <script src="table.js"></script>
   <script src="reader.js"></script>
   <script src="recommend.js"></script>
+  <script src="importer.js"></script>
+  <script src="scan.js"></script>
+  <script src="yearreview.js"></script>
   <script src="app.js"></script>
   <script src="motes.js"></script>
 </body>

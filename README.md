@@ -4,9 +4,17 @@ A cozy digital library for every book you've read. Each book you log lands on th
 
 ## Features
 
-- **Opening scene**: each time you open the app, the title fades into a lamplit home library (in your own wallpaper and wood), the view pushes in to the bookcase, and your shelves appear. Tap to skip.
+- **Opening scene**: the first time you open the app each day, the title fades into a lamplit home library (in your own wallpaper and wood), the view pushes in to the bookcase, and your shelves appear. Tap to skip. Customize → Opening scene can play it every time or never.
 - **Bookshelf view**: wooden shelves that fill as you read. Spine height and color vary per book; thickness follows the page count when you enter one.
-- **Add a book**: title, author, 1–5 star rating, date finished, pages, genre, spine color, and a written review.
+- **Add a book**: start typing a title and pick the right book from Open Library: author, pages, genre, cover and summary fill themselves in. Or tap the barcode button and point your camera at the ISBN on the back of the book. Then add stars, dates and a review (or leave the review for later).
+- **Reading status**: each book is *Read*, *Reading now*, *Want to read* or *Didn’t finish*. Books you're reading show at the top with a progress line; tap one to update your page (or %, for ebooks and audiobooks), see your pace and when you're on track to finish, save a quote, or mark it finished. The shelf pills switch between your read shelves and the *Reading*, *To read* and *Set aside* piles. "What to read next" suggestions can go straight onto your to-read pile.
+- **Waiting for a review**: books you've finished without a review have a paper slip sticking out of the top of the spine, and the line under the title says how many are waiting; tap it to see just those.
+- **Rereads**: a book can have more than one finish date. "Read it again" on the open book starts a reread; finishing it keeps every date, and each one counts toward that year's goal.
+- **Formats**: print, ebook or audiobook (length in hours). A small mark on the spine shows ebooks and audiobooks.
+- **Series and tags**: give a book its series and number (arrange by Series to keep them together), and tag it with moods or anything you like. Make your own tags right in the form, or rename and delete them in ••• → Tags. Tap a tag to see every book that has it.
+- **Favorite lines**: save quotes (with the page) while you read; they appear on the open book's pages.
+- **Year in review** (••• menu): books, pages and hours for any year or all time, month by month, your ratings, five-star books, longest, shortest and quickest reads, genres, tags, authors you came back to, formats, and the year's covers.
+- **Import from Goodreads or StoryGraph** (••• menu): bring in a library exported from either site, with ratings, reviews, dates, statuses, series (from Goodreads titles), shelves and moods as tags. Books you already have are skipped.
 - **List view**: every book with rating, finish date and the start of your review.
 - **Search and arrange**: by recently added, date finished, author, title or rating.
 - **Year shelves**: filter the shelf and list to All, a single year, or books with no finish date.
@@ -27,7 +35,7 @@ A cozy digital library for every book you've read. Each book you log lands on th
 
 With accounts switched on, each reader's books, goals, trophies, look and cover photos are kept in their own space in Firebase (Google's app backend). Only they can read or change it, and only if their email is on the guest list. A copy also stays in the browser, so the app opens instantly and works offline, then catches up when it's back online. Nothing is uploaded to GitHub.
 
-With accounts switched off (the default), everything is saved only in your browser's storage on the device you use. To find covers, summaries and reading suggestions, Tomestead sends each book's title and author (and, for suggestions, the subjects and authors you like) to Open Library's public search. Cover photos you add yourself stay on your device and are included in backups. To move your library to another device, use **Back up my library** from the ••• menu, then **Restore from backup** on the other device.
+With accounts switched off (the default), everything is saved only in your browser's storage on the device you use. To find books as you type, covers, summaries and reading suggestions, Tomestead sends what you type, each book's title and author (or ISBN) (and, for suggestions, the subjects and authors you like) to Open Library's public search. Scanning a barcode uses your camera only on your device; on phones without a built-in barcode reader (iPhone), a small reader is downloaded from jsDelivr the first time you scan. Cover photos you add yourself stay on your device and are included in backups. To move your library to another device, use **Back up my library** from the ••• menu, then **Restore from backup** on the other device.
 
 ## Add it to your home screen
 
@@ -46,6 +54,9 @@ intro.js              the opening scene
 table.js              the reading table, drawn in perspective
 reader.js             the 3D book and the shelf-to-table animation
 recommend.js          what to read next
+importer.js           Goodreads / StoryGraph .csv import
+scan.js               barcode scanning (the camera reads the ISBN)
+yearreview.js         year in review
 covers.js             cover art and summaries (Open Library) and your own cover photos
 sync.js               sign-in, the guest list, and syncing with Firebase
 firebase-config.js    your Firebase project settings (null = accounts off)

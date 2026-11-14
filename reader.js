@@ -62,6 +62,7 @@ window.TomesteadReader = function (api) {
 
   const zAt = (d) => `0px 0px ${(S.Tb / 2 + d).toFixed(2)}px`;
   function openLeaves() {
+    S.box.classList.add('is-open');
     S.box.querySelector('.leaf.cover').style.transform = 'rotateY(-180deg)';
     const f1 = S.box.querySelector('.leaf.f1'), f2 = S.box.querySelector('.leaf.f2');
     f1.style.transform = f2.style.transform = 'rotateY(-180deg)';
@@ -87,16 +88,28 @@ window.TomesteadReader = function (api) {
 
   // ---------- building the book ----------
   function pageHTML(b, side, narrow) {
+    const d = api.describe(b);
     const info = () => {
-      const meta = [];
-      if (b.finished) meta.push(`Finished ${esc(api.fmtDate(b.finished))}`);
-      const m2 = [b.pages ? `${b.pages} pages` : '', b.genre ? esc(b.genre) : ''].filter(Boolean).join(', ');
+      const meta = [d.reads, d.series, d.details].filter(Boolean).map(esc);
+      const act = d.action;
       return `<header class="pg-head">
           <h2 class="pg-title">${esc(b.title)}</h2>
           ${b.author ? `<p class="pg-author">by ${esc(b.author)}</p>` : ''}
-          <p class="pg-stars" aria-label="${b.rating ? `${b.rating} of 5 stars` : 'Not rated'}">${b.rating ? api.starsHTML(b.rating) : '<span class="pg-muted">Not rated</span>'}</p>
-          ${meta.length || m2 ? `<p class="pg-meta">${meta.join('')}${meta.length && m2 ? '<br>' : ''}${m2}</p>` : ''}
+          ${d.rated ? `<p class="pg-stars" aria-label="${b.rating ? `${b.rating} of 5 stars` : 'Not rated'}">${b.rating ? api.starsHTML(b.rating) : '<span class="pg-muted">Not rated</span>'}</p>` : ''}
+          ${d.status ? `<p class="pg-status ${esc(d.statusKey)}">${esc(d.status)}</p>` : ''}
+          ${d.pct != null ? `<span class="pg-meter" aria-hidden="true"><span style="width:${d.pct}%"></span></span>` : ''}
+          ${meta.length ? `<p class="pg-meta">${meta.join('<br>')}</p>` : ''}
+          ${d.tags.length ? `<p class="pg-tags">${d.tags.map(t => `<button type="button" class="pg-tag" data-rd="tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</p>` : ''}
+          ${act ? `<button type="button" class="${act.quiet ? 'pg-link' : 'pg-btn'}" data-rd="${act.rd}">${esc(act.label)}</button>` : ''}
         </header>`;
+    };
+    const quotes = () => {
+      const qs = Array.isArray(b.quotes) ? b.quotes : [];
+      return `<section class="pg-sec pg-quotes">
+        <h3 class="pg-h">Favorite lines</h3>
+        ${qs.map(q => `<button type="button" class="pg-quote" data-rd="quote" data-q="${esc(q.id)}" aria-label="Edit this quote"><span class="pg-q-text">${esc(q.text).replace(/\n/g, '<br>')}</span>${q.where ? `<span class="pg-q-where">${esc(q.where)}</span>` : ''}</button>`).join('')}
+        <button type="button" class="pg-link" data-rd="quote-add">${qs.length ? '+ Save another line' : '+ Save a line you loved'}</button>
+      </section>`;
     };
     const about = () => {
       const a = b.about;
@@ -108,10 +121,10 @@ window.TomesteadReader = function (api) {
       return `<section class="pg-sec"><h3 class="pg-h">About the book</h3>${body}</section>`;
     };
     const review = () => `<section class="pg-sec">
-        <h3 class="pg-h">My review</h3>
+        <h3 class="pg-h">${esc(d.reviewHeading)}</h3>
         ${b.review
           ? `<div class="pg-review">${esc(b.review).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')}</div>`
-          : `<p class="pg-muted">You haven’t written a review yet.</p><button type="button" class="pg-btn" data-rd="edit">Write my review</button>`}
+          : `<p class="pg-muted">${esc(d.reviewEmpty)}</p><button type="button" class="pg-btn" data-rd="edit">${esc(d.reviewCta)}</button>`}
       </section>`;
     const rule = `<div class="pg-rule" aria-hidden="true">❦</div>`;
 
@@ -119,8 +132,8 @@ window.TomesteadReader = function (api) {
       if (narrow) return '';
       return `<div class="pg-inner">${info()}${rule}${about()}</div><span class="pg-folio">i</span>`;
     }
-    if (narrow) return `<div class="pg-inner">${info()}${rule}${review()}${rule}${about()}</div>`;
-    return `<div class="pg-inner">${review()}</div><span class="pg-folio">ii</span>`;
+    if (narrow) return `<div class="pg-inner">${info()}${rule}${review()}${rule}${quotes()}${rule}${about()}</div>`;
+    return `<div class="pg-inner">${review()}${rule}${quotes()}</div><span class="pg-folio">ii</span>`;
   }
 
   function plainCoverHTML(b) {
@@ -435,6 +448,7 @@ window.TomesteadReader = function (api) {
     const sh = anim(shadow, [{ opacity: 0.55 }, { opacity: 0 , offset: 0.4 }, { opacity: 0.45 }], { duration: 900 });
     setTimeout(() => placeShadow(g, 'open'), 360);
     await Promise.all([lift, swing(cover, 300, 900), swing(f1, 380, 860, [-3, 3]), swing(f2, 450, 820, [-6, 6]), sh]);
+    S.box.classList.add('is-open');
     S.state = 'open';
     setBar('open');
     busy = false;
@@ -446,6 +460,7 @@ window.TomesteadReader = function (api) {
     setBar(null);
     const g = S.g;
     S.state = 'closing';
+    S.box.classList.remove('is-open');
     const cover = S.box.querySelector('.leaf.cover');
     const f1 = S.box.querySelector('.leaf.f1');
     const f2 = S.box.querySelector('.leaf.f2');
@@ -606,6 +621,13 @@ window.TomesteadReader = function (api) {
     if (S.state === 'open') {
       const act = e.target.closest('[data-rd]');
       if (act && act.dataset.rd === 'edit') { api.onEdit(S.id); return; }
+      if (act && act.dataset.rd === 'tag') {
+        // put the book back, then show everything with that tag
+        const t = act.dataset.tag;
+        putBack().then(() => api.onTag(t));
+        return;
+      }
+      if (act) { api.onPage(act.dataset.rd, S.id, act); return; }
       if (!onBook) closeBook();
     }
   });
@@ -668,5 +690,5 @@ window.TomesteadReader = function (api) {
     }, 150);
   });
 
-  return { open, refresh, isOpen: () => !!S, currentId: () => S && S.id };
+  return { open, refresh, putBack, isOpen: () => !!S, currentId: () => S && S.id };
 };

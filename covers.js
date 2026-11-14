@@ -102,8 +102,81 @@
     return r.json();
   }
 
+  // ---------- finding a book while you type (or from its barcode) ----------
+  const FIND_FIELDS = 'key,title,author_name,cover_i,first_publish_year,number_of_pages_median,subject,edition_count';
+  const isbnOf = (s) => { const d = String(s || '').replace(/[\s-]/g, '').toUpperCase(); return /^(97[89]\d{10}|\d{9}[\dX])$/.test(d) ? d : ''; };
+  // Returns [{ olKey, title, author, year, pages, cover, subjects }]
+  async function search(text, limit = 7) {
+    const isbn = isbnOf(text);
+    if (isbn) { const one = await byISBN(isbn); return one ? [one] : []; }
+    const q = new URLSearchParams({ q: text, limit: String(limit), fields: FIND_FIELDS });
+    const docs = (await getJSON(`${OL}/search.json?${q}`)).docs || [];
+    return docs.filter(d => d.title).map(fromDoc);
+  }
+  const fromDoc = (d) => ({
+    olKey: d.key || null, title: d.title, author: (d.author_name || []).slice(0, 2).join(' & '),
+    year: d.first_publish_year || null, pages: d.number_of_pages_median || null, cover: d.cover_i || null,
+    subjects: (d.subject || []).slice(0, 40),
+  });
+  async function byISBN(isbn) {
+    isbn = isbnOf(isbn);
+    if (!isbn) return null;
+    try {
+      const q = new URLSearchParams({ q: `isbn:${isbn}`, limit: '1', fields: FIND_FIELDS });
+      const d = ((await getJSON(`${OL}/search.json?${q}`)).docs || [])[0];
+      if (d && d.title) return Object.assign(fromDoc(d), { isbn });
+    } catch {}
+    // not in the search index yet: the edition record itself
+    try {
+      const e = await getJSON(`${OL}/isbn/${isbn}.json`);
+      if (!e || !e.title) return null;
+      let author = '';
+      const ak = (e.authors || [])[0] && e.authors[0].key;
+      if (ak) { try { author = (await getJSON(`${OL}${ak}.json`)).name || ''; } catch {} }
+      const work = (e.works || [])[0] && e.works[0].key;
+      return { olKey: work || null, title: e.title, author, year: parseInt(e.publish_date, 10) || null, pages: e.number_of_pages || null, cover: (e.covers || []).find(c => c > 0) || null, subjects: e.subjects || [], isbn };
+    } catch { return null; }
+  }
+  // Open Library subjects → one plain genre (fiction first, so "History" on a novel doesn't win)
+  const GENRES = [
+    ['science fiction', 'Science fiction'], ['fantasy', 'Fantasy'], ['horror', 'Horror'], ['ghost', 'Horror'],
+    ['detective', 'Mystery'], ['mystery', 'Mystery'], ['thriller', 'Thriller'], ['suspense', 'Thriller'],
+    ['romance', 'Romance'], ['love stories', 'Romance'], ['historical fiction', 'Historical fiction'],
+    ['graphic novel', 'Graphic novel'], ['comic', 'Graphic novel'], ['young adult', 'Young adult'],
+    ['juvenile', 'Children’s'], ['children', 'Children’s'], ['poetry', 'Poetry'], ['classic', 'Classics'],
+    ['autobiography', 'Memoir', 1], ['memoir', 'Memoir', 1], ['biography', 'Biography', 1], ['self-help', 'Self-help', 1],
+    ['business', 'Business', 1], ['psychology', 'Psychology', 1], ['philosophy', 'Philosophy', 1], ['religion', 'Religion', 1],
+    ['christian', 'Religion', 1], ['history', 'History', 1], ['science', 'Science', 1], ['cooking', 'Cooking', 1],
+    ['literary', 'Literary fiction'], ['fiction', 'Fiction'],
+  ];
+  function genreFrom(subjects, known = []) {
+    const subs = (subjects || []).map(s => String(s).toLowerCase());
+    if (!subs.length) return '';
+    const fiction = subs.some(s => /\bfiction\b|novel/.test(s));
+    for (const [k, g, nonfiction] of GENRES) {
+      if (nonfiction && fiction) continue;
+      if (subs.some(s => s.includes(k))) return known.find(x => x.toLowerCase() === g.toLowerCase()) || g;
+    }
+    return '';
+  }
+
   // Returns { olKey, ids: [coverIds], about: {text, source, url} | null }
+  // (a book picked from search or scanned already knows its Open Library work)
   async function lookup(book) {
+    if (book.olKey) {
+      const out = { olKey: book.olKey, ids: [], about: null };
+      const seed = book.art && Array.isArray(book.art.ids) ? book.art.ids : [];
+      seed.forEach(c => { if (c > 0 && !out.ids.includes(c)) out.ids.push(c); });
+      const w = await getJSON(`${OL}${book.olKey}.json`);
+      const d = typeof w.description === 'string' ? w.description : w.description && w.description.value;
+      if (d) out.about = { text: cleanDesc(d), source: 'Open Library', url: `${OL}${book.olKey}` };
+      (w.covers || []).forEach(c => { if (c > 0 && !out.ids.includes(c)) out.ids.push(c); });
+      return out;
+    }
+    if (book.isbn) {
+      const hit = await byISBN(book.isbn).catch(() => null);
+      if (hit && hit.olKey) return lookup({ olKey: hit.olKey, art: { ids: hit.cover ? [hit.cover] : [] } });
+    }
     const q = new URLSearchParams({ title: book.title, limit: '6', fields: 'key,title,author_name,cover_i,first_publish_year,edition_count' });
     if (book.author) q.set('author', book.author);
     let docs = (await getJSON(`${OL}/search.json?${q}`)).docs || [];
@@ -157,5 +230,5 @@
     });
   }
 
-  window.TomesteadCovers = { coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc };
+  window.TomesteadCovers = { coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, byISBN, isbnOf, genreFrom };
 })();

@@ -1,5 +1,6 @@
 /* Tomestead startup: the title, a cozy home library, a slow push in to the
-   bookcase, then the app. Plays once each time the app is opened; tap to skip. */
+   bookcase, then the app. Plays the first time you open the app each day (or
+   every time, or never: Customize → Opening scene); tap to skip. */
 (() => {
   'use strict';
   const el = document.getElementById('intro');
@@ -8,7 +9,13 @@
   // the sign-in card comes first; the scene plays once you're in
   if (document.documentElement.classList.contains('auth-gate')) { el.remove(); return; }
   let seen = false;
-  try { seen = sessionStorage.getItem(KEY) === '1'; sessionStorage.setItem(KEY, '1'); } catch {}
+  try {
+    const mode = localStorage.getItem('tomestead.intro.mode') || 'day';
+    const d = new Date(), day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    seen = mode === 'never' || (mode === 'day' && localStorage.getItem('tomestead.intro.day') === day) || sessionStorage.getItem(KEY) === '1';
+    localStorage.setItem('tomestead.intro.day', day);
+    sessionStorage.setItem(KEY, '1');
+  } catch {}
   if (seen) { el.remove(); return; }
 
   const Art = window.TomesteadArt, D = window.TomesteadDecor;

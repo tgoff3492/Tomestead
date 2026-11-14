@@ -26,6 +26,9 @@ window.TomesteadRecommend = function (api) {
 
   // how much each book tells us about your taste
   function weightOf(b) {
+    // books on your want-to-read list hint a little; ones you put down count a little against
+    if (b.status === 'want') return 0.6;
+    if (b.status === 'dnf') return b.rating ? Math.min(-0.5, { 5: 1, 4: 0.5, 3: -0.5, 2: -1, 1: -2 }[b.rating]) : -1;
     const w = { 5: 3, 4: 2, 3: 0.5, 2: -1, 1: -2 }[b.rating] ?? 1;
     const recent = b.finished && (Date.now() - new Date(b.finished).getTime()) < 400 * 864e5 ? 1.2 : 1;
     return w * recent;
@@ -160,6 +163,7 @@ window.TomesteadRecommend = function (api) {
           ${c.shared.length ? `<p class="rec-tags">${c.shared.map(s => `<span>${esc(pretty(s))}</span>`).join('')}</p>` : ''}
           <div class="rec-actions">
             <button type="button" class="btn btn-ink" data-rec="next">Another idea</button>
+            <button type="button" class="btn btn-ghost" data-rec="want">Want to read</button>
             <button type="button" class="btn btn-ghost" data-rec="read">I’ve read it</button>
             <button type="button" class="btn btn-ghost" data-rec="nope">Not for me</button>
           </div>
@@ -218,12 +222,20 @@ window.TomesteadRecommend = function (api) {
       api.toast('Got it. It won’t come up again.');
       show();
     }
+    if (b.dataset.rec === 'want' && c) {
+      api.dismiss(c.key);
+      list.splice(at, 1);
+      if (at >= list.length) at = 0;
+      api.wantBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null, olKey: c.key || null, cover: c.cover_i || null });
+      if (list.length) show(); else dlg.close();
+      return;
+    }
     if (b.dataset.rec === 'read' && c) {
       api.dismiss(c.key);
       list.splice(at, 1);
       if (at >= list.length) at = 0;
       dlg.close();
-      api.addBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null });
+      api.addBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null, olKey: c.key || null, cover: c.cover_i || null });
     }
   });
 
