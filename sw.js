@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v13';
+const VERSION = 'tomestead-v14';
 const SHELL = [
   './',
   'index.html',
@@ -12,6 +12,13 @@ const SHELL = [
   'covers.js',
   'reader.js',
   'recommend.js',
+  'motes.js',
+  'tex/wood-v.webp',
+  'tex/wood-h.webp',
+  'tex/plaster.webp',
+  'tex/cloth.webp',
+  'tex/leather.webp',
+  'tex/floor.webp',
   'sync.js',
   'firebase-config.js',
   'manifest.webmanifest',

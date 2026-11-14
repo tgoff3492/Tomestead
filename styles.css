@@ -1036,3 +1036,235 @@ html.gate-on, html.gate-on body { overflow: hidden; }
   margin: 0; padding: 6px 12px 2px; font-size: .85rem; color: var(--ink-soft);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;
 }
+
+/* =========================================================
+   Golden hour (day) and Twilight (night)
+   The room: sunlit plaster by day, a star chart by night; real wood,
+   cloth and leather textures; an arched bookcase whose niche holds trophies.
+   ========================================================= */
+:root {
+  --arch-h: 150px;
+  --post: 18px;
+  --tex-wood-v: url(tex/wood-v.webp);
+  --tex-wood-h: url(tex/wood-h.webp);
+  --tex-cloth: url(tex/cloth.webp);
+  --tex-leather: url(tex/leather.webp);
+  /* lettering and controls that sit on the wall */
+  --chrome-title: var(--brass-lt);
+  --chrome-title-shadow: 0 1px 0 rgba(0,0,0,.5), 0 0 24px rgba(242,182,90,.25);
+  --chrome-ink: var(--paper);
+  --chrome-soft: #cdbf9f;
+  --chrome-dim: #b9ab8c;
+  --chrome-accent: var(--brass-lt);
+  --chrome-pill: rgba(0,0,0,.24);
+  --chrome-pill-shadow: inset 0 1px 2px rgba(0,0,0,.35);
+  --chrome-on: var(--paper);
+  --chrome-on-ink: var(--ink);
+  --chrome-meter: rgba(239,227,200,.12);
+  --chrome-text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  --wall-glow: radial-gradient(ellipse 90vw 70vh at 30% -10%, rgba(242,182,90,.17), transparent 70%);
+  --wall-shade: linear-gradient(180deg, transparent 60%, rgba(0,0,0,.25));
+  --wall-blend: normal;
+}
+/* sunlit plaster: warm sun from the upper right, texture blended into the colour */
+html[data-wall="room"][data-light="day"] {
+  --wall-glow: radial-gradient(ellipse 120vw 85vh at 100% 0%, rgba(255,236,190,.62), rgba(255,214,140,.16) 45%, transparent 72%);
+  --wall-shade: linear-gradient(180deg, transparent 55%, rgba(70,40,15,.22));
+  --wall-blend: overlay;
+}
+/* moonlight from the left, after dark */
+html[data-light="night"] {
+  --wall-glow: radial-gradient(ellipse 110vw 80vh at 0% 12%, rgba(150,185,255,.16), transparent 70%);
+  --wall-shade: linear-gradient(180deg, transparent 50%, rgba(0,0,0,.4));
+}
+html[data-chrome="light"] {
+  --chrome-title: #3b2410;
+  --chrome-title-shadow: 0 1px 0 rgba(255,244,220,.55);
+  --chrome-ink: #2e1c0d;
+  --chrome-soft: #4a3420;
+  --chrome-dim: #5a422a;
+  --chrome-accent: #8a3d17;
+  --chrome-pill: rgba(255,248,232,.5);
+  --chrome-pill-shadow: 0 1px 6px rgba(70,40,15,.16);
+  --chrome-on: #3a2410;
+  --chrome-on-ink: #f8e8c4;
+  --chrome-meter: rgba(58,36,16,.18);
+  --chrome-text-shadow: 0 1px 0 rgba(255,244,220,.45);
+}
+body {
+  background-image: var(--wall-glow), var(--wall-shade), var(--wall-img, none);
+  background-blend-mode: normal, normal, var(--wall-blend);
+}
+/* the status bar text stays white on iPhone, so keep a little shade under it on the light wall */
+html[data-chrome="light"] body::before {
+  content: ""; position: fixed; left: 0; right: 0; top: 0; height: calc(env(safe-area-inset-top) + 6px); z-index: 30;
+  background: linear-gradient(180deg, rgba(60,36,16,.45), rgba(60,36,16,0)); pointer-events: none;
+}
+
+/* chrome on the wall */
+.brand h1 { color: var(--chrome-title); text-shadow: var(--chrome-title-shadow); }
+.stats { color: var(--chrome-dim); }
+.pills { background: var(--chrome-pill); box-shadow: var(--chrome-pill-shadow); }
+.pills button { color: var(--chrome-soft); }
+.pills button[aria-selected="true"] { background: var(--chrome-on); color: var(--chrome-on-ink); }
+.years button[aria-selected="true"] { background: var(--chrome-accent); color: var(--chrome-on-ink); }
+html[data-chrome="dark"] .years button[aria-selected="true"] { background: var(--brass-lt); color: var(--ink); }
+.pills button:hover:not([aria-selected="true"]) { color: var(--chrome-ink); }
+.more summary { fill: var(--chrome-soft); background: var(--chrome-pill); box-shadow: var(--chrome-pill-shadow); }
+.icon-pill { color: var(--chrome-soft); background: var(--chrome-pill); box-shadow: var(--chrome-pill-shadow); }
+.icon-pill:hover { color: var(--chrome-ink); }
+.goalbar { color: var(--chrome-soft); }
+.goal-text strong { color: var(--chrome-accent); }
+.goal-name { color: var(--chrome-ink); }
+.goal-meter { background: var(--chrome-meter); }
+.linkbtn { color: var(--chrome-accent); }
+.pager { color: var(--chrome-ink); }
+.pager-label { text-shadow: var(--chrome-text-shadow); }
+.empty-note p { color: var(--paper); }
+.cz-head h2 { color: var(--chrome-ink); text-shadow: var(--chrome-text-shadow); }
+html[data-chrome="light"] .search input { background: rgba(255,248,232,.6); color: var(--chrome-ink); border-color: rgba(58,36,16,.3); }
+html[data-chrome="light"] .search input::placeholder { color: #7a6448; }
+
+/* ---------- the bookcase: real wood, an arched top ---------- */
+.shelves { margin: 0 var(--post); }
+.bookcase {
+  padding-top: var(--arch-h);
+  border-radius: 0 0 3px 3px;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.42), rgba(0,0,0,0) 3%, rgba(255,240,215,.07) 48%, rgba(0,0,0,0) 97%, rgba(0,0,0,.42)),
+    var(--tex-wood-v),
+    linear-gradient(180deg, var(--wood-lt), var(--wood) 40%, var(--wood-dk));
+  background-size: auto, 256px 1024px, auto;
+  background-blend-mode: normal, overlay, normal;
+  background-origin: content-box; background-clip: content-box;
+  box-shadow: none;
+}
+.arch {
+  position: absolute; left: 0; right: 0; top: 0; height: var(--arch-h);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background:
+    radial-gradient(ellipse 70% 90% at 50% 100%, rgba(255,232,196,.10), transparent 70%),
+    var(--tex-wood-v),
+    linear-gradient(180deg, var(--wood-hi), var(--wood-lt) 35%, var(--wood));
+  background-size: auto, 256px 1024px, auto;
+  background-blend-mode: normal, overlay, normal;
+  box-shadow: inset 0 2px 1px rgba(255,236,206,.22), inset 0 -10px 14px -10px rgba(0,0,0,.4);
+}
+.niche {
+  position: absolute; left: var(--post); right: var(--post); top: 16px; bottom: 0;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.6), rgba(0,0,0,.3) 45%, rgba(0,0,0,.42)),
+    var(--tex-wood-v),
+    linear-gradient(90deg, var(--recess-1), var(--recess-2) 50%, var(--recess-1));
+  background-size: auto, 256px 1024px, auto;
+  background-blend-mode: normal, overlay, normal;
+  /* a bead moulding that follows the curve, and the shadow inside it */
+  box-shadow: 0 0 0 3px rgba(0,0,0,.30), 0 0 0 4px rgba(255,228,190,.20),
+    inset 0 18px 24px -10px rgba(0,0,0,.8), inset 14px 0 18px -12px rgba(0,0,0,.85), inset -14px 0 18px -12px rgba(0,0,0,.85);
+}
+.niche .nitem { position: absolute; bottom: 0; }
+.niche .trophy svg { filter: drop-shadow(5px 2px 5px rgba(0,0,0,.55)); }
+.niche .trinket > svg { filter: drop-shadow(5px 2px 5px rgba(0,0,0,.45)) brightness(.95); }
+.sill {
+  height: 24px; position: relative; z-index: 2; margin: 0 calc(var(--post) - 4px);
+  display: grid; place-items: center;
+  background: var(--tex-wood-h), linear-gradient(180deg, var(--wood-hi), var(--wood-lt) 22%, var(--wood) 62%, var(--wood-dk));
+  background-size: 1024px 192px, auto;
+  background-blend-mode: overlay, normal;
+  box-shadow: 0 7px 10px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,240,215,.28);
+}
+.sill .plate { font-size: .86rem; padding: 0 14px; }
+.lamp { inset: calc(var(--arch-h) + 24px) 0 0 0; }
+.crown { display: none; }
+.plinth {
+  background: var(--tex-wood-h), linear-gradient(180deg, var(--wood-dk), var(--wood-deep));
+  background-size: 1024px 192px, auto;
+  background-blend-mode: overlay, normal;
+  box-shadow: inset 0 2px 0 rgba(255,240,215,.08), inset 0 8px 0 -6px rgba(0,0,0,.4);
+}
+.shelf-row {
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.26) 30%, rgba(0,0,0,.38)),
+    var(--tex-wood-v),
+    linear-gradient(90deg, var(--recess-1), var(--recess-2) 50%, var(--recess-1));
+  background-size: auto, 256px 1024px, auto;
+  background-blend-mode: normal, overlay, normal;
+}
+.plank {
+  background:
+    var(--tex-wood-h),
+    linear-gradient(180deg, var(--wood-hi) 0, var(--wood-lt) 16%, var(--wood) 60%, var(--wood-dk));
+  background-size: 1024px 192px, auto;
+  background-blend-mode: overlay, normal;
+  box-shadow: 0 7px 11px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,240,215,.26);
+}
+.floor-plane {
+  position: absolute; left: -70%; right: -70%; height: 1400px;
+  transform-origin: 50% 0; transform: perspective(560px) rotateX(76deg);
+  background: url(tex/floor.webp) repeat 0 0 / 640px 150px;
+}
+.floor svg { position: relative; }
+
+/* ---------- spines: book cloth, leather, gold foil ---------- */
+.book {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(90deg, rgba(0,0,0,.46), rgba(0,0,0,.08) 12%, rgba(255,250,235,.17) 28%, rgba(255,250,235,.03) 42%, rgba(0,0,0,.1) 72%, rgba(0,0,0,.52)),
+    linear-gradient(180deg, rgba(0,0,0,.28), transparent 5%, transparent 95%, rgba(0,0,0,.22)),
+    var(--tex-cloth);
+  background-size: auto, auto, 128px 128px;
+  background-blend-mode: normal, normal, overlay;
+  box-shadow: 4px 0 7px -3px rgba(0,0,0,.5), 1px 0 0 rgba(0,0,0,.35);
+}
+.book.v2, .book.v0 { background-image:
+    linear-gradient(90deg, rgba(0,0,0,.5), rgba(0,0,0,.08) 12%, rgba(255,250,235,.2) 28%, rgba(255,250,235,.04) 42%, rgba(0,0,0,.1) 72%, rgba(0,0,0,.56)),
+    linear-gradient(180deg, rgba(0,0,0,.28), transparent 5%, transparent 95%, rgba(0,0,0,.22)),
+    var(--tex-leather);
+  background-size: auto, auto, 160px 160px;
+}
+.book.v2 { border-radius: 5px 5px 1px 1px; }
+/* stamped gold on darker spines */
+.book:not(.light):not(.ghost) .s-title,
+.book:not(.light):not(.ghost) .s-author {
+  color: #e7c675;
+  background-image: linear-gradient(90deg, #c39340, #fff3c8 40%, #ebc46e 62%, #b0812f);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,.6)) drop-shadow(0 0 1px rgba(0,0,0,.35));
+}
+.book:not(.light) { --foil: #d9b25e; }
+.book.v1 .s-title { background-color: transparent; }
+.book.v1:not(.light)::after {
+  content: ""; position: absolute; left: 18%; right: 18%; top: 30%; bottom: 30%; border-radius: 2px; pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(217,178,94,.7), inset 0 0 0 100vmax rgba(0,0,0,.18);
+}
+.book.v1 .s-title { box-shadow: none; }
+
+/* ---------- night: dim the room, warm the candles ---------- */
+html[data-light="night"] .bookcase,
+html[data-light="night"] .floor { filter: brightness(.58) saturate(.8) contrast(1.05); }
+html[data-light="night"] .trinket .halo { background: radial-gradient(circle, rgba(255,190,100,.55), rgba(255,160,70,.16) 40%, transparent 68%); }
+html[data-light="night"] .sill .plate { filter: brightness(1.15); }
+
+/* ---------- light through the window, and the dust it catches ---------- */
+.sunlight, .motes {
+  position: fixed; inset: 0; pointer-events: none; z-index: 4;
+  mix-blend-mode: screen;
+}
+.sunlight {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, rgba(0,0,0,.6) 140px, #000 260px);
+  mask-image: linear-gradient(180deg, transparent 0, rgba(0,0,0,.6) 140px, #000 260px);
+  animation: beams 14s ease-in-out infinite alternate;
+}
+@keyframes beams { from { opacity: .82; } to { opacity: 1; } }
+html.reading .sunlight, html.reading .motes, html.intro-on .motes { opacity: 0; }
+
+@media (max-width: 640px) {
+  :root { --arch-h: 122px; --post: 12px; }
+  .niche { top: 13px; }
+  .sill { height: 22px; }
+  .sill .plate { font-size: .8rem; }
+  .lamp { inset: calc(var(--arch-h) + 22px) 0 0 0; }
+}

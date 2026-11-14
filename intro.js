@@ -17,8 +17,14 @@
 
   // theme colors, so the room matches the library you've set up
   let theme = D.DEFAULTS;
-  try { theme = Object.assign({}, D.DEFAULTS, (JSON.parse(localStorage.getItem('tomestead.prefs.v1' + ((window.TomesteadSync && window.TomesteadSync.suffix) || ''))) || {}).theme || {}); } catch {}
-  const wall = D.WALLPAPERS.find(w => w.key === theme.wall) || D.WALLPAPERS[0];
+  try {
+    const saved = Object.assign({}, (JSON.parse(localStorage.getItem('tomestead.prefs.v1' + ((window.TomesteadSync && window.TomesteadSync.suffix) || ''))) || {}).theme || {});
+    if ((saved.v || 1) < 2) { if (saved.wall === 'forest') saved.wall = 'room'; if (saved.wall === 'room' && saved.wood === 'walnut') saved.wood = 'oak'; }
+    theme = Object.assign({}, D.DEFAULTS, saved);
+  } catch {}
+  const wallPick = D.WALLPAPERS.find(w => w.key === theme.wall) || D.WALLPAPERS[0];
+  // the Golden hour room: its night sky after dark, a small plaster tile by day
+  const wall = D.lightNow(theme) === 'night' && wallPick.night ? wallPick.night : wallPick.img ? { tile: '<svg></svg>', size: 60, color: wallPick.color } : wallPick;
   const wood = (D.WOODS.find(w => w.key === theme.wood) || D.WOODS[0]).v;
 
   const SPINES = ['#6E1F24', '#1F3350', '#4F6B3A', '#C2902F', '#5B2F4A', '#2E5E5E', '#9A4A25', '#3A3A3F', '#A57A4E', '#D9CBA8', '#2F4A33', '#8B3A3A'];

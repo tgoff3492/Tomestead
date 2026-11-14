@@ -4,7 +4,22 @@
   const svgURL = (svg) => `url('data:image/svg+xml,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim()).replace(/'/g, '%27')}')`;
 
   // ---------- wallpapers (tiled SVG) ----------
+  // a night sky for the Golden hour room: faint stars and a few constellations
+  const STARS = (() => {
+    let r = 9, st = '';
+    const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 46; i++) st += `<circle cx="${(rnd() * 300).toFixed(1)}" cy="${(rnd() * 300).toFixed(1)}" r="${(.35 + rnd() * .9).toFixed(2)}" fill="#efe3c0" fill-opacity="${(.18 + rnd() * .45).toFixed(2)}"/>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">${st}
+      <path d="M30 40 L62 70 L58 110 L96 130 M200 180 L228 204 L262 196 L276 232" stroke="#c9b27a" stroke-opacity=".16" stroke-width=".7" fill="none"/>
+      <g fill="#f4e4b0" fill-opacity=".55"><circle cx="30" cy="40" r="1.4"/><circle cx="62" cy="70" r="1.4"/><circle cx="58" cy="110" r="1.4"/><circle cx="96" cy="130" r="1.4"/><circle cx="200" cy="180" r="1.4"/><circle cx="228" cy="204" r="1.4"/><circle cx="262" cy="196" r="1.4"/><circle cx="276" cy="232" r="1.4"/></g></svg>`;
+  })();
+
   const WALLPAPERS = [
+    // sunlit plaster by day, a midnight star chart by night (follows Time of day)
+    { key: 'room', name: 'Golden hour', color: '#c7ab82', size: 512, img: 'tex/plaster.webp', light: true,
+      night: { color: '#0f1a2b', tile: STARS, size: 300 },
+      tile: `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="60" height="60" fill="#c7ab82"/>
+        <circle cx="18" cy="20" r="22" fill="#e6d3b0" fill-opacity=".5"/><circle cx="48" cy="46" r="18" fill="#a88a62" fill-opacity=".25"/></svg>` },
     { key: 'forest', name: 'Forest damask', color: '#1d2e27', size: 44,
       tile: `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44">
         <ellipse cx="22" cy="22" rx="8" ry="12" fill="none" stroke="#c9a15b" stroke-opacity=".10" stroke-width="1.5"/>
@@ -130,7 +145,8 @@
   const MAX_TABLE_ITEMS = 5;
 
   const DEFAULTS = {
-    wall: 'forest', wood: 'walnut', bookend: 'brass',
+    v: 2, light: 'system',
+    wall: 'room', wood: 'oak', bookend: 'brass',
     trinkets: ['plant', 'candle', 'cat', 'globe', 'stack', 'teacup'],
     table: 'walnut', tableItems: ['lamp', 'tea', 'glasses'],
   };
@@ -139,17 +155,46 @@
     return svg.replace(/width="(\d+)" height="(\d+)"/, (_, w, h) => `width="${(w * s).toFixed(1)}" height="${(h * s).toFixed(1)}" aria-hidden="true" focusable="false"`);
   }
 
+  // ---------- time of day ----------
+  const LIGHTS = {
+    system: { name: 'Match my phone', hint: 'Night when your phone is in dark mode' },
+    clock:  { name: 'Follow the clock', hint: 'Day from sunrise to sunset' },
+    day:    { name: 'Always day' },
+    night:  { name: 'Always night' },
+  };
+  const darkQuery = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+  function lightNow(settings) {
+    const m = settings.light || 'system';
+    if (m === 'day' || m === 'night') return m;
+    if (m === 'clock') {
+      const d = new Date(), h = d.getHours() + d.getMinutes() / 60, mo = d.getMonth();
+      const [rise, set] = mo >= 3 && mo <= 8 ? [6.5, 20.25] : mo === 2 || mo === 9 ? [7.25, 19.25] : [7.25, 17.75];
+      return h >= rise && h < set ? 'day' : 'night';
+    }
+    return darkQuery && darkQuery.matches ? 'night' : 'day';
+  }
+
   function applyTheme(settings) {
     const wall = WALLPAPERS.find(w => w.key === settings.wall) || WALLPAPERS[0];
     const wood = WOODS.find(w => w.key === settings.wood) || WOODS[0];
-    const root = document.documentElement.style;
-    root.setProperty('--wall', wall.color);
-    root.setProperty('--wall-img', svgURL(wall.tile));
-    root.setProperty('--wall-size', `${wall.size}px ${wall.h || wall.size}px`);
+    const light = lightNow(settings);
+    const html = document.documentElement, root = html.style;
+    const night = light === 'night';
+    const look = night && wall.night ? wall.night : wall;
+    root.setProperty('--wall', look.color);
+    root.setProperty('--wall-img', look.img && !(night && wall.night) ? `url(${look.img})` : svgURL(look.tile));
+    root.setProperty('--wall-size', `${look.size}px ${look.h || look.size}px`);
     ['--wood-hi', '--wood-lt', '--wood', '--wood-dk', '--wood-deep', '--recess-1', '--recess-2'].forEach((p, i) => root.setProperty(p, wood.v[i]));
+    const before = html.dataset.light;
+    html.dataset.light = light;
+    html.dataset.wall = wall.key;
+    // dark lettering only where the wall itself is light (sunlit plaster)
+    html.dataset.chrome = wall.light && !night ? 'light' : 'dark';
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', wall.color);
+    if (meta) meta.setAttribute('content', look.color);
+    if (before !== light) window.dispatchEvent(new CustomEvent('tomestead:light', { detail: light }));
+    return light;
   }
 
-  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, sized, svgURL, applyTheme };
+  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, LIGHTS, lightNow, sized, svgURL, applyTheme };
 })();

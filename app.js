@@ -45,7 +45,19 @@
     view: 'shelf', sort: 'added', year: 'all', iosTipDismissed: false,
     theme: { ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, goals: {},
   }, Sync.gated ? {} : loadJSON(PREFS, {}));
-  prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, prefs.theme || {});
+  prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(prefs.theme || {}));
+  // the Golden hour room replaced the old default look (forest wallpaper, walnut shelves)
+  // (works on the saved theme before defaults are filled in)
+  function migrateTheme(saved) {
+    const t = Object.assign({}, saved || {});
+    if ((t.v || 1) < 2) {
+      if (t.wall === 'forest') t.wall = 'room';
+      if (t.wall === 'room' && t.wood === 'walnut') t.wood = 'oak';
+      t.v = 2;
+    }
+    if (t.light && !D.LIGHTS[t.light]) delete t.light;
+    return t;
+  }
   prefs.goals = prefs.goals || {};
   prefs.trophies = prefs.trophies || {};
   prefs.recs = prefs.recs || { dismissed: [] };
@@ -279,6 +291,8 @@
     const cs = getComputedStyle(rowEl);
     const inner = rowEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const rowH = rowEl.clientHeight;
+    const nicheEl = probe.querySelector('.niche');
+    const niche = { w: nicheEl.clientWidth, h: nicheEl.clientHeight };
     container.removeChild(probe);
     const avail = Math.max(100, inner - bookendW * 2);
 
@@ -302,13 +316,15 @@
       const w = row.reduce((t, it) => t + width(it) + gap, 0) + (row.length ? bookendW * 2 : 0);
       return { ri, books: row.length > 0, free: inner - w, caseIdx: Math.floor(ri / perCase) };
     });
-    const plan = planTrinkets(info, s, rowH);
+    const nichePlan = planNiches(niche, rows.length / perCase, opts.trophies || [], s);
+    const plan = planTrinkets(info, s, rowH, nichePlan.used);
 
     const cases = [];
     rows.forEach((row, ri) => {
       if (ri % perCase === 0) {
         const c = makeCase(opts.plate ? opts.plate(Math.floor(ri / perCase)) : '');
         container.appendChild(c);
+        fillNiche(c.querySelector('.niche'), nichePlan.cases[cases.length] || []);
         cases.push(c);
       }
       const shelves = cases[cases.length - 1].querySelector('.shelves');
@@ -328,15 +344,7 @@
       shelves.appendChild(shelf);
     });
 
-    // trophies stand on top of the first bookcase
-    const tro = opts.trophies || [];
-    container.classList.toggle('has-top', tro.length > 0);
-    if (tro.length && cases[0]) {
-      const top = document.createElement('div');
-      top.className = 'case-top';
-      top.innerHTML = tro.map(t => `<button type="button" class="trophy" data-trophy="${esc(t.year)}" aria-label="${esc(t.year)} reading goal trophy: ${t.goal} books">${Art.drawTrophy(t.year, t.goal, 0.72 * s)}</button>`).join('');
-      cases[0].appendChild(top);
-    }
+    container.classList.remove('has-top');
     fitSpines(container);
     return cases;
   }
@@ -344,8 +352,85 @@
   // ---------- trinket placement ----------
   const tsize = (key, s) => { const z = Art.size(key); return { w: z.w * s, h: z.h * s, base: z.base * s, top: z.top && { y: z.top.y * s, x0: z.top.x0 * s, x1: z.top.x1 * s }, glow: z.glow && { x: z.glow.x * s, y: z.glow.y * s } }; };
 
-  function planTrinkets(info, s, rowH) {
-    const picks = [...new Set(prefs.theme.trinkets)].filter(k => D.TRINKETS[k] && Art.A[k]);
+  // ---------- the arch: a display niche at the top of each bookcase ----------
+  // Trophies take the niche as they're earned (newest in the middle); any room left holds a
+  // trinket or two, which go back to the shelves once trophies need the space.
+  const NICHE_PREF = ['globe', 'candle', 'hourglass', 'clock', 'lantern', 'crystal', 'frame', 'succulent', 'teacup', 'plant'];
+  function planNiches(niche, caseCount, trophies, s) {
+    const out = { cases: [], used: new Set() };
+    if (!niche.w || !niche.h) return out;
+    const half = niche.w / 2, cx = half, gap = 16 * s;
+    const roomAt = (x) => niche.h * Math.sqrt(Math.max(0, 1 - ((x - cx) / half) ** 2));
+    const fits = (x0, w, h) => x0 >= 6 && x0 + w <= niche.w - 6 && roomAt(x0) >= h + 6 && roomAt(x0 + w) >= h + 6;
+    // newest trophies first, so they get the middle
+    const tro = [...trophies].sort((a, b) => String(b.year).localeCompare(String(a.year)));
+    const tsc = Math.min(0.75 * s, (niche.h * 0.74) / 152);
+    const picks = [...new Set(prefs.theme.trinkets)].filter(k => NICHE_PREF.includes(k) && Art.A[k])
+      .sort((a, b) => NICHE_PREF.indexOf(a) - NICHE_PREF.indexOf(b));
+    for (let ci = 0; ci < Math.max(1, caseCount); ci++) {
+      const items = [];
+      if (ci === 0) for (const t of tro) items.push({ kind: 'trophy', t, w: 100 * tsc, h: 152 * tsc, sc: tsc });
+      // a trinket or two to keep an empty niche company
+      const want = ci === 0 ? Math.max(0, 3 - items.length) : 1;
+      let added = 0;
+      for (const k of picks) {
+        if (added >= want) break;
+        if (out.used.has(k)) continue;
+        const z = Art.size(k);
+        const sc = Math.min(s, (niche.h * 0.6) / z.h, (niche.w * 0.3) / z.w);
+        items.push({ kind: 'trinket', key: k, w: z.w * sc, h: z.h * sc, sc, tentative: true });
+        added++;
+      }
+      // place from the middle outward, alternating sides; skip anything the curve won't hold
+      const placed = [];
+      let left = cx, right = cx, side = 1;
+      for (const it of items) {
+        let x0 = null;
+        if (!placed.length) { const c = cx - it.w / 2; if (fits(c, it.w, it.h)) x0 = c; }
+        else {
+          const tryR = right + gap, tryL = left - gap - it.w;
+          const order = side > 0 ? [tryR, tryL] : [tryL, tryR];
+          for (const c of order) if (fits(c, it.w, it.h)) { x0 = c; break; }
+        }
+        if (x0 === null) continue;
+        it.x = x0;
+        left = Math.min(left, x0); right = Math.max(right, x0 + it.w);
+        side = -side;
+        placed.push(it);
+        if (it.kind === 'trinket') out.used.add(it.key);
+      }
+      out.cases.push(placed);
+    }
+    return out;
+  }
+  function fillNiche(el, items) {
+    if (!el) return;
+    el.innerHTML = '';
+    for (const it of items) {
+      let node;
+      if (it.kind === 'trophy') {
+        node = document.createElement('button');
+        node.type = 'button';
+        node.className = 'trophy';
+        node.dataset.trophy = it.t.year;
+        node.setAttribute('aria-label', `${it.t.year} reading goal trophy: ${it.t.goal} books`);
+        node.innerHTML = Art.drawTrophy(it.t.year, it.t.goal, it.sc);
+      } else {
+        const sz = tsize(it.key, it.sc);
+        node = document.createElement('div');
+        node.className = `trinket t-${it.key}`;
+        node.innerHTML = Art.draw(it.key, it.sc);
+        if (sz.glow) node.insertAdjacentHTML('afterbegin', `<span class="halo" style="left:${sz.glow.x}px;top:${sz.glow.y}px"></span>`);
+        node.style.marginBottom = `${Math.round(sz.base - sz.h)}px`;
+      }
+      node.classList.add('nitem');
+      node.style.left = `${Math.round(it.x)}px`;
+      el.appendChild(node);
+    }
+  }
+
+  function planTrinkets(info, s, rowH, skip = new Set()) {
+    const picks = [...new Set(prefs.theme.trinkets)].filter(k => D.TRINKETS[k] && Art.A[k] && !skip.has(k));
     const plan = info.map(() => []);
     if (!picks.length) return plan;
     // a stack of books makes a riser for one small piece (the last small one picked)
@@ -445,7 +530,7 @@
   function makeCase(plateText) {
     const c = document.createElement('div');
     c.className = 'bookcase';
-    c.innerHTML = `<div class="crown">${plateText ? `<span class="plate">${esc(plateText)}</span>` : ''}</div><div class="lamp" aria-hidden="true"></div><div class="shelves"></div><div class="plinth"></div>`;
+    c.innerHTML = `<div class="arch"><div class="niche"></div></div><div class="sill">${plateText ? `<span class="plate">${esc(plateText)}</span>` : ''}</div><div class="lamp" aria-hidden="true"></div><div class="shelves"></div><div class="plinth"></div>`;
     return c;
   }
 
@@ -686,33 +771,23 @@
   }
   function floorSVG(W, H, caseX, caseW) {
     const wood = (D.WOODS.find(w => w.key === prefs.theme.wood) || D.WOODS[0]).v;
-    const r = Art.rng(77);
     const fy = BASEBOARD;                       // where wall meets floor
-    let boards = '', y = fy, h = 9, row = 0;
-    while (y < H) {
-      const off = r() * 300;
-      for (let x = -off; x < W; x += 260 + r() * 340) boards += `<path d="M${x.toFixed(1)} ${y.toFixed(1)}v${h.toFixed(1)}" stroke="#000" stroke-opacity=".35"/>`;
-      boards += `<rect x="0" y="${y.toFixed(1)}" width="${W}" height="${h.toFixed(1)}" fill="${row % 3 === 0 ? '#ffd9a8' : '#000'}" opacity="${row % 3 === 0 ? .05 : .05 + r() * .08}"/>`;
-      boards += `<path d="M0 ${y.toFixed(1)}H${W}" stroke="#000" stroke-opacity=".45"/><path d="M0 ${(y + 1).toFixed(1)}H${W}" stroke="#fff" stroke-opacity=".05"/>`;
-      y += h; h *= 1.16; row++;
-    }
     const cx = caseX + caseW / 2;
-    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false" style="display:block">
+    // real boards, laid in perspective (CSS 3D), with the lighting drawn over them
+    return `<div class="floor-plane" style="top:${fy}px"></div>
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false" style="display:block;position:relative">
       <defs>
         <linearGradient id="fl-base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${wood[2]}"/><stop offset=".6" stop-color="${wood[3]}"/><stop offset="1" stop-color="${wood[4]}"/></linearGradient>
-        <linearGradient id="fl-floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a2f1c"/><stop offset=".3" stop-color="#3b2516"/><stop offset="1" stop-color="#1a1008"/></linearGradient>
-        <radialGradient id="fl-lamp" cx="${(cx * .7 / W).toFixed(3)}" cy="0" r=".7"><stop offset="0" stop-color="#ffc677" stop-opacity=".22"/><stop offset="1" stop-color="#ffc677" stop-opacity="0"/></radialGradient>
+        <linearGradient id="fl-depth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".05"/><stop offset=".55" stop-color="#000" stop-opacity=".3"/><stop offset="1" stop-color="#000" stop-opacity=".65"/></linearGradient>
         <radialGradient id="fl-shadow"><stop offset="0" stop-color="#000" stop-opacity=".75"/><stop offset=".6" stop-color="#000" stop-opacity=".35"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
-        <linearGradient id="fl-wallao" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
-        <linearGradient id="fl-fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>
+        <linearGradient id="fl-wallao" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".5"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+        <linearGradient id="fl-fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".4"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".4"/></linearGradient>
       </defs>
       <rect x="0" y="0" width="${W}" height="${BASEBOARD}" fill="url(#fl-base)"/>
       <rect x="0" y="0" width="${W}" height="3" fill="${wood[0]}" opacity=".55"/>
       <rect x="0" y="5" width="${W}" height="1.2" fill="#000" opacity=".35"/>
-      <rect x="0" y="${fy}" width="${W}" height="${H - fy}" fill="url(#fl-floor)"/>
-      <g>${boards}</g>
+      <rect x="0" y="${fy}" width="${W}" height="${H - fy}" fill="url(#fl-depth)"/>
       <rect x="0" y="${fy}" width="${W}" height="${Math.min(40, H - fy)}" fill="url(#fl-wallao)"/>
-      <rect x="0" y="0" width="${W}" height="${H}" fill="url(#fl-lamp)"/>
       <rect x="0" y="0" width="${W}" height="${H}" fill="url(#fl-fade)"/>
       <ellipse cx="${cx.toFixed(1)}" cy="${(BASEBOARD + SETBACK).toFixed(1)}" rx="${(caseW * .56).toFixed(1)}" ry="16" fill="url(#fl-shadow)"/>
       <rect x="${(caseX + 6).toFixed(1)}" y="${(BASEBOARD + SETBACK - 3).toFixed(1)}" width="${(caseW - 12).toFixed(1)}" height="7" rx="3" fill="#000" opacity=".55"/>
@@ -731,6 +806,17 @@
         <span class="tile-art wall" style="background-color:${w.color};background-image:radial-gradient(ellipse at 30% 0%, rgba(242,182,90,.22), transparent 75%),${D.svgURL(w.tile)};background-size:100% 100%,${Math.round(w.size * .75)}px ${Math.round((w.h || w.size) * .75)}px"></span>
         <span class="tile-label">${w.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
+
+    const sun = '<svg viewBox="0 0 64 44" width="64" height="44"><circle cx="32" cy="26" r="10" fill="#f2c45e"/><g stroke="#f2c45e" stroke-width="2.4" stroke-linecap="round"><path d="M32 8v-5M32 49v-5M14 26H9M55 26h-5M19 13l-3-3M45 13l3-3M19 39l-3 3M45 39l3 3"/></g></svg>';
+    const moon = '<svg viewBox="0 0 64 44" width="64" height="44"><path d="M38 9a15 15 0 1 0 12 23A12 12 0 0 1 38 9z" fill="#dfe6f5"/><circle cx="14" cy="10" r="1.2" fill="#efe3c0"/><circle cx="54" cy="14" r="1" fill="#efe3c0"/><circle cx="12" cy="34" r="1" fill="#efe3c0"/></svg>';
+    const half = '<svg viewBox="0 0 64 44" width="64" height="44"><circle cx="24" cy="24" r="9" fill="#f2c45e"/><path d="M44 10a12 12 0 1 0 9 18A10 10 0 0 1 44 10z" fill="#dfe6f5"/></svg>';
+    const lightArt = { system: half, clock: half, day: sun, night: moon };
+    $('#czLight').innerHTML = Object.entries(D.LIGHTS).map(([k, l]) => `
+      <button type="button" class="tile" role="radio" aria-checked="${(t.light || 'system') === k}" data-light="${k}">
+        <span class="tile-art light-art ${k}">${lightArt[k]}</span>
+        <span class="tile-label">${l.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('');
+    $('#czLightHint').textContent = `Golden hour by day; moonlight and candles by night. ${D.LIGHTS[t.light || 'system'].hint || ''} It’s ${document.documentElement.dataset.light === 'night' ? 'night' : 'day'} in your library right now.`;
 
     $('#czWood').innerHTML = D.WOODS.map(w => {
       const [hi, lt, mid, dk, , r1, r2] = w.v;
@@ -761,7 +847,7 @@
     }).join('');
     const n = t.trinkets.length;
     $('#czTrinketHint').textContent = n
-      ? `${n} picked. Each one appears once, in an open spot on your shelves, starting with the first bookcase. A stack of books will hold one of the small ones on top.`
+      ? `${n} picked. Each one appears once: a few in the arch at the top of your bookcase (until trophies need the room), the rest in open spots on your shelves. A stack of books will hold one of the small ones on top.`
       : 'No trinkets on display. Pick a few to fill the empty spots on your shelves.';
 
     renderTablePreview();
@@ -1042,7 +1128,7 @@
     const sub = $('#goalSub');
     if (goalSpan === 'year') {
       const y = $('#gYear').value;
-      sub.textContent = `${countInYear(y)} finished in ${y} so far. Empty spots on the ${y} shelf hold space for the rest, and reaching it earns a trophy for the top of your bookcase.`;
+      sub.textContent = `${countInYear(y)} finished in ${y} so far. Empty spots on the ${y} shelf hold space for the rest, and reaching it earns a trophy for the arch of your bookcase.`;
       $('#goalTitle').textContent = goalEdit && goalEdit.kind === 'year' ? `${y} reading goal` : (goalEdit ? 'Edit goal' : 'New reading goal');
       $('#goalRemove').hidden = !(goalEdit && goalEdit.kind === 'year' && goalFor(y));
       return;
@@ -1176,7 +1262,7 @@
 
   function celebrate(y) {
     syncTrophies();
-    $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}. Your ${y} trophy now stands on top of your bookcase.`;
+    $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}. Your ${y} trophy now stands in the arch of your bookcase.`;
     $('#celebrateTrophy').innerHTML = Art.drawTrophy(y, goalFor(y), 0.9);
     $('#celebrateRaise').dataset.year = y;
     delete $('#celebrateRaise').dataset.cgoal;
@@ -1259,7 +1345,7 @@
         }
         const st = !Array.isArray(parsed) && parsed.settings;
         if (st) {
-          if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, st.theme);
+          if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(st.theme));
           if (st.goals) prefs.goals = Object.assign({}, prefs.goals, st.goals);
           if (Array.isArray(st.customGoals)) {
             for (const g of cleanGoals(st.customGoals)) {
@@ -1434,6 +1520,7 @@
       if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
       else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
       else if (t.dataset.bookend) setTheme({ bookend: t.dataset.bookend });
+      else if (t.dataset.light) setTheme({ light: t.dataset.light });
       else if (t.dataset.table) setTheme({ table: t.dataset.table });
       else if (t.dataset.titem) {
         const k = t.dataset.titem, cur = prefs.theme.tableItems;
@@ -1445,7 +1532,7 @@
         const list = prefs.theme.trinkets.includes(k) ? prefs.theme.trinkets.filter(x => x !== k) : [...prefs.theme.trinkets, k];
         setTheme({ trinkets: list });
       }
-      const attr = ['wall', 'wood', 'bookend', 'table', 'titem', 'trinket'].find(a => t.dataset[a]);
+      const attr = ['wall', 'light', 'wood', 'bookend', 'table', 'titem', 'trinket'].find(a => t.dataset[a]);
       const sel = `[data-${attr}="${t.dataset[attr]}"]`;
       const again = $(`#customizePage .tile${sel}`); again && again.focus();
     });
@@ -1456,6 +1543,14 @@
 
     // anything above the bookcase can change height after the first paint (fonts arriving,
     // a sync note, the goal bar), so keep the floor tucked under the bookcase whenever it moves
+    // day and night: follow the phone's dark mode, or the clock, as chosen in Customize
+    const relight = () => D.applyTheme(prefs.theme);
+    const dq = window.matchMedia && matchMedia('(prefers-color-scheme: dark)');
+    if (dq) (dq.addEventListener ? dq.addEventListener('change', relight) : dq.addListener(relight));
+    setInterval(relight, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) relight(); });
+    window.addEventListener('tomestead:light', () => { floorKey = ''; if (onCustomize()) renderCustomize(); else placeFloor(); });
+
     if ('ResizeObserver' in window) {
       const ro = new ResizeObserver(() => placeFloor());
       ro.observe($('#cases')); ro.observe($('#stage'));
@@ -1513,7 +1608,7 @@
     return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs };
   }
   function applySettings(s) {
-    if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, s.theme);
+    if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
     prefs.goals = s.goals && typeof s.goals === 'object' ? s.goals : {};
     prefs.trophies = s.trophies && typeof s.trophies === 'object' ? s.trophies : {};
     // (a device still on an older version doesn't send these; keep what's here rather than wiping them)
@@ -1571,7 +1666,7 @@
     }
     const old = loadJSON(LEGACY_PREFS, {});
     if (old.theme && JSON.stringify(prefs.theme) === JSON.stringify(Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, {}))) {
-      prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, old.theme);
+      prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(old.theme));
       D.applyTheme(prefs.theme);
     }
     if (old.goals) for (const [y, g] of Object.entries(old.goals)) if (!(prefs.goals[y] > 0)) prefs.goals[y] = g;
@@ -1598,6 +1693,7 @@
   }
 
   D.applyTheme(prefs.theme);
+  if (!Sync.gated) savePrefsHere();   // keeps a migrated look for next time (and for the opening scene)
   reader = window.TomesteadReader({
     esc, colorOf, dims, starsHTML, fmtDate, toast,
     theme: () => prefs.theme,
