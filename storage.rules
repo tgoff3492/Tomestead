@@ -1,0 +1,22 @@
+// Tomestead: who can upload cover photos (Cloud Storage).
+// Paste this into Firebase console → Storage → Rules, then Publish.
+// (The first time, the console asks to let Storage rules check Firestore. Allow it:
+// that's how the guest list is checked here.)
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // covers/<your account id>/<book id>-<version>.jpg
+    match /covers/{uid}/{file} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && firestore.exists(/databases/(default)/documents/invites/$(request.auth.token.email.lower()))
+        && request.resource.size < 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Everything else is closed.
+  }
+}

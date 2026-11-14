@@ -566,7 +566,7 @@ window.TomesteadReader = function (api) {
       a.more = true;
     }
     if (!a.ids || !a.ids.length) { api.toast('No other covers found. Try using your own photo.'); return; }
-    if (a.status === 'upload') await C.delUpload(b.id);
+    if (a.status === 'upload') await api.forgetPhoto(b);
     const start = a.status === 'found' ? (a.i || 0) : -1;
     for (let k = 1; k <= Math.min(a.ids.length, 12); k++) {
       const i = (start + k) % a.ids.length;
@@ -583,6 +583,7 @@ window.TomesteadReader = function (api) {
     const b = api.getBook(S.id);
     try {
       const blob = await C.resizeImage(file);
+      if (b.art && b.art.status === 'upload') await api.forgetPhoto(b);
       await C.putUpload(b.id, blob);
       b.art = Object.assign(b.art || {}, { status: 'upload' });
       api.saveBook(b); refresh();
@@ -591,7 +592,7 @@ window.TomesteadReader = function (api) {
   }
   async function usePlain() {
     const b = api.getBook(S.id);
-    if (b.art && b.art.status === 'upload') await C.delUpload(b.id);
+    if (b.art && b.art.status === 'upload') await api.forgetPhoto(b);
     b.art = Object.assign(b.art || {}, { status: 'plain' });
     api.saveBook(b); refresh();
     api.toast('Using a plain cloth cover.');

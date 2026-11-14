@@ -52,6 +52,9 @@
           <button id="exportBtn">Back up my library</button>
           <button id="importBtn">Restore from backup</button>
           <input id="importFile" type="file" accept="application/json,.json" hidden>
+          <hr class="signed-in-only" hidden>
+          <p id="whoAmI" class="menu-who" hidden></p>
+          <button id="signOutBtn" class="signed-in-only" hidden>Sign out</button>
         </div>
       </details>
     </div>
@@ -240,6 +243,19 @@
     <p class="rec-foot">Picked from the subjects and authors you rate highest, using Open Library.</p>
   </dialog>
 
+  <!-- Books saved on this device before signing in -->
+  <dialog id="claimDialog" class="paper narrow" aria-labelledby="claimTitle">
+    <form method="dialog">
+      <h2 id="claimTitle">Bring your books along?</h2>
+      <p class="meta" id="claimText"></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" id="claimNo" class="btn btn-ghost">Not now</button>
+        <button type="button" id="claimYes" class="btn btn-ink">Add them</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Reading goal -->
   <dialog id="goalDialog" class="paper narrow">
     <form id="goalForm" method="dialog" novalidate>
@@ -281,6 +297,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="firebase-config.js"></script>
+  <script src="sync.js"></script>
   <script src="art.js"></script>
   <script src="decor.js"></script>
   <script src="intro.js"></script>

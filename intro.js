@@ -5,6 +5,8 @@
   const el = document.getElementById('intro');
   if (!el) return;
   const KEY = 'tomestead.intro';
+  // the sign-in card comes first; the scene plays once you're in
+  if (document.documentElement.classList.contains('auth-gate')) { el.remove(); return; }
   let seen = false;
   try { seen = sessionStorage.getItem(KEY) === '1'; sessionStorage.setItem(KEY, '1'); } catch {}
   if (seen) { el.remove(); return; }
@@ -15,7 +17,7 @@
 
   // theme colors, so the room matches the library you've set up
   let theme = D.DEFAULTS;
-  try { theme = Object.assign({}, D.DEFAULTS, (JSON.parse(localStorage.getItem('tomestead.prefs.v1')) || {}).theme || {}); } catch {}
+  try { theme = Object.assign({}, D.DEFAULTS, (JSON.parse(localStorage.getItem('tomestead.prefs.v1' + ((window.TomesteadSync && window.TomesteadSync.suffix) || ''))) || {}).theme || {}); } catch {}
   const wall = D.WALLPAPERS.find(w => w.key === theme.wall) || D.WALLPAPERS[0];
   const wood = (D.WOODS.find(w => w.key === theme.wood) || D.WOODS[0]).v;
 

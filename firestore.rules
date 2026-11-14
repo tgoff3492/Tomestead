@@ -1,0 +1,33 @@
+// Tomestead: who can read and write library data (Firestore).
+// Paste this into Firebase console → Firestore Database → Rules, then Publish.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Signed in, email confirmed, and on the guest list (invites/<email, lowercase>).
+    function invited() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()));
+    }
+
+    // The guest list. You edit it in the console; the app may only check its own entry.
+    match /invites/{email} {
+      allow get: if request.auth != null && request.auth.token.email.lower() == email;
+    }
+
+    // Each reader's library: only they can see or change it.
+    match /users/{uid} {
+      allow read, write: if invited() && request.auth.uid == uid;
+
+      match /books/{bookId} {
+        allow read, delete: if invited() && request.auth.uid == uid;
+        allow create, update: if invited() && request.auth.uid == uid
+          && request.resource.data.title is string
+          && request.resource.data.title.size() <= 500;
+      }
+    }
+
+    // Everything else is closed.
+  }
+}

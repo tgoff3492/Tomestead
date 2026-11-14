@@ -1,5 +1,6 @@
 /* Tomestead covers: finds cover art and a short summary on Open Library,
-   and keeps your own cover photos on this device (IndexedDB). */
+   and keeps your own cover photos on this device (IndexedDB). When you're
+   signed in, app.js also sends those photos to the cloud (see sync.js). */
 (() => {
   'use strict';
   const OL = 'https://openlibrary.org';
@@ -60,7 +61,7 @@
       const img = new Image();
       const u = URL.createObjectURL(file);
       img.onload = () => {
-        const s = Math.min(1, maxH / img.naturalHeight);
+        const s = Math.min(1, maxH / img.naturalHeight, (maxH * .8) / img.naturalWidth);   // wide photos too
         const c = document.createElement('canvas');
         c.width = Math.round(img.naturalWidth * s);
         c.height = Math.round(img.naturalHeight * s);
@@ -139,7 +140,7 @@
   // Resolve which image (if any) a book should show on its cover
   async function coverSrc(book, size = 'L') {
     const a = book.art || {};
-    if (a.status === 'upload') return uploadURL(book.id);
+    if (a.status === 'upload') return (await uploadURL(book.id)) || a.url || null;   // this device's copy, else the cloud copy
     if (a.status === 'plain') return null;
     if (a.ids && a.ids.length) return coverURL(a.ids[a.i || 0], size);
     return null;

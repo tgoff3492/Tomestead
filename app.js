@@ -4,8 +4,12 @@
 
   const D = window.TomesteadDecor;
   const Art = window.TomesteadArt;
-  const STORE = 'tomestead.books.v1';
-  const PREFS = 'tomestead.prefs.v1';
+  const Sync = window.TomesteadSync;
+  // each signed-in reader gets their own copy on this device
+  const STORE = 'tomestead.books.v1' + Sync.suffix;
+  const PREFS = 'tomestead.prefs.v1' + Sync.suffix;
+  const LEGACY_STORE = 'tomestead.books.v1', LEGACY_PREFS = 'tomestead.prefs.v1';
+  const firstTimeHere = (() => { try { return Sync.enabled && !!Sync.uid && localStorage.getItem(STORE) === null; } catch { return false; } })();
   const SHELVES_PER_CASE = 3;
 
   const PALETTE = [
@@ -35,11 +39,12 @@
   const thisYear = () => String(new Date().getFullYear());
 
   // ---------- state ----------
-  let books = load();
+  // (while the sign-in card is up, nobody's library is loaded)
+  let books = Sync.gated ? [] : load();
   let prefs = Object.assign({
     view: 'shelf', sort: 'added', year: 'all', iosTipDismissed: false,
     theme: { ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, goals: {},
-  }, loadJSON(PREFS, {}));
+  }, Sync.gated ? {} : loadJSON(PREFS, {}));
   prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, prefs.theme || {});
   prefs.goals = prefs.goals || {};
   prefs.trophies = prefs.trophies || {};
@@ -58,11 +63,14 @@
     const arr = loadJSON(STORE, []);
     return Array.isArray(arr) ? arr.filter(b => b && b.id && b.title) : [];
   }
-  function save() {
+  function saveHere() {
     try { localStorage.setItem(STORE, JSON.stringify(books)); }
     catch { toast('Couldn’t save. Your browser storage may be full.'); }
   }
-  function savePrefs() { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch {} }
+  function save() { saveHere(); Sync.push(); }
+  function savePrefsHere() { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch {} }
+  function savePrefs() { savePrefsHere(); Sync.push(); }
+  const validId = (id) => /^[A-Za-z0-9_-]{1,120}$/.test(id);
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   function hash(str) {
@@ -477,7 +485,7 @@
       const a = b.art || {};
       const thumb = a.status === 'found' && a.ids && a.ids.length
         ? `<img class="thumb" alt="" loading="lazy" src="${Covers.coverURL(a.ids[a.i || 0], 'S')}" data-bg="${c.bg}">`
-        : a.status === 'upload' ? `<img class="thumb" alt="" data-upload="${esc(b.id)}" data-bg="${c.bg}">`
+        : a.status === 'upload' ? `<img class="thumb" alt="" data-upload="${esc(b.id)}" data-url="${esc(a.url || '')}" data-bg="${c.bg}">`
         : `<span class="chip" style="--bg:${c.bg}" aria-hidden="true"></span>`;
       return `<li><button type="button" class="ledger-item" data-id="${esc(b.id)}">
         ${thumb}
@@ -489,7 +497,7 @@
     const toChip = (img) => { const sp = document.createElement('span'); sp.className = 'chip'; sp.style.setProperty('--bg', img.dataset.bg); sp.setAttribute('aria-hidden', 'true'); img.replaceWith(sp); };
     ol.querySelectorAll('img.thumb').forEach(img => img.addEventListener('error', () => toChip(img), { once: true }));
     ol.querySelectorAll('img[data-upload]').forEach(async img => {
-      const u = await Covers.uploadURL(img.dataset.upload);
+      const u = (await Covers.uploadURL(img.dataset.upload)) || img.dataset.url;
       if (u) img.src = u; else toChip(img);
     });
     const empty = $('#listEmpty');
@@ -721,7 +729,7 @@
       try {
         const r = await Covers.lookup(b);
         const keep = b.art && (b.art.status === 'upload' || b.art.status === 'plain') ? b.art.status : null;
-        b.art = { status: keep || (r.ids.length ? 'found' : 'none'), ids: r.ids, i: 0, olKey: r.olKey };
+        b.art = Object.assign({ status: keep || (r.ids.length ? 'found' : 'none'), ids: r.ids, i: 0, olKey: r.olKey }, photoFields(b.art));
         b.about = r.about;
         b.lookedUp = Date.now();
         save();
@@ -857,7 +865,7 @@
       const renamed = b.title !== data.title || (b.author || '') !== data.author;
       Object.assign(b, data, { updatedAt: Date.now() });
       if (renamed) {
-        const keep = b.art && (b.art.status === 'upload' || b.art.status === 'plain') ? { status: b.art.status } : null;
+        const keep = b.art && (b.art.status === 'upload' || b.art.status === 'plain') ? Object.assign({ status: b.art.status }, photoFields(b.art)) : null;
         b.art = keep; b.about = null; b.lookedUp = 0;
       }
       toast('Changes saved.');
@@ -966,17 +974,18 @@
         for (const b of incoming) {
           if (!b || !b.title) continue;
           const clean = {
-            id: String(b.id || uid()), title: String(b.title), author: String(b.author || ''),
+            id: validId(String(b.id || '')) ? String(b.id) : uid(), title: String(b.title), author: String(b.author || ''),
             rating: Math.max(0, Math.min(5, parseInt(b.rating, 10) || 0)),
             finished: String(b.finished || ''), pages: parseInt(b.pages, 10) || null,
             genre: String(b.genre || ''), review: String(b.review || ''),
             color: Number.isInteger(b.color) ? b.color : null, addedAt: Number(b.addedAt) || Date.now(),
           };
-          if (b.art && typeof b.art === 'object') clean.art = { status: String(b.art.status || ''), ids: Array.isArray(b.art.ids) ? b.art.ids.filter(Number.isFinite) : [], i: parseInt(b.art.i, 10) || 0, olKey: b.art.olKey ? String(b.art.olKey) : null };
+          if (b.art && typeof b.art === 'object') clean.art = Object.assign({ status: String(b.art.status || ''), ids: Array.isArray(b.art.ids) ? b.art.ids.filter(Number.isFinite) : [], i: parseInt(b.art.i, 10) || 0, olKey: b.art.olKey ? String(b.art.olKey) : null }, photoFields(b.art));
           if (b.about && b.about.text) clean.about = { text: String(b.about.text), source: String(b.about.source || 'Open Library'), url: String(b.about.url || '') };
           if (b.lookedUp) clean.lookedUp = Number(b.lookedUp) || 0;
           const i = books.findIndex(x => x.id === clean.id);
           if (i >= 0) books[i] = clean; else books.push(clean);
+          if (b.id && clean.id !== String(b.id) && !Array.isArray(parsed) && parsed.uploads && parsed.uploads[b.id]) { parsed.uploads[clean.id] = parsed.uploads[b.id]; delete parsed.uploads[b.id]; }
           n++;
         }
         if (!Array.isArray(parsed) && parsed.uploads) {
@@ -997,7 +1006,7 @@
           savePrefs();
           D.applyTheme(prefs.theme);
         }
-        save(); render();
+        save(); render(); syncCovers();
         toast(`Restored ${n} ${n === 1 ? 'book' : 'books'}${st ? ' and your library settings' : ''}.`);
       } catch {
         toast('That file isn’t a Tomestead backup. Choose a .json file made with “Back up my library”.');
@@ -1109,7 +1118,16 @@
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoal(); });
     $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
+    $('#signOutBtn').addEventListener('click', () => { more.open = false; Sync.signOut(); });
+    more.addEventListener('toggle', () => {
+      if (!more.open || !Sync.enabled) return;
+      const who = $('#whoAmI'), em = Sync.email();
+      who.hidden = !em; who.textContent = em ? `Signed in as ${em}` : '';
+    });
+    $('#claimYes').addEventListener('click', () => claimLegacy(true));
+    $('#claimNo').addEventListener('click', () => claimLegacy(false));
     window.addEventListener('online', runLookupQueue);
+    window.addEventListener('online', syncCovers);
     $('#importBtn').addEventListener('click', () => { more.open = false; $('#importFile').click(); });
     $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importBooks(f); e.target.value = ''; });
     $('#installBtn').addEventListener('click', async () => {
@@ -1161,8 +1179,128 @@
       rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; render(); } }, 120);
     });
     window.addEventListener('storage', e => {
-      if (e.key === STORE) { books = load(); render(); }
+      if (e.key === STORE) { books = load(); render(); }  // (another tab of the same reader)
       if (e.key === PREFS) { prefs = Object.assign(prefs, loadJSON(PREFS, {})); D.applyTheme(prefs.theme); render(); }
+    });
+  }
+
+  // ---------- accounts & syncing ----------
+  // a photo cover's cloud copy: where it lives and the link other devices load it from
+  function photoFields(a) {
+    if (!a || a.status !== 'upload') return {};
+    const out = {};
+    if (typeof a.url === 'string' && /^https:\/\/firebasestorage\.googleapis\.com\//.test(a.url)) out.url = a.url;
+    if (typeof a.path === 'string' && /^covers\/[\w-]+\/[\w.-]+$/.test(a.path)) out.path = a.path;
+    return out;
+  }
+  async function forgetPhoto(b) {
+    await Covers.delUpload(b.id);
+    if (b.art) { Sync.removeCover(b.art.path); delete b.art.url; delete b.art.path; }
+  }
+  // send photo covers that only live on this device up to the cloud
+  let coversRunning = false;
+  async function syncCovers() {
+    if (!Sync.signedIn() || coversRunning || navigator.onLine === false) return;
+    coversRunning = true;
+    try {
+      for (const b of books) {
+        const a = b.art;
+        if (!a || a.status !== 'upload' || a.url) continue;
+        const blob = await Covers.getUpload(b.id);
+        if (!blob) continue;
+        try {
+          const up = await Sync.uploadCover(b.id, blob);
+          const now = books.find(x => x.id === b.id);
+          if (!up) break;
+          if (now && now.art && now.art.status === 'upload' && !now.art.url) { Object.assign(now.art, up); save(); }
+          else Sync.removeCover(up.path);   // the cover changed while it was uploading
+        } catch (e) { console.warn('Tomestead: photo upload failed', e); break; }
+      }
+    } finally { coversRunning = false; }
+  }
+
+  function settingsForSync() {
+    return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, recs: prefs.recs };
+  }
+  function applySettings(s) {
+    if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, s.theme);
+    prefs.goals = s.goals && typeof s.goals === 'object' ? s.goals : {};
+    prefs.trophies = s.trophies && typeof s.trophies === 'object' ? s.trophies : {};
+    prefs.recs = s.recs && typeof s.recs === 'object' ? Object.assign({ dismissed: [] }, s.recs) : { dismissed: [] };
+    savePrefsHere();
+    D.applyTheme(prefs.theme);
+    renderSoon();
+  }
+  function applyBooks({ upserts, removes }) {
+    for (const data of upserts) {
+      const have = books.find(x => x.id === data.id);
+      if (have) { Object.keys(have).forEach(k => delete have[k]); Object.assign(have, data); }
+      else books.push(data);
+    }
+    if (removes.length) {
+      const gone = new Set(removes);
+      if (reader && reader.isOpen() && gone.has(reader.currentId())) gone.delete(reader.currentId());   // don't pull a book out from under you
+      books = books.filter(x => !gone.has(x.id));
+    }
+    saveHere();
+    syncTrophies();
+    renderSoon();
+  }
+  let renderWait = null;
+  function renderSoon() {
+    clearTimeout(renderWait);
+    // wait until the reading table and dialogs are closed, so nothing jumps while you're using it
+    if ((reader && reader.isOpen()) || document.querySelector('dialog[open]')) { renderWait = setTimeout(renderSoon, 800); return; }
+    if (onCustomize()) renderCustomize(); else render();
+  }
+
+  // books saved on this device before accounts existed
+  function legacyBooks() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(LEGACY_STORE));
+      return Array.isArray(arr) ? arr.filter(b => b && b.id && b.title) : [];
+    } catch { return []; }
+  }
+  function offerLegacy() {
+    if (!firstTimeHere || localStorage.getItem('tomestead.legacy.claimed')) return;
+    const old = legacyBooks().filter(b => !books.some(x => x.id === b.id));
+    if (!old.length) return;
+    $('#claimText').textContent = `This device has ${old.length} ${old.length === 1 ? 'book' : 'books'} from before you signed in. Add ${old.length === 1 ? 'it' : 'them'} to your library? Your goals, trophies and look come too.`;
+    $('#claimDialog').showModal();
+  }
+  function claimLegacy(yes) {
+    $('#claimDialog').close();
+    if (!yes) { toast('Okay. Those books stay off your shelf.'); return; }
+    try { localStorage.setItem('tomestead.legacy.claimed', Sync.uid); } catch {}
+    let n = 0;
+    for (const b of legacyBooks()) {
+      if (!validId(b.id) || books.some(x => x.id === b.id)) continue;
+      books.push(b); n++;
+    }
+    const old = loadJSON(LEGACY_PREFS, {});
+    if (old.theme && JSON.stringify(prefs.theme) === JSON.stringify(Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, {}))) {
+      prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, old.theme);
+      D.applyTheme(prefs.theme);
+    }
+    if (old.goals) for (const [y, g] of Object.entries(old.goals)) if (!(prefs.goals[y] > 0)) prefs.goals[y] = g;
+    if (old.trophies) for (const [y, t] of Object.entries(old.trophies)) if (!prefs.trophies[y]) prefs.trophies[y] = t;
+    if (old.recs && Array.isArray(old.recs.dismissed)) prefs.recs.dismissed = [...new Set([...prefs.recs.dismissed, ...old.recs.dismissed])];
+    syncTrophies();
+    savePrefs();
+    save();
+    render();
+    syncCovers();
+    toast(`Added ${n} ${n === 1 ? 'book' : 'books'} to your library.`);
+  }
+
+  if (Sync.enabled) {
+    document.querySelectorAll('.signed-in-only').forEach(el => { el.hidden = false; });
+    Sync.start({
+      books: () => books,
+      applyBooks,
+      settings: settingsForSync,
+      applySettings,
+      onReady: () => { offerLegacy(); syncCovers(); },
     });
   }
 
@@ -1172,13 +1310,15 @@
     theme: () => prefs.theme,
     spineEl: (b) => spine(b),
     getBook: (id) => books.find(x => x.id === id),
-    saveBook: () => { save(); scheduleListRefresh(); },
+    saveBook: () => { save(); scheduleListRefresh(); syncCovers(); },
+    forgetPhoto,
     lookup,
     onEdit: (id) => openEditor(id),
     onRemove: (id) => {
       const b = books.find(x => x.id === id);
       books = books.filter(x => x.id !== id);
       Covers.delUpload(id);
+      if (b && b.art) Sync.removeCover(b.art.path);
       save(); render();
       toast(b ? `Removed “${b.title}”.` : 'Removed.');
     },

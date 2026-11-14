@@ -17,11 +17,14 @@ A cozy digital library for every book you've read. Each book you log lands on th
 - **Cover art and summaries**: covers and summaries come from [Open Library](https://openlibrary.org) automatically. In the open book, use **Cover** to try another edition's cover, use your own photo, or switch to a plain cloth cover.
 - **Customize library**: choose the wallpaper, shelf wood, bookends and which trinkets sit on your shelves (a trailing pothos, a candlestick, a sleeping cat, a globe, a lantern and more). Each trinket appears once, in an open spot, and a stack of books holds one small piece on top. You can also pick the reading table (walnut, leather-top desk, farmhouse oak, round cherry, or marble and brass) and up to five things to keep on it (a banker's lamp, tea, reading glasses, ink and quill and more), with live previews.
 - **Home screen app**: installable on iPhone, iPad and Android, and works offline.
+- **Accounts and sync** (once switched on, see [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md)): each reader signs in with Google or email, and their library, goals, trophies, look and cover photos are saved to the cloud and follow them to any device. Only people on the guest list can use it. Sign out from the ••• menu to hand the device to someone else.
 - **Backups**: download your library as a JSON file and restore it on any device.
 
 ## Where your data lives
 
-Your books, goals, trophies and look are saved in your browser's storage on the device you use. Nothing is uploaded to GitHub. To find covers, summaries and reading suggestions, Tomestead sends each book's title and author (and, for suggestions, the subjects and authors you like) to Open Library's public search. Cover photos you add yourself stay on your device and are included in backups. To move your library to another device, use **Back up my library** from the ••• menu, then **Restore from backup** on the other device.
+With accounts switched on, each reader's books, goals, trophies, look and cover photos are kept in their own space in Firebase (Google's app backend). Only they can read or change it, and only if their email is on the guest list. A copy also stays in the browser, so the app opens instantly and works offline, then catches up when it's back online. Nothing is uploaded to GitHub.
+
+With accounts switched off (the default), everything is saved only in your browser's storage on the device you use. To find covers, summaries and reading suggestions, Tomestead sends each book's title and author (and, for suggestions, the subjects and authors you like) to Open Library's public search. Cover photos you add yourself stay on your device and are included in backups. To move your library to another device, use **Back up my library** from the ••• menu, then **Restore from backup** on the other device.
 
 ## Add it to your home screen
 
@@ -41,6 +44,10 @@ table.js              the reading table, drawn in perspective
 reader.js             the 3D book and the shelf-to-table animation
 recommend.js          what to read next
 covers.js             cover art and summaries (Open Library) and your own cover photos
+sync.js               sign-in, the guest list, and syncing with Firebase
+firebase-config.js    your Firebase project settings (null = accounts off)
+firestore.rules       database security rules (paste into the Firebase console)
+storage.rules         cover photo security rules (paste into the Firebase console)
 sw.js                 offline support
 manifest.webmanifest  home screen app details
 icons/
