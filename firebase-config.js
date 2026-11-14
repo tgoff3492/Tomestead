@@ -1,18 +1,12 @@
-/* Tomestead accounts.
-   Paste your Firebase web app settings between the braces below (Firebase console →
-   Project settings → Your apps → the </> web app → "Config"). Only these six values matter.
-   While this is left as null, Tomestead keeps working the old way: no sign-in, and
-   everything stays in this browser only. These values are safe to publish; your
-   security rules are what protect the data. */
-window.TOMESTEAD_FIREBASE = null;
-
-/* Example of what it looks like when filled in:
+/* Tomestead accounts: this project's Firebase web app settings (Firebase console →
+   Project settings → Your apps). Set this back to null to switch accounts off; the
+   app then keeps everything in the browser only, as it did before. These values are
+   safe to publish; the security rules (firestore.rules, storage.rules) protect the data. */
 window.TOMESTEAD_FIREBASE = {
-  apiKey: "AIza...",
-  authDomain: "tomestead-xxxx.firebaseapp.com",
-  projectId: "tomestead-xxxx",
-  storageBucket: "tomestead-xxxx.firebasestorage.app",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abc123"
+  apiKey: "AIzaSyDO3CMC3lkYGclzQhpIGWmc3-pzo-uQomo",
+  authDomain: "tomestead-b604a.firebaseapp.com",
+  projectId: "tomestead-b604a",
+  storageBucket: "tomestead-b604a.firebasestorage.app",
+  messagingSenderId: "300728391371",
+  appId: "1:300728391371:web:6814bf9df3490e05cd2d4e"
 };
-*/
