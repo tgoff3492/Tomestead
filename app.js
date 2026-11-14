@@ -346,6 +346,13 @@
 
     container.classList.remove('has-top');
     fitSpines(container);
+    // a climbing vine up the right side of each bookcase and over its arch
+    const vk = prefs.theme.vine || 'roses';
+    if (vk !== 'none' && window.TomesteadVine) cases.forEach((c, i) => {
+      const post = parseFloat(getComputedStyle(c.querySelector('.shelves')).marginRight) || 18;
+      const svg = window.TomesteadVine.draw(vk, c.offsetWidth, c.offsetHeight, c.querySelector('.arch').offsetHeight, post, 11 + i * 37 + (container.id === 'czPreview' ? 500 : 0), s);
+      if (svg) c.insertAdjacentHTML('beforeend', `<div class="vine" aria-hidden="true">${svg}</div>`);
+    });
     return cases;
   }
 
@@ -829,6 +836,12 @@
         <span class="tile-label">${w.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`;
     }).join('');
+
+    $('#czVine').innerHTML = Object.entries(D.VINES).map(([k, v]) => `
+      <button type="button" class="tile" role="radio" aria-checked="${(t.vine || 'roses') === k}" data-vine="${k}">
+        <span class="tile-art vine-art">${k === 'none' ? '<span style="align-self:center;color:#cdbf9f;font-size:.85rem">None</span>' : (window.TomesteadVine ? window.TomesteadVine.draw(k, 150, 150, 70, 10, 3, .75) : '')}</span>
+        <span class="tile-label">${v.name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('');
 
     $('#czBookend').innerHTML = Object.entries(D.BOOKENDS).map(([k, b]) => `
       <button type="button" class="tile" role="radio" aria-checked="${t.bookend === k}" data-bookend="${k}">
@@ -1521,6 +1534,7 @@
       else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
       else if (t.dataset.bookend) setTheme({ bookend: t.dataset.bookend });
       else if (t.dataset.light) setTheme({ light: t.dataset.light });
+      else if (t.dataset.vine) setTheme({ vine: t.dataset.vine });
       else if (t.dataset.table) setTheme({ table: t.dataset.table });
       else if (t.dataset.titem) {
         const k = t.dataset.titem, cur = prefs.theme.tableItems;
@@ -1532,7 +1546,7 @@
         const list = prefs.theme.trinkets.includes(k) ? prefs.theme.trinkets.filter(x => x !== k) : [...prefs.theme.trinkets, k];
         setTheme({ trinkets: list });
       }
-      const attr = ['wall', 'light', 'wood', 'bookend', 'table', 'titem', 'trinket'].find(a => t.dataset[a]);
+      const attr = ['wall', 'light', 'wood', 'vine', 'bookend', 'table', 'titem', 'trinket'].find(a => t.dataset[a]);
       const sel = `[data-${attr}="${t.dataset[attr]}"]`;
       const again = $(`#customizePage .tile${sel}`); again && again.focus();
     });

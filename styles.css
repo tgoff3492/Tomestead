@@ -1268,3 +1268,9 @@ html.reading .sunlight, html.reading .motes, html.intro-on .motes { opacity: 0; 
   .sill .plate { font-size: .8rem; }
   .lamp { inset: calc(var(--arch-h) + 22px) 0 0 0; }
 }
+
+/* the climbing vine */
+.vine { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.vine svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.tile-art.vine-art { overflow: hidden; }
+.tile-art.vine-art svg { transform: translate(-74px, 2px); }

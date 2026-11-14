@@ -146,7 +146,7 @@
 
   const DEFAULTS = {
     v: 2, light: 'system',
-    wall: 'room', wood: 'oak', bookend: 'brass',
+    wall: 'room', wood: 'oak', vine: 'roses', bookend: 'brass',
     trinkets: ['plant', 'candle', 'cat', 'globe', 'stack', 'teacup'],
     table: 'walnut', tableItems: ['lamp', 'tea', 'glasses'],
   };
@@ -154,6 +154,9 @@
   function sized(svg, s) {
     return svg.replace(/width="(\d+)" height="(\d+)"/, (_, w, h) => `width="${(w * s).toFixed(1)}" height="${(h * s).toFixed(1)}" aria-hidden="true" focusable="false"`);
   }
+
+  // ---------- climbing vine (drawn in vine.js) ----------
+  const VINES = { roses: { name: 'Climbing roses' }, ivy: { name: 'English ivy' }, none: { name: 'No vine' } };
 
   // ---------- time of day ----------
   const LIGHTS = {
@@ -196,5 +199,5 @@
     return light;
   }
 
-  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, LIGHTS, lightNow, sized, svgURL, applyTheme };
+  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, VINES, LIGHTS, lightNow, sized, svgURL, applyTheme };
 })();
