@@ -46,7 +46,7 @@
         <div class="menu">
           <button id="recBtn">What should I read next?</button>
           <button id="customizeBtn">Customize library</button>
-          <button id="goalMenuBtn">Set a reading goal</button>
+          <button id="goalMenuBtn">Reading goals</button>
           <hr>
           <button id="installBtn" hidden>Install app</button>
           <button id="exportBtn">Back up my library</button>
@@ -256,13 +256,51 @@
     </form>
   </dialog>
 
-  <!-- Reading goal -->
+  <!-- Reading goals: everything you're working toward -->
+  <dialog id="goalsDialog" class="paper narrow">
+    <article>
+      <h2>Reading goals</h2>
+      <p class="meta">Set a goal for the year, or for any stretch of time: a month, a summer, a long trip. Every book you finish in that window counts.</p>
+      <ul id="goalsList" class="goals-list"></ul>
+      <p id="goalsEmpty" class="goals-empty" hidden>No goals yet.</p>
+      <div class="actions">
+        <button type="button" class="btn btn-ghost" data-close>Close</button>
+        <span class="spacer"></span>
+        <button type="button" id="newGoalBtn" class="btn btn-ink">New goal</button>
+      </div>
+    </article>
+  </dialog>
+
+  <!-- One reading goal (a whole year, or your own dates) -->
   <dialog id="goalDialog" class="paper narrow">
     <form id="goalForm" method="dialog" novalidate>
-      <h2 id="goalTitle">Reading goal</h2>
-      <p class="meta" id="goalSub">How many books do you want to read this year? Empty spots on your shelf will hold space for them.</p>
-      <div class="row2">
+      <h2 id="goalTitle">New reading goal</h2>
+      <div class="field" id="gSpanField">
+        <span class="field-label" id="gSpanLabel">Timeline</span>
+        <div id="gSpans" class="spans" role="radiogroup" aria-labelledby="gSpanLabel">
+          <button type="button" role="radio" data-span="year">Whole year</button>
+          <button type="button" role="radio" data-span="month">This month</button>
+          <button type="button" role="radio" data-span="30">Next 30 days</button>
+          <button type="button" role="radio" data-span="90">Next 3 months</button>
+          <button type="button" role="radio" data-span="custom">Pick dates</button>
+        </div>
+      </div>
+      <div id="gNameField" class="field">
+        <label for="gName">Name <span class="opt">(optional)</span></label>
+        <input id="gName" type="text" maxlength="60" placeholder="Summer reading, book club, vacation…" autocomplete="off">
+      </div>
+      <div id="gDates" class="row2">
         <div class="field">
+          <label for="gStart">Starts</label>
+          <input id="gStart" type="date">
+        </div>
+        <div class="field">
+          <label for="gEnd">Ends</label>
+          <input id="gEnd" type="date">
+        </div>
+      </div>
+      <div class="row2 keep">
+        <div class="field" id="gYearField">
           <label for="gYear">Year</label>
           <select id="gYear"></select>
         </div>
@@ -271,6 +309,7 @@
           <input id="gCount" type="number" min="1" max="999" inputmode="numeric" required>
         </div>
       </div>
+      <p class="meta goal-sub" id="goalSub"></p>
       <p id="goalError" class="form-error" role="alert" hidden></p>
       <div class="actions">
         <button type="button" id="goalRemove" class="btn btn-ghost danger" hidden>Remove goal</button>

@@ -109,6 +109,71 @@
   const countInYear = (y) => books.filter(b => yearOf(b) === y).length;
   const goalFor = (y) => (prefs.goals[y] > 0 ? prefs.goals[y] : 0);
 
+  // ---------- goals with your own timeline ----------
+  // { id, name, target, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', createdAt, metAt? }
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  function cleanGoals(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(g => g && validId(String(g.id || '')) && ISO.test(g.start) && ISO.test(g.end) && g.end >= g.start && Number(g.target) > 0)
+      .map(g => Object.assign({
+        id: String(g.id), name: String(g.name || '').slice(0, 60).trim(),
+        target: Math.min(999, Math.floor(Number(g.target))), start: g.start, end: g.end,
+        createdAt: Number(g.createdAt) || Date.now(),
+      }, ISO.test(g.metAt || '') ? { metAt: g.metAt } : {}));
+  }
+  const dayNum = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); };
+  const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+  const finishedOn = (b) => (ISO.test(String(b.finished || '').slice(0, 10)) ? b.finished.slice(0, 10) : '');
+  const booksBetween = (a, z) => books.filter(b => { const f = finishedOn(b); return f && f >= a && f <= z; });
+  function shortDate(iso, withYear) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, withYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  }
+  function rangeText(a, z) {
+    const sameYear = a.slice(0, 4) === z.slice(0, 4);
+    const showYear = !sameYear || a.slice(0, 4) !== thisYear();
+    if (a === z) return shortDate(a, showYear);
+    return `${shortDate(a, !sameYear && showYear)} – ${shortDate(z, showYear)}`;
+  }
+  const goalName = (g) => g.name || rangeText(g.start, g.end);
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+
+  // where a goal stands today
+  function goalInfo(g) {
+    const done = g.done ?? booksBetween(g.start, g.end).length;
+    const t = dayNum(today()), a = dayNum(g.start), z = dayNum(g.end);
+    const status = t < a ? 'upcoming' : t > z ? 'ended' : 'active';
+    const met = done >= g.target;
+    const left = Math.max(0, g.target - done);
+    const daysLeft = status === 'upcoming' ? z - a + 1 : Math.max(0, z - t + 1);
+    let note;
+    if (met) note = g.metAt ? `Reached ${shortDate(g.metAt, g.metAt.slice(0, 4) !== thisYear())}` : 'Goal reached';
+    else if (status === 'ended') note = `Ended ${shortDate(g.end, g.end.slice(0, 4) !== thisYear())} with ${done} of ${g.target}`;
+    else if (status === 'upcoming') note = `Starts ${shortDate(g.start, g.start.slice(0, 4) !== thisYear())} · ${plural(daysLeft, 'day')}`;
+    else {
+      // how fast you'd need to go from here, and whether you're keeping pace
+      const total = z - a + 1, elapsed = t - a + 1;
+      const every = Math.floor(daysLeft / left);
+      const pace = daysLeft >= left ? (every === 1 ? '1 book a day' : `1 book every ${every} days`) : `${left} in ${plural(daysLeft, 'day')}`;
+      const expected = Math.floor((g.target * elapsed) / total);
+      const track = elapsed > 1 && done < expected ? ' · a little behind' : (done > 0 && done >= expected ? ' · on pace' : '');
+      note = `${daysLeft === 1 ? 'Last day' : `${daysLeft} days left`} · ${pace}${track}`;
+    }
+    return { done, met, left, status, daysLeft, note, pct: Math.min(100, Math.round((done / g.target) * 100)) };
+  }
+  // remember the day each goal was reached (the finish date of the book that got you there)
+  function syncGoalMarks() {
+    let changed = false;
+    for (const g of prefs.customGoals) {
+      const hits = booksBetween(g.start, g.end).map(finishedOn).sort();
+      const at = hits.length >= g.target ? hits[g.target - 1] : '';
+      if ((g.metAt || '') !== at) { if (at) g.metAt = at; else delete g.metAt; changed = true; }
+    }
+    if (changed) savePrefs();
+  }
+  prefs.customGoals = cleanGoals(prefs.customGoals);
+  const customMet = () => new Set(prefs.customGoals.filter(g => goalInfo(g).met).map(g => g.id));
+
   // a trophy is earned the moment a year's goal is met, and stays earned
   function syncTrophies() {
     let changed = false;
@@ -533,21 +598,32 @@
   function renderGoalBar() {
     const bar = $('#goalBar');
     const y = prefs.year;
-    if (y === 'all' || y === 'none') { bar.hidden = true; return; }
-    bar.hidden = false;
-    const goal = goalFor(y), done = countInYear(y);
-    if (!goal) {
-      bar.className = 'goalbar';
-      bar.innerHTML = `<p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button>`;
-      return;
+    const rows = [];
+    if (y !== 'all' && y !== 'none') {
+      const goal = goalFor(y), done = countInYear(y);
+      if (!goal) {
+        rows.push(`<div class="goal-row"><p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button></div>`);
+      } else {
+        const pct = Math.min(100, Math.round((done / goal) * 100));
+        const met = done >= goal;
+        rows.push(`<div class="goal-row${met ? ' met' : ''}"><p class="goal-text"><strong>${done} of ${goal}</strong> ${met ? '· goal reached' : `· ${goal - done} to go`}</p>
+          <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(done, goal)}"><span style="width:${pct}%"></span></div>
+          <button class="linkbtn" data-goal>Change</button></div>`);
+      }
     }
-    const pct = Math.min(100, Math.round((done / goal) * 100));
-    const met = done >= goal;
-    bar.className = 'goalbar' + (met ? ' met' : '');
-    const left = goal - done;
-    bar.innerHTML = `<p class="goal-text"><strong>${done} of ${goal}</strong> ${met ? '· goal reached' : `· ${left} to go`}</p>
-      <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(done, goal)}"><span style="width:${pct}%"></span></div>
-      <button class="linkbtn" data-goal>Change</button>`;
+    // goals with their own timeline that are running right now
+    const live = prefs.customGoals.map(g => ({ g, i: goalInfo(g) })).filter(x => x.i.status === 'active')
+      .sort((p, q) => p.g.end.localeCompare(q.g.end));
+    live.slice(0, 3).forEach(({ g, i }) => {
+      const tail = i.met ? 'goal reached' : (i.daysLeft === 1 ? 'last day' : `${i.daysLeft} days left`);
+      rows.push(`<button type="button" class="goal-row custom${i.met ? ' met' : ''}" data-cgoal="${esc(g.id)}" aria-label="${esc(goalName(g))}: ${i.done} of ${g.target}, ${tail}. Edit goal.">
+        <span class="goal-text"><span class="goal-name">${esc(goalName(g))}</span> <strong>${i.done} of ${g.target}</strong> · ${tail}</span>
+        <span class="goal-meter" aria-hidden="true"><span style="width:${i.pct}%"></span></span></button>`);
+    });
+    if (live.length > 3) rows.push(`<div class="goal-row"><button class="linkbtn" data-goals>${live.length - 3} more ${live.length - 3 === 1 ? 'goal' : 'goals'}</button></div>`);
+    bar.hidden = !rows.length;
+    bar.className = 'goalbar';
+    bar.innerHTML = rows.join('');
   }
 
   // ---------- page routing ----------
@@ -555,6 +631,7 @@
 
   function render() {
     syncTrophies();
+    syncGoalMarks();
     const cz = onCustomize();
     $('#libraryPage').hidden = cz;
     $('#customizePage').hidden = !cz;
@@ -577,25 +654,35 @@
   // ---------- the floor the bookcase stands on ----------
   const BASEBOARD = 30, SETBACK = 14;   // the bookcase stands a little in front of the wall
   let floorKey = '';
+  // measured in layout space (offsetTop), so transforms on the stage (the opening
+  // push-in, the reading-table pan) never throw it off
+  function offsetIn(el, root) {
+    let x = 0, y = 0;
+    for (let n = el; n && n !== root; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
+    return { x, y };
+  }
   function placeFloor() {
     const fl = $('#floor');
     const show = !onCustomize() && prefs.view === 'shelf';
     fl.hidden = !show;
     if (!show) return;
-    const cases = $('#cases');
+    const stage = $('#stage'), cases = $('#cases');
     const pad = parseFloat(getComputedStyle(cases).paddingBottom) || 0;
-    const stageTop = $('#stage').getBoundingClientRect().top;
-    const baseY = cases.getBoundingClientRect().bottom - pad - stageTop;   // bottom of the bookcase
+    const at = offsetIn(cases, stage);
+    const baseY = at.y + cases.offsetHeight - pad;                         // bottom of the bookcase
     const top = Math.round(baseY - SETBACK - BASEBOARD);
-    const stageH = Math.max($('#stage').scrollHeight, window.innerHeight);
-    const W = Math.round(document.documentElement.clientWidth), H = Math.max(120, Math.round(stageH - top));
     fl.style.top = `${top}px`;
-    fl.style.height = `${H}px`;
-    const caseRect = cases.getBoundingClientRect();
-    const key = [W, H, prefs.theme.wood, Math.round(caseRect.left), Math.round(caseRect.width)].join('|');
+    fl.style.height = '';
+    fl.style.bottom = '0';                                                // always runs to the bottom of the page
+    // draw well past the bottom so the floor never runs short when the page grows
+    // (phone toolbars hiding, a banner appearing) — the extra is clipped
+    const W = Math.round(document.documentElement.clientWidth);
+    const need = Math.max(stage.offsetHeight, window.innerHeight) - top;
+    const H = Math.max(400, Math.ceil((need + Math.max(window.screen.height || 0, 900)) / 200) * 200);
+    const key = [W, H, prefs.theme.wood, Math.round(at.x), cases.offsetWidth].join('|');
     if (key === floorKey) return;
     floorKey = key;
-    fl.innerHTML = floorSVG(W, H, caseRect.left + 0, caseRect.width);
+    fl.innerHTML = floorSVG(W, H, at.x, cases.offsetWidth);
   }
   function floorSVG(W, H, caseX, caseW) {
     const wood = (D.WOODS.find(w => w.key === prefs.theme.wood) || D.WOODS[0]).v;
@@ -859,6 +946,7 @@
     };
     const y = yearOf(data);
     const before = y ? countInYear(y) : 0;
+    const metBefore = customMet();
     let target;
     if (editingId) {
       const b = target = books.find(x => x.id === editingId);
@@ -884,51 +972,226 @@
     const goal = y ? goalFor(y) : 0;
     if (wasEditing && reader && reader.currentId() === wasEditing) reader.refresh();
     if (goal && before < goal && countInYear(y) >= goal) celebrate(y);
+    else {
+      const won = prefs.customGoals.find(g => !metBefore.has(g.id) && goalInfo(g).met);
+      if (won) celebrateGoal(won);
+    }
   }
 
   // ---------- goals ----------
-  function openGoal(year) {
-    const y = year || (prefs.year !== 'all' && prefs.year !== 'none' ? prefs.year : thisYear());
-    const years = [...new Set([thisYear(), String(+thisYear() + 1), ...yearsAvailable()])].sort((a, b) => b.localeCompare(a));
-    $('#gYear').innerHTML = years.map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('');
-    syncGoalForm();
-    $('#goalError').hidden = true;
-    $('#goalDialog').showModal();
-    setTimeout(() => $('#gCount').focus(), 30);
+  // the list of everything you're working toward
+  function openGoals() {
+    renderGoals();
+    const d = $('#goalsDialog');
+    if (!d.open) d.showModal();
   }
-  function syncGoalForm() {
-    const y = $('#gYear').value;
-    const g = goalFor(y);
-    $('#gCount').value = g || '';
-    $('#goalTitle').textContent = `${y} reading goal`;
-    $('#goalSub').textContent = `${countInYear(y)} finished so far. Empty spots on the ${y} shelf hold space for the rest.`;
-    $('#goalRemove').hidden = !g;
+  function renderGoals() {
+    const cards = [];
+    for (const g of prefs.customGoals) cards.push({ kind: 'c', g, i: goalInfo(g) });
+    for (const y of Object.keys(prefs.goals)) {
+      if (!goalFor(y)) continue;
+      const g = { id: y, name: `${y} reading goal`, target: goalFor(y), start: `${y}-01-01`, end: `${y}-12-31`, done: countInYear(y), metAt: prefs.trophies[y] && prefs.trophies[y].at };
+      cards.push({ kind: 'y', g, i: goalInfo(g) });
+    }
+    // running now first (soonest deadline first), then coming up, then finished
+    const rank = (c) => (c.i.status === 'active' ? 0 : c.i.status === 'upcoming' ? 1 : 2);
+    cards.sort((p, q) => rank(p) - rank(q) || (rank(p) === 2 ? q.g.end.localeCompare(p.g.end) : rank(p) === 1 ? p.g.start.localeCompare(q.g.start) : p.g.end.localeCompare(q.g.end)));
+    $('#goalsList').innerHTML = cards.map(({ kind, g, i }) => `
+      <li><button type="button" class="gcard ${i.status}${i.met ? ' met' : ''}" ${kind === 'y' ? `data-ygoal="${esc(g.id)}"` : `data-cgoal="${esc(g.id)}"`}>
+        <span class="gc-head"><span class="gc-name">${i.met ? '<span class="gc-check" aria-hidden="true">✓</span>' : ''}${esc(kind === 'y' ? g.name : goalName(g))}</span><span class="gc-count">${i.done} of ${g.target}</span></span>
+        ${kind === 'c' && g.name ? `<span class="gc-range">${esc(rangeText(g.start, g.end))}</span>` : ''}
+        <span class="gc-meter" aria-hidden="true"><span style="width:${i.pct}%"></span></span>
+        <span class="gc-note">${esc(i.note)}</span>
+      </button></li>`).join('');
+    $('#goalsEmpty').hidden = cards.length > 0;
   }
-  function saveGoal(e) {
-    e.preventDefault();
-    const y = $('#gYear').value;
-    const n = parseInt($('#gCount').value, 10);
-    if (!(n > 0)) {
-      $('#goalError').textContent = 'Enter how many books you want to read, 1 or more.';
-      $('#goalError').hidden = false;
+
+  // one goal: a whole year (trophy + empty spots on that year's shelf) or your own dates
+  let goalEdit = null;          // { kind: 'year'|'custom', id? }
+  let goalSpan = 'month';
+  function spanRange(span) {
+    const t = today(), n = dayNum(t);
+    if (span === 'month') {
+      const [y, m] = t.split('-').map(Number);
+      return [`${y}-${String(m).padStart(2, '0')}-01`, isoOf(dayNum(`${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`) - 1)];
+    }
+    if (span === '30') return [t, isoOf(n + 29)];
+    if (span === '90') {
+      const [y, m, d] = t.split('-').map(Number);
+      const e = new Date(Date.UTC(y, m - 1 + 3, d));
+      return [t, isoOf(Math.round(e.getTime() / 86400000) - 1)];
+    }
+    return null;
+  }
+  function setSpan(span, fill = true) {
+    goalSpan = span;
+    document.querySelectorAll('#gSpans [data-span]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.span === span)));
+    const year = span === 'year';
+    $('#gYearField').hidden = !year;
+    $('#gDates').hidden = year;
+    $('#gNameField').hidden = year;
+    if (!year && fill) {
+      const r = spanRange(span);
+      if (r) { $('#gStart').value = r[0]; $('#gEnd').value = r[1]; }
+    }
+    if (year && fill) $('#gCount').value = goalFor($('#gYear').value) || $('#gCount').value;
+    goalHint();
+  }
+  // a live line under the form: how many already count, how long the window is
+  function goalHint() {
+    const sub = $('#goalSub');
+    if (goalSpan === 'year') {
+      const y = $('#gYear').value;
+      sub.textContent = `${countInYear(y)} finished in ${y} so far. Empty spots on the ${y} shelf hold space for the rest, and reaching it earns a trophy for the top of your bookcase.`;
+      $('#goalTitle').textContent = goalEdit && goalEdit.kind === 'year' ? `${y} reading goal` : (goalEdit ? 'Edit goal' : 'New reading goal');
+      $('#goalRemove').hidden = !(goalEdit && goalEdit.kind === 'year' && goalFor(y));
       return;
     }
-    prefs.goals[y] = n;
-    prefs.year = y;
-    caseIndex = 0;
+    $('#goalTitle').textContent = goalEdit && goalEdit.id ? 'Edit goal' : 'New reading goal';
+    $('#goalRemove').hidden = !(goalEdit && goalEdit.kind === 'custom' && goalEdit.id);
+    const a = $('#gStart').value, z = $('#gEnd').value;
+    if (!ISO.test(a) || !ISO.test(z) || z < a) { sub.textContent = 'Pick when it starts and ends.'; return; }
+    const days = dayNum(z) - dayNum(a) + 1;
+    const already = booksBetween(a, z).length;
+    const n = parseInt($('#gCount').value, 10);
+    let line = `${rangeText(a, z)} · ${plural(days, 'day')}.`;
+    if (already) line += ` ${plural(already, 'book')} you’ve logged already ${already === 1 ? 'counts' : 'count'}.`;
+    else line += ' Every book you finish in that window counts.';
+    if (n > 0 && n > already) {
+      const per = days / n;
+      line += per >= 1.5 ? ` That’s about one book every ${Math.round(per)} days.` : ` That’s about ${Math.round(n / days * 7)} books a week.`;
+    }
+    sub.textContent = line;
+  }
+  function openGoal(year) {
+    // opened from the year's goal bar or a trophy: that year's goal
+    const y = year || (prefs.year !== 'all' && prefs.year !== 'none' ? prefs.year : thisYear());
+    openGoalEditor({ kind: 'year', year: y });
+  }
+  function openGoalEditor(opts = {}) {
+    const years = [...new Set([thisYear(), String(+thisYear() + 1), ...yearsAvailable()])].sort((a, b) => b.localeCompare(a));
+    const y = opts.year || thisYear();
+    $('#gYear').innerHTML = years.map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('');
+    $('#goalError').hidden = true;
+    const spans = $('#gSpanField');
+    if (opts.kind === 'year') {
+      goalEdit = { kind: 'year' };
+      spans.hidden = !!goalFor(y);   // changing an existing year goal: just the number
+      $('#gCount').value = goalFor(y) || '';
+      setSpan('year', false);
+    } else if (opts.id) {
+      const g = prefs.customGoals.find(x => x.id === opts.id);
+      if (!g) return;
+      goalEdit = { kind: 'custom', id: g.id };
+      spans.hidden = false;
+      $('#gName').value = g.name; $('#gStart').value = g.start; $('#gEnd').value = g.end; $('#gCount').value = g.target;
+      // show which quick pick it matches, if any
+      const match = ['month', '30', '90'].find(sp => { const r = spanRange(sp); return r && r[0] === g.start && r[1] === g.end; });
+      setSpan(match || 'custom', false);
+    } else {
+      goalEdit = { kind: 'custom' };
+      spans.hidden = false;
+      $('#gName').value = ''; $('#gCount').value = '';
+      setSpan('month');
+    }
+    // the year option only makes sense when you're not editing a dated goal (and vice versa)
+    const yearBtn = $('#gSpans [data-span="year"]');
+    yearBtn.hidden = !!(goalEdit.kind === 'custom' && goalEdit.id);
+    document.querySelectorAll('#gSpans [data-span]').forEach(b => { if (b !== yearBtn) b.hidden = false; });
+    $('#goalDialog').showModal();
+    setTimeout(() => $('#gCount').value ? null : $('#gCount').focus(), 30);
+  }
+  function goalError(msg) { $('#goalError').textContent = msg; $('#goalError').hidden = false; }
+  function saveGoal(e) {
+    e.preventDefault();
+    const n = parseInt($('#gCount').value, 10);
+    if (!(n > 0 && n <= 999)) return goalError('Enter how many books you want to read, 1 or more.');
+    if (goalSpan === 'year') {
+      const y = $('#gYear').value;
+      prefs.goals[y] = n;
+      prefs.year = y;
+      caseIndex = 0;
+      savePrefs();
+      $('#goalDialog').close();
+      render();
+      if ($('#goalsDialog').open) renderGoals();
+      const left = n - countInYear(y);
+      toast(left > 0 ? `Goal saved: ${n} books in ${y}. ${left} to go.` : `Goal saved. You’ve already read ${countInYear(y)} in ${y}.`);
+      return;
+    }
+    const a = $('#gStart').value, z = $('#gEnd').value;
+    if (!ISO.test(a) || !ISO.test(z)) return goalError('Pick a start date and an end date.');
+    if (z < a) return goalError('The end date comes before the start date.');
+    if (dayNum(z) - dayNum(a) > 3660) return goalError('Keep it to ten years or less.');
+    const name = $('#gName').value.trim().slice(0, 60);
+    let g = goalEdit && goalEdit.id && prefs.customGoals.find(x => x.id === goalEdit.id);
+    if (g) Object.assign(g, { name, target: n, start: a, end: z });
+    else { g = { id: uid(), name, target: n, start: a, end: z, createdAt: Date.now() }; prefs.customGoals.push(g); }
+    syncGoalMarks();
     savePrefs();
     $('#goalDialog').close();
     render();
-    const left = n - countInYear(y);
-    toast(left > 0 ? `Goal saved: ${n} books in ${y}. ${left} to go.` : `Goal saved. You’ve already read ${countInYear(y)} in ${y}.`);
+    if ($('#goalsDialog').open) renderGoals();
+    const i = goalInfo(g);
+    toast(i.met ? `Goal saved. You’ve already read ${i.done} in that stretch.` : `Goal saved: ${plural(n, 'book')} by ${shortDate(z, z.slice(0, 4) !== thisYear())}. ${i.left} to go.`);
+  }
+  function removeGoal() {
+    if (goalSpan === 'year') {
+      const y = $('#gYear').value;
+      delete prefs.goals[y];
+      toast(`Removed your ${y} goal.`);
+    } else if (goalEdit && goalEdit.id) {
+      const g = prefs.customGoals.find(x => x.id === goalEdit.id);
+      prefs.customGoals = prefs.customGoals.filter(x => x.id !== goalEdit.id);
+      toast(`Removed “${g ? goalName(g) : 'that goal'}”.`);
+    }
+    savePrefs();
+    $('#goalDialog').close();
+    render();
+    if ($('#goalsDialog').open) renderGoals();
+  }
+
+  // a ribbon for goals with your own timeline (yearly goals get the trophy)
+  function drawRibbon(n, s = 1) {
+    const k = `rb${Math.random().toString(36).slice(2, 7)}`;
+    const big = String(n).length > 2;
+    return `<svg viewBox="0 0 100 140" width="${Math.round(100 * s)}" height="${Math.round(140 * s)}" aria-hidden="true" focusable="false">
+      <defs>
+        <radialGradient id="${k}g" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#fff1c4"/><stop offset=".45" stop-color="#e2bb63"/><stop offset="1" stop-color="#9c7230"/></radialGradient>
+        <linearGradient id="${k}r" x1="0" x2="1"><stop offset="0" stop-color="#5d1a1f"/><stop offset=".5" stop-color="#8e2a2f"/><stop offset="1" stop-color="#5d1a1f"/></linearGradient>
+      </defs>
+      <path d="M34 66 L18 132 L32 122 L42 136 L54 72Z" fill="url(#${k}r)"/>
+      <path d="M66 66 L82 132 L68 122 L58 136 L46 72Z" fill="url(#${k}r)"/>
+      <path d="M38 68 L27 116 M62 68 L73 116" stroke="#e6c886" stroke-opacity=".5" stroke-width="1.5"/>
+      <g transform="translate(50 50)">
+        ${Array.from({ length: 16 }, (_, i) => `<ellipse rx="7" ry="13" transform="rotate(${i * 22.5}) translate(0 -30)" fill="${i % 2 ? '#7a2328' : '#952f34'}"/>`).join('')}
+        <circle r="30" fill="#6e1f24"/>
+        <circle r="26" fill="url(#${k}g)"/>
+        <circle r="21.5" fill="none" stroke="#8a6224" stroke-opacity=".55" stroke-width="1.2"/>
+        <text y="${big ? 6 : 8}" text-anchor="middle" font-family="IM Fell English, Georgia, serif" font-size="${big ? 17 : 23}" fill="#5a3d14">${esc(String(n))}</text>
+        <text y="-11" text-anchor="middle" font-size="7" fill="#7a5520">★</text>
+      </g>
+    </svg>`;
   }
 
   function celebrate(y) {
-    const el = $('#celebrate');
     syncTrophies();
     $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}. Your ${y} trophy now stands on top of your bookcase.`;
     $('#celebrateTrophy').innerHTML = Art.drawTrophy(y, goalFor(y), 0.9);
     $('#celebrateRaise').dataset.year = y;
+    delete $('#celebrateRaise').dataset.cgoal;
+    confetti();
+  }
+  function celebrateGoal(g) {
+    const i = goalInfo(g);
+    $('#celebrateText').textContent = `You read ${plural(i.done, 'book')} ${g.name ? `for “${g.name}”` : `between ${rangeText(g.start, g.end)}`} and hit your goal of ${g.target}${i.status === 'active' && i.daysLeft > 1 ? `, with ${i.daysLeft} days to spare` : ''}.`;
+    $('#celebrateTrophy').innerHTML = drawRibbon(g.target, 0.95);
+    $('#celebrateRaise').dataset.cgoal = g.id;
+    delete $('#celebrateRaise').dataset.year;
+    confetti();
+  }
+  function confetti() {
+    const el = $('#celebrate');
     const conf = el.querySelector('.confetti');
     conf.innerHTML = '';
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -954,7 +1217,7 @@
       for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
     } catch {}
     const clean = books;
-    const payload = { app: 'Tomestead', version: 3, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies }, uploads };
+    const payload = { app: 'Tomestead', version: 3, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -998,6 +1261,12 @@
         if (st) {
           if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, st.theme);
           if (st.goals) prefs.goals = Object.assign({}, prefs.goals, st.goals);
+          if (Array.isArray(st.customGoals)) {
+            for (const g of cleanGoals(st.customGoals)) {
+              const i = prefs.customGoals.findIndex(x => x.id === g.id);
+              if (i >= 0) prefs.customGoals[i] = g; else prefs.customGoals.push(g);
+            }
+          }
           if (st.trophies && typeof st.trophies === 'object') {
             for (const [yr, t] of Object.entries(st.trophies)) {
               if (/^\d{4}$/.test(yr) && t && Number(t.goal) > 0) prefs.trophies[yr] = { goal: Number(t.goal), at: String(t.at || '').slice(0, 10) };
@@ -1077,6 +1346,9 @@
       if (it) return openDetail(it.dataset.id, it.querySelector('.thumb, .chip'));
       if (e.target.closest('[data-add]')) return openEditor();
       if (e.target.closest('[data-goal]')) return openGoal();
+      const cg = e.target.closest('[data-cgoal]');
+      if (cg) return openGoalEditor({ id: cg.dataset.cgoal });
+      if (e.target.closest('[data-goals]')) return openGoals();
       if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
       if (e.target.closest('[data-clear]')) { query = ''; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
     });
@@ -1099,15 +1371,25 @@
 
     // goals
     $('#goalForm').addEventListener('submit', saveGoal);
-    $('#gYear').addEventListener('change', syncGoalForm);
-    $('#goalRemove').addEventListener('click', () => {
-      const y = $('#gYear').value;
-      delete prefs.goals[y]; savePrefs();
-      $('#goalDialog').close(); render();
-      toast(`Removed your ${y} goal.`);
+    $('#gYear').addEventListener('change', () => { $('#gCount').value = goalFor($('#gYear').value) || ''; goalHint(); });
+    $('#goalRemove').addEventListener('click', removeGoal);
+    $('#gSpans').addEventListener('click', e => { const b = e.target.closest('[data-span]'); if (b) setSpan(b.dataset.span); });
+    ['#gStart', '#gEnd'].forEach(id => $(id).addEventListener('input', () => {
+      const match = ['month', '30', '90'].find(sp => { const r = spanRange(sp); return r && r[0] === $('#gStart').value && r[1] === $('#gEnd').value; });
+      setSpan(match || 'custom', false);
+    }));
+    $('#gCount').addEventListener('input', goalHint);
+    $('#newGoalBtn').addEventListener('click', () => openGoalEditor());
+    $('#goalsList').addEventListener('click', e => {
+      const c = e.target.closest('[data-cgoal]'); if (c) return openGoalEditor({ id: c.dataset.cgoal });
+      const y = e.target.closest('[data-ygoal]'); if (y) return openGoalEditor({ kind: 'year', year: y.dataset.ygoal });
     });
     $('#celebrateClose').addEventListener('click', closeCelebrate);
-    $('#celebrateRaise').addEventListener('click', e => { const y = e.currentTarget.dataset.year; closeCelebrate(); openGoal(y); });
+    $('#celebrateRaise').addEventListener('click', e => {
+      const { year, cgoal } = e.currentTarget.dataset;
+      closeCelebrate();
+      if (cgoal) openGoalEditor({ id: cgoal }); else openGoal(year);
+    });
     $('#celebrate').addEventListener('click', e => { if (e.target.id === 'celebrate') closeCelebrate(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#celebrate').hidden) closeCelebrate(); });
 
@@ -1115,7 +1397,7 @@
     const more = $('.more');
     document.addEventListener('click', e => { if (more.open && !more.contains(e.target)) more.open = false; });
     $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
-    $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoal(); });
+    $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoals(); });
     $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     $('#signOutBtn').addEventListener('click', () => { more.open = false; Sync.signOut(); });
@@ -1172,7 +1454,15 @@
       toast('Back to the original look.');
     });
 
-    if ('ResizeObserver' in window) new ResizeObserver(() => placeFloor()).observe($('#cases'));
+    // anything above the bookcase can change height after the first paint (fonts arriving,
+    // a sync note, the goal bar), so keep the floor tucked under the bookcase whenever it moves
+    if ('ResizeObserver' in window) {
+      const ro = new ResizeObserver(() => placeFloor());
+      ro.observe($('#cases')); ro.observe($('#stage'));
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => placeFloor());
+    window.addEventListener('load', () => placeFloor());
+    window.addEventListener('resize', () => placeFloor());
     let rt; let lastW = window.innerWidth;
     window.addEventListener('resize', () => {
       clearTimeout(rt);
@@ -1220,12 +1510,14 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, recs: prefs.recs };
+    return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, s.theme);
     prefs.goals = s.goals && typeof s.goals === 'object' ? s.goals : {};
     prefs.trophies = s.trophies && typeof s.trophies === 'object' ? s.trophies : {};
+    // (a device still on an older version doesn't send these; keep what's here rather than wiping them)
+    if (Array.isArray(s.customGoals)) prefs.customGoals = cleanGoals(s.customGoals);
     prefs.recs = s.recs && typeof s.recs === 'object' ? Object.assign({ dismissed: [] }, s.recs) : { dismissed: [] };
     savePrefsHere();
     D.applyTheme(prefs.theme);
@@ -1284,6 +1576,7 @@
     }
     if (old.goals) for (const [y, g] of Object.entries(old.goals)) if (!(prefs.goals[y] > 0)) prefs.goals[y] = g;
     if (old.trophies) for (const [y, t] of Object.entries(old.trophies)) if (!prefs.trophies[y]) prefs.trophies[y] = t;
+    for (const g of cleanGoals(old.customGoals)) if (!prefs.customGoals.some(x => x.id === g.id)) prefs.customGoals.push(g);
     if (old.recs && Array.isArray(old.recs.dismissed)) prefs.recs.dismissed = [...new Set([...prefs.recs.dismissed, ...old.recs.dismissed])];
     syncTrophies();
     savePrefs();
