@@ -34,7 +34,7 @@ A cozy digital library for every book you've read. Each book you log lands on th
 
 With accounts switched on, each reader's books, goals, trophies, look and cover photos are kept in their own space in Firebase (Google's app backend). Only they can read or change it, and only if their email is on the guest list. A copy also stays in the browser, so the app opens instantly and works offline, then catches up when it's back online. Nothing is uploaded to GitHub.
 
-With accounts switched off (the default), everything is saved only in your browser's storage on the device you use. To find books as you type, covers, summaries and reading suggestions, Tomestead sends what you type, each book's title and author (or ISBN) (and, for suggestions, the subjects and authors you like) to Open Library's public search. Scanning a barcode uses your camera only on your device; on phones without a built-in barcode reader (iPhone), a small reader is downloaded from jsDelivr the first time you scan. Cover photos you add yourself stay on your device and are included in backups. To move your library to another device, use **Back up my library** from the ••• menu, then **Restore from backup** on the other device.
+With accounts switched off (the default), everything is saved only in your browser's storage on the device you use. To find books as you type, covers, summaries and reading suggestions, Tomestead sends what you type, each book's title and author (or ISBN) (and, for suggestions, the subjects and authors you like) to Open Library's public search. Scanning a barcode uses your camera only on your device; on phones without a built-in barcode reader (iPhone), Tomestead uses the reader that ships with the app (in `vendor/`), so nothing is downloaded from other sites. Cover photos you add yourself stay on your device and are included in backups. To move your library to another device, use **Back up my library** from the ••• menu, then **Restore from backup** on the other device.
 
 ## Add it to your home screen
 
@@ -55,6 +55,7 @@ reader.js             the 3D book and the shelf-to-table animation
 recommend.js          what to read next
 importer.js           Goodreads / StoryGraph .csv import
 scan.js               barcode scanning (the camera reads the ISBN)
+vendor/               bundled barcode reader for phones without one (barcode-detector + zxing-wasm, MIT)
 yearreview.js         year in review
 covers.js             cover art and summaries (Open Library) and your own cover photos
 sync.js               sign-in, the guest list, and syncing with Firebase
