@@ -25,6 +25,8 @@ Models were shrunk for phones with gltf-transform (textures resized and converte
 ## Textures
 Herringbone Parquet (floor), Plastered Wall (walls), Wooden Panels (wainscot), Dark Wooden Planks (ceiling and beams), Oak Veneer 01 / Walnut Veneer / Lacquered Cherry Wood (bookcase, by your wood choice), Wool Boucle (rug weave), Brown Leather (tome cover and desk top), Bark Willow 02 (tome pedestal and firewood), Marble 01 (fireplace surround), Castle Brick 07 (firebox), Slate Floor 03 (hearth), Faux Fur Geometric (the dog's coat).
 
-Hand-built in code: the bookcase, the pedestal desk, the fireplace and its fire, the branch pedestal, the dog, the rug and the lamp shade.
+The painting over the mantel (Highland cattle on the moor) is an image TJ supplied, shown in the Fancy Picture Frame 01 frame.
+
+Hand-built in code: the bookcase (modelled on the app's arched bookcase, with its bookends, labels and climbing vine), the pedestal desk, the fireplace and its fire, the branch pedestal, the dog, the rug and the lamp shade.
 
 The spine cloth, leather and other textures in the app's own `tex/` folder are Tomestead's.

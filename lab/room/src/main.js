@@ -53,7 +53,7 @@ function loadLibrary() {
   }
   books = (books || []).filter((b) => b && b.id && b.title);
   const prefs = readJSON('tomestead.prefs.v1' + suffix) || readJSON('tomestead.prefs.v1') || {};
-  return { books, theme: prefs.theme || {}, sample: false };
+  return { books, theme: prefs.theme || {}, trophies: prefs.trophies || {}, sample: false };
 }
 const SAMPLE = [
   ['The Hobbit', 'J.R.R. Tolkien', 310, 5, 'read'], ['Jane Eyre', 'Charlotte Brontë', 532, 4, 'read'],
@@ -205,7 +205,7 @@ function placeFurniture(MOD, M) {
   let oilGlow = null, flameMats = [], shadeMat = null;
   if (MOD.oillamp) {
     placeModel(MOD.oillamp, 2.61, 0.761, -2.44, 0.4, 0.9);
-    MOD.oillamp.traverse((o) => { if (!o.isMesh) return; if (/flame/.test(o.material.name)) flameMats.push(o.material); if (/glass/.test(o.material.name)) { o.material.transparent = true; o.material.opacity = 0.3; o.material.depthWrite = false; o.castShadow = false; } });
+    MOD.oillamp.traverse((o) => { if (!o.isMesh) return; if (/flame/.test(o.material.name)) flameMats.push(o.material); if (/glass/.test(o.material.name)) o.visible = false; });
     oilGlow = new THREE.PointLight('#ffae55', 0, 3.4, 2); oilGlow.position.set(2.58, 1.2, -2.38); scene.add(oilGlow);
     // a pleated linen shade over the chimney
     shadeMat = std({ map: canvasTex(shadeTex(), { repeat: false }), roughness: 0.9, side: THREE.DoubleSide, emissive: '#ffb86b', emissiveIntensity: 0 });
@@ -308,6 +308,7 @@ async function build() {
     M.caseShelf = pbrMat(W, 0.7, 1.4, { color: tint, rot: true });
     M.caseDark = pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.55) });
     M.trim = pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.5), rot: true });
+    M.recessWood = pbrMat(W, 0.5, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.2) });
   }
   if (sets.dark_wooden_planks) M.beam = pbrMat(sets.dark_wooden_planks, 2.2, 2.2, { color: '#b9a48c' });
   if (extra.leather) { M.tomeLeather.normalMap = tile(extra.leather, 0.15, 0.15); M.tomeLeather.needsUpdate = true; }
@@ -458,7 +459,7 @@ function mergeStatics() {
   scene.updateMatrixWorld(true);
   const buckets = new Map();
   scene.traverse((o) => {
-    if (!o.isMesh || Array.isArray(o.material) || !o.material.visible || Object.keys(o.userData).length) return;
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || !o.material.visible || Object.keys(o.userData).length) return;
     for (let p = o.parent; p; p = p.parent) if (p.userData && p.userData.dyn) return;
     const key = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '');
     if (!buckets.has(key)) buckets.set(key, []);
@@ -561,48 +562,169 @@ function rugTex() {
 }
 
 // ---------------------------------------------------------------- the bookcase
+// The bookcase, built to look like the one in the Tomestead app: an arched top over a sill
+// with a brass name plate and a few trinkets, three shelves, section bookends and labels,
+// and a climbing vine up the right side and over the arch.
+function bookendMesh(kind, M, flip) {
+  const k = 0.00155;                                 // the app's bookend drawings are 110 units tall → 17 cm
+  const P = (x, y) => [(flip ? 34 - x : x) * k, (110 - y) * k];
+  const g = new THREE.Group();
+  const ext = (shape, mat, depth = 0.11) => { const m = mesh(new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelSize: 0.002, bevelThickness: 0.002, bevelSegments: 2, curveSegments: 10 }), mat, g); m.position.z = -depth / 2; return m; };
+  if (kind === 'brass') {
+    const s2 = new THREE.Shape(); s2.moveTo(...P(4, 110)); s2.lineTo(...P(4, 30)); s2.quadraticCurveTo(...P(4, 8), ...P(26, 6)); s2.quadraticCurveTo(...P(14, 22), ...P(14, 40));
+    s2.lineTo(...P(14, 96)); s2.lineTo(...P(30, 96)); s2.lineTo(...P(30, 110)); s2.lineTo(...P(4, 110));
+    ext(s2, M.brass, 0.1);
+  } else if (kind === 'oak' || kind === 'marble') {
+    const s2 = new THREE.Shape();
+    if (kind === 'oak') { s2.moveTo(...P(2, 110)); s2.lineTo(...P(2, 24)); s2.quadraticCurveTo(...P(2, 6), ...P(18, 6)); s2.quadraticCurveTo(...P(34, 6), ...P(34, 24)); s2.lineTo(...P(34, 110)); s2.lineTo(...P(2, 110)); }
+    else { s2.moveTo(...P(2, 110)); s2.lineTo(...P(2, 18)); s2.lineTo(...P(32, 18)); s2.lineTo(...P(32, 110)); s2.lineTo(...P(2, 110)); }
+    ext(s2, kind === 'oak' ? M.caseDark : std({ color: '#e9e4da', roughness: 0.3 }), 0.1);
+    if (kind === 'oak') { const d = mesh(new THREE.SphereGeometry(0.005, 10, 8), M.brass, g); d.position.set(18 * k, (110 - 26) * k, 0.052); }
+  } else if (kind === 'owl') {
+    const iron = std({ color: '#3e3e44', roughness: 0.5, metalness: 0.6 });
+    box(0.056, 0.025, 0.08, iron, 20 * k, 0.0125, 0, g);
+    const body = mesh(new THREE.SphereGeometry(0.03, 16, 12), iron, g); body.scale.set(0.95, 1.45, 0.85); body.position.set(20 * k, 0.065, 0);
+    const head = mesh(new THREE.SphereGeometry(0.024, 16, 12), iron, g); head.scale.set(1.05, 0.95, 0.9); head.position.set(20 * k, 0.118, 0.002);
+    for (const sx of [-1, 1]) {
+      const ear = mesh(new THREE.ConeGeometry(0.007, 0.022, 8), iron, g); ear.position.set(20 * k + sx * 0.016, 0.142, 0); ear.rotation.z = -sx * 0.35;
+      const eye = mesh(new THREE.SphereGeometry(0.0065, 10, 8), std({ color: '#e6c886', roughness: 0.3, metalness: 0.4, emissive: '#3a2a08' }), g); eye.position.set(20 * k + sx * 0.0095, 0.121, 0.02);
+    }
+    const beak = mesh(new THREE.ConeGeometry(0.004, 0.01, 6), M.brass, g); beak.rotation.x = Math.PI; beak.position.set(20 * k, 0.11, 0.023);
+  } else if (kind === 'stones') {
+    const st = [['#6d6a64', 19, 10, 100], ['#8c877d', 15, 9, 82], ['#5e5b56', 12, 8, 66], ['#a39d90', 9, 6.5, 52]];
+    for (const [c, rx, ry, cy] of st) { const m = mesh(new THREE.SphereGeometry(1, 16, 10), std({ color: c, roughness: 0.6 }), g); m.scale.set(rx * k, ry * k, rx * k * 0.8); m.position.set(20 * k, (110 - cy) * k, 0); }
+  }
+  return g;
+}
+function leafTex(rose) {
+  const [c, x] = mkCanvas(128, 128);
+  x.fillStyle = rose ? '#4f7a3a' : '#3d6b2f';
+  x.beginPath(); x.moveTo(64, 6); x.bezierCurveTo(118, 40, 104, 104, 64, 122); x.bezierCurveTo(24, 104, 10, 40, 64, 6); x.fill();
+  x.strokeStyle = 'rgba(210,235,170,.45)'; x.lineWidth = 3; x.beginPath(); x.moveTo(64, 14); x.lineTo(64, 118); x.stroke();
+  x.lineWidth = 1.5; for (let i = 0; i < 5; i++) { const y = 30 + i * 17; x.beginPath(); x.moveTo(64, y + 8); x.lineTo(38, y); x.moveTo(64, y + 8); x.lineTo(90, y); x.stroke(); }
+  return c;
+}
+function roseTex() {
+  const [c, x] = mkCanvas(128, 128);
+  x.translate(64, 64);
+  for (let r = 54; r > 6; r -= 9) {
+    x.fillStyle = `hsl(350, ${55 + (54 - r) * 0.4}%, ${82 - (54 - r) * 0.55}%)`;
+    x.beginPath(); for (let a = 0; a <= 6.3; a += 0.3) { const rr = r * (0.82 + 0.18 * Math.sin(a * 5 + r)); x.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } x.fill();
+    x.strokeStyle = 'rgba(120,30,50,.25)'; x.lineWidth = 1.5; x.stroke();
+  }
+  return c;
+}
+// a climbing vine (roses or ivy) up the right post and over the arch
+function buildVine(parent, { W, top, RISE, ZF, ivy }) {
+  const r = rng(5);
+  const pts = [];
+  const x0 = W / 2 - 0.02;
+  for (let i = 0; i <= 10; i++) { const y = 0.12 + (top - 0.12) * (i / 10); pts.push(new THREE.Vector3(x0 + Math.sin(i * 1.3) * 0.012, y, ZF + 0.025)); }
+  for (let th = 0.08; th < 1.25; th += 0.12) pts.push(new THREE.Vector3(Math.cos(th) * (W / 2 + 0.005), top + Math.sin(th) * (RISE + 0.01) + Math.cos(th * 7) * 0.01, ZF + 0.025));
+  const curve = new THREE.CatmullRomCurve3(pts);
+  mesh(new THREE.TubeGeometry(curve, 120, 0.006, 6, false), std({ color: '#5a4a2a', roughness: 0.9 }), parent, { recv: false });
+  const leafMat = std({ map: canvasTex(leafTex(!ivy), { repeat: false }), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75 });
+  const N = 150, leaves = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.045, 0.045), leafMat, N);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    const t = Math.min(1, (i / N) * 1.02 + r() * 0.01);
+    curve.getPointAt(t, p);
+    p.x += (r() - 0.5) * 0.07; p.y += (r() - 0.5) * 0.05; p.z += 0.005 + r() * 0.02;
+    e.set((r() - 0.5) * 0.9, (r() - 0.5) * 0.9, r() * 6.28); q.setFromEuler(e);
+    const s2 = 0.7 + r() * 0.6; sc.set(s2, s2, s2);
+    leaves.setMatrixAt(i, m4.compose(p, q, sc));
+  }
+  leaves.castShadow = true; parent.add(leaves);
+  if (ivy) return;
+  const roseMat = std({ map: canvasTex(roseTex(), { repeat: false }), alphaTest: 0.4, roughness: 0.7, side: THREE.DoubleSide });
+  const R2 = 22, roses = new THREE.InstancedMesh(new THREE.CircleGeometry(0.022, 16), roseMat, R2);
+  for (let i = 0; i < R2; i++) {
+    curve.getPointAt(0.12 + (i / R2) * 0.86, p);
+    p.x += (r() - 0.5) * 0.05; p.z += 0.03; p.y += (r() - 0.5) * 0.04;
+    e.set((r() - 0.5) * 0.5, (r() - 0.5) * 0.5, r() * 6.28); q.setFromEuler(e);
+    const s2 = 0.7 + r() * 0.6; sc.set(s2, s2, s2);
+    roses.setMatrixAt(i, m4.compose(p, q, sc));
+  }
+  parent.add(roses);
+}
+function plateTex(text, w = 512, h = 96) {
+  const [c, x] = mkCanvas(w, h);
+  const gr = x.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#e6c886'); gr.addColorStop(0.6, '#c9a15b'); gr.addColorStop(1, '#9c7637');
+  x.fillStyle = gr; x.beginPath(); x.roundRect(2, 2, w - 4, h - 4, 10); x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.35)'; x.lineWidth = 3; x.beginPath(); x.moveTo(12, 6); x.lineTo(w - 12, 6); x.stroke();
+  x.fillStyle = '#3a2610'; x.font = `italic ${Math.round(h * 0.58)}px "IM Fell English", Georgia, serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, w / 2, h / 2 + 3);
+  return c;
+}
 function buildBookcase(M, { cloth, leather }) {
   const g = new THREE.Group(); scene.add(g);
-  const W = 2.0, D = 0.38, BODY = 2.1, ZF = -2.68 + D, ZC = -2.68 + D / 2, ROWS = 5, PLINTH = 0.12;
-  const rowH = (BODY - PLINTH) / ROWS;
-  box(W + 0.06, PLINTH, D + 0.03, M.caseDark, 0, PLINTH / 2, ZC + 0.01, g);
-  box(0.05, BODY - PLINTH, D, M.caseSide, -W / 2 + 0.025, PLINTH + (BODY - PLINTH) / 2, ZC, g);
-  box(0.05, BODY - PLINTH, D, M.caseSide, W / 2 - 0.025, PLINTH + (BODY - PLINTH) / 2, ZC, g);
-  box(W - 0.1, BODY - PLINTH, 0.02, M.recess, 0, PLINTH + (BODY - PLINTH) / 2, -2.67, g);
+  const W = 1.9, D = 0.4, P = 0.055, PL = 0.1, ROWH = 0.38, PLK = 0.035, ROWS = 3, HS = 0.12, RISE = 0.27;
+  const ZB = -2.68, ZF = ZB + D, ZC = ZB + D / 2;
+  const plankY = (k) => PL + k * (ROWH + PLK);
+  const SILL = plankY(ROWS);                       // the sill sits where a fourth plank would
+  const theme = Object.assign({ bookend: 'brass', vine: 'roses' }, lib.theme);
+  // plinth, posts, back, planks, sill
+  box(W + 0.04, PL, D + 0.03, M.caseDark, 0, PL / 2, ZC + 0.015, g);
+  for (const sx of [-1, 1]) box(P, SILL + 0.04 - PL, D, M.caseSide, sx * (W / 2 - P / 2), PL + (SILL + 0.04 - PL) / 2, ZC, g);
+  const recess = M.recessWood || M.recess;
+  box(W - 2 * P, SILL + 0.04 - PL, 0.02, recess, 0, PL + (SILL + 0.04 - PL) / 2, ZB + 0.01, g);
   const rowsY = [];
-  for (let k = 0; k < ROWS; k++) {
-    const y = PLINTH + k * rowH;
-    box(W - 0.1, 0.03, D - 0.02, M.caseShelf, 0, y + 0.015, ZC + 0.01, g);
-    rowsY.push(y + 0.03);
-  }
-  box(W + 0.08, 0.05, D + 0.05, M.trim, 0, BODY + 0.025, ZC + 0.02, g);      // cornice
-  // the arch, with its display niche
-  const s = new THREE.Shape();
-  s.moveTo(-W / 2, 0); s.lineTo(-W / 2, 0.1); s.absellipse(0, 0.1, W / 2, 0.42, Math.PI, 0, true); s.lineTo(W / 2, 0); s.lineTo(-W / 2, 0);
-  const hole = new THREE.Path();
-  hole.moveTo(-0.3, 0.07); hole.lineTo(0.3, 0.07); hole.lineTo(0.3, 0.2); hole.absellipse(0, 0.2, 0.3, 0.17, 0, Math.PI, false); hole.lineTo(-0.3, 0.07);
-  s.holes.push(hole);
-  const ag = new THREE.ExtrudeGeometry(s, { depth: D - 0.04, bevelEnabled: false, curveSegments: 32 });
-  const arch = mesh(ag, M.caseSide, g); arch.position.set(0, BODY + 0.05, -2.68);
-  box(0.6, 0.4, 0.02, M.recess, 0, BODY + 0.05 + 0.25, -2.665, g);
-  // a gold trophy in the niche (the app's reward for reaching a yearly goal)
-  const trophy = new THREE.Group(); g.add(trophy);
-  mesh(lathe([[0, 0], [0.06, 0], [0.06, 0.02], [0.035, 0.03], [0.012, 0.05], [0.012, 0.1], [0.03, 0.12], [0.065, 0.17], [0.072, 0.22], [0.066, 0.22], [0.02, 0.13], [0, 0.13]]), M.gold, trophy);
-  for (const sx of [-1, 1]) { const h = mesh(new THREE.TorusGeometry(0.035, 0.006, 8, 20, Math.PI), M.gold, trophy); h.rotation.z = sx * -Math.PI / 2; h.position.set(sx * 0.07, 0.185, 0); }
-  trophy.position.set(-0.07, BODY + 0.05 + 0.07, -2.48);
-  // a globe on its stand beside it (a trinket from the app)
+  for (let k2 = 0; k2 < ROWS; k2++) { box(W - 2 * P, PLK, D - 0.015, M.caseShelf, 0, plankY(k2) + PLK / 2, ZC + 0.0075, g); rowsY.push(plankY(k2) + PLK); }
+  box(W + 0.03, 0.045, D + 0.035, M.caseShelf, 0, SILL + 0.0225, ZC + 0.0175, g);
+  // the arched top: a band of wood following the arch, with a dark panel behind
+  const AY = SILL + 0.045, rx = W / 2, rxi = W / 2 - P;
+  const band = new THREE.Shape();
+  band.moveTo(-rx, 0); band.lineTo(-rx, HS); band.absellipse(0, HS, rx, RISE, Math.PI, 0, true); band.lineTo(rx, 0); band.lineTo(rxi, 0); band.lineTo(rxi, HS);
+  band.absellipse(0, HS, rxi, RISE - P * 0.8, 0, Math.PI, false); band.lineTo(-rxi, 0); band.lineTo(-rx, 0);
+  const bandM = mesh(new THREE.ExtrudeGeometry(band, { depth: D, bevelEnabled: false, curveSegments: 48 }), M.caseSide, g); bandM.position.set(0, AY, ZB);
+  const back = new THREE.Shape(); back.moveTo(-rxi, 0); back.lineTo(-rxi, HS); back.absellipse(0, HS, rxi, RISE - P * 0.8, Math.PI, 0, true); back.lineTo(rxi, 0); back.lineTo(-rxi, 0);
+  const backM = mesh(new THREE.ExtrudeGeometry(back, { depth: 0.02, bevelEnabled: false, curveSegments: 48 }), recess, g); backM.position.set(0, AY, ZB);
+  // a light bead moulding along the outside of the arch
+  const arcPts = []; for (let i = 0; i <= 48; i++) { const a = Math.PI - (i / 48) * Math.PI; arcPts.push(new THREE.Vector3(Math.cos(a) * (rx + 0.004), AY + HS + Math.sin(a) * (RISE + 0.004), ZF + 0.002)); }
+  mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arcPts), 64, 0.009, 8, false), M.caseShelf, g);
+  // brass name plate on the sill, like the app ("16 read")
+  const nRead = lib.books.filter((b) => (b.status || 'read') === 'read').length;
+  const plate = mesh(new THREE.PlaneGeometry(0.2, 0.034), std({ map: canvasTex(plateTex(`${nRead} read`), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
+  plate.position.set(0, SILL + 0.0225, ZF + 0.035 / 2 + 0.0185);
+  // trinkets under the arch: a candlestick, a globe, and the year's trophy once a goal is met
+  const AT = SILL + 0.045, AZ = ZC + 0.02;
+  const cand = new THREE.Group(); g.add(cand); cand.position.set(-0.32, AT, AZ);
+  mesh(lathe([[0, 0], [0.045, 0], [0.045, 0.01], [0.012, 0.02], [0.012, 0.09], [0.03, 0.1], [0.03, 0.11], [0, 0.11]]), M.brass, cand);
+  const cw = mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.13, 14), M.candle, cand); cw.position.y = 0.175;
+  const cf = flameSprite(); cf.position.set(-0.32, AT + 0.26, AZ); g.add(cf);
   const globe = new THREE.Group(); g.add(globe);
-  mesh(lathe([[0, 0], [0.04, 0], [0.04, 0.012], [0.008, 0.02], [0.008, 0.05], [0, 0.05]]), M.brass, globe);
-  const gl = mesh(new THREE.SphereGeometry(0.055, 24, 16), std({ map: canvasTex(globeTex(), { repeat: false }), roughness: 0.5 }), globe);
-  gl.position.y = 0.105; gl.rotation.z = 0.4;
-  globe.position.set(0.17, BODY + 0.05 + 0.07, -2.5);
+  mesh(lathe([[0, 0], [0.045, 0], [0.045, 0.012], [0.008, 0.02], [0.008, 0.06], [0, 0.06]]), M.brass, globe);
+  const gl = mesh(new THREE.SphereGeometry(0.065, 24, 16), std({ map: canvasTex(globeTex(), { repeat: false }), roughness: 0.5 }), globe);
+  gl.position.y = 0.125; gl.rotation.z = 0.4;
+  const ring = mesh(new THREE.TorusGeometry(0.075, 0.004, 6, 32, Math.PI * 1.2), M.brass, globe); ring.position.y = 0.125; ring.rotation.set(0, Math.PI / 2, 0.4 - Math.PI / 2);
+  globe.position.set(-0.16, AT, AZ);
+  if (Object.keys(lib.trophies || {}).length) {
+    const trophy = new THREE.Group(); g.add(trophy);
+    mesh(lathe([[0, 0], [0.06, 0], [0.06, 0.02], [0.035, 0.03], [0.012, 0.05], [0.012, 0.1], [0.03, 0.12], [0.065, 0.17], [0.072, 0.22], [0.066, 0.22], [0.02, 0.13], [0, 0.13]]), M.gold, trophy);
+    for (const sx of [-1, 1]) { const h = mesh(new THREE.TorusGeometry(0.035, 0.006, 8, 20, Math.PI), M.gold, trophy); h.rotation.z = sx * -Math.PI / 2; h.position.set(sx * 0.07, 0.185, 0); }
+    trophy.position.set(0.06, AT, AZ);
+  }
+  [[0.26, 0.032, '#1F3350'], [0.23, 0.028, '#e9dcbc'], [0.25, 0.034, '#6E1F24']].reduce((yy, [w, th, col]) => {
+    box(w, th, 0.17, std({ color: col, roughness: 0.7 }), 0.3, yy + th / 2, AZ, g); return yy + th;
+  }, AT);
+  if (theme.vine !== 'none') buildVine(g, { W, top: AY + HS, RISE, ZF, ivy: theme.vine === 'ivy' });
 
   // ---- books, in the app's order: Reading now → To read → Read
   const ORDER = ['reading', 'want', 'read'];
   const list = lib.books.filter((b) => ORDER.includes(b.status || 'read'))
     .sort((a, b) => ORDER.indexOf(a.status || 'read') - ORDER.indexOf(b.status || 'read') || (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0));
-  const innerL = -W / 2 + 0.06, innerR = W / 2 - 0.06, rowW = innerR - innerL;
-  const bookendW = 0.014;
+  const counts = {}; list.forEach((b) => { const k2 = b.status || 'read'; counts[k2] = (counts[k2] || 0) + 1; });
+  const labelled = Object.keys(counts).length > 1;
+  const PICKS = { reading: ['owl', 'stones', 'oak', 'marble', 'brass'], want: ['oak', 'marble', 'stones', 'owl', 'brass'] };
+  const endFor = (sec) => {
+    if (sec !== 'reading' && sec !== 'want') return theme.bookend;
+    const saved = theme.bookends && theme.bookends[sec]; if (saved) return saved;
+    if (theme.bookend === 'none') return 'none';
+    const taken = [theme.bookend]; if (sec === 'want') taken.push(endFor('reading'));
+    return PICKS[sec].find((k2) => !taken.includes(k2)) || theme.bookend;
+  };
+  const endW = (sec) => (endFor(sec) === 'none' ? 0 : endFor(sec) === 'owl' || endFor(sec) === 'stones' ? 0.064 : 0.054);
+  const innerL = -W / 2 + P + 0.02, innerR = W / 2 - P - 0.02, rowW = innerR - innerL;
   // first the run of books and bookends, then lay it onto the shelves
   const seq = [];
   let sec = null;
@@ -613,20 +735,21 @@ function buildBookcase(M, { cloth, leather }) {
     const h = (176 + (h0 % 66)) * 0.00118;
     const d = 0.15 + (h0 % 5) * 0.011;
     if (st !== sec) {
-      if (sec !== null) seq.push({ kind: 'end', w: bookendW + 0.03, flip: true });
-      seq.push({ kind: 'end', w: bookendW + 0.004 });
+      if (sec !== null) seq.push({ kind: 'end', sec, w: endW(sec) + 0.035, flip: true });
+      seq.push({ kind: 'end', sec: st, w: endW(st) + 0.004, start: true });
       sec = st;
     }
     const lean = st === 'reading' ? 0.012 : 0;
     seq.push({ kind: 'book', w: t + 0.0025 + lean, b, t, h, d, lean, st, variant: (h0 >>> 9) % 4 });
   }
-  if (sec !== null) seq.push({ kind: 'end', w: bookendW, flip: true });
-  // a small library is spread over a few shelves at eye level, with room for trinkets
+  if (sec !== null) seq.push({ kind: 'end', sec, w: endW(sec), flip: true });
+  // a small library is spread over the shelves, with room for trinkets
   const total = seq.reduce((s2, e) => s2 + e.w, 0);
   const needed = Math.ceil(total / rowW);
-  const rowsUsed = Math.min(ROWS, Math.max(needed, Math.min(3, Math.ceil(total / (rowW * 0.55)))));
-  const cap = rowsUsed > needed ? total / rowsUsed + 0.05 : rowW;
-  let row = rowsUsed <= 3 ? 3 : ROWS - 1, x = innerL, hidden = 0;
+  // balance the books over the shelves they need (a little extra, so each shelf has room for a trinket)
+  const rowsUsed = Math.min(ROWS, Math.max(needed, Math.ceil(total / (rowW * 0.72))));
+  const cap = Math.min(rowW, total / rowsUsed + 0.06);
+  let row = ROWS - 1, x = innerL, hidden = 0;
   const items = [];
   for (const e of seq) {
     if (x + e.w > innerL + cap && x > innerL) {
@@ -642,18 +765,21 @@ function buildBookcase(M, { cloth, leather }) {
   const freeRows = [];
   for (let r = ROWS - 1; r >= 0; r--) {
     const used = items.filter((i) => i.row === r);
-    const end = used.length ? Math.max(...used.map((i) => i.x + (i.t || bookendW))) : innerL;
+    const end = used.length ? Math.max(...used.map((i) => i.x + (i.t || i.w))) : innerL;
     freeRows.push({ r, from: end + 0.04 });
   }
   const bookMeshes = [];
-  const endMat = M.brass;
   for (const it of items) {
     const y = rowsY[it.row];
     if (it.kind === 'end') {
-      const e = new THREE.Group(); g.add(e);
-      box(0.006, 0.17, 0.12, endMat, it.flip ? 0.011 : 0.003, 0.085, 0, e);
-      box(0.05, 0.005, 0.12, endMat, it.flip ? -0.012 : 0.026, 0.0025, 0, e);
-      e.position.set(it.x, y, ZF - 0.09);
+      const kind = endFor(it.sec);
+      if (kind !== 'none') { const e = bookendMesh(kind, M, !!it.flip); g.add(e); e.position.set(it.x + (it.flip ? 0.006 : 0), y, ZF - 0.1); }
+      // a small brass label on the plank where each section starts, as in the app
+      if (it.start && labelled) {
+        const name = { reading: 'Reading now', want: 'To read', read: 'Read' }[it.sec];
+        const lb = mesh(new THREE.PlaneGeometry(0.15, 0.022), std({ map: canvasTex(plateTex(`${name} · ${counts[it.sec]}`, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
+        lb.position.set(it.x + 0.08, y - PLK / 2, ZF + 0.0006);
+      }
       continue;
     }
     const geo = new THREE.BoxGeometry(it.t, it.h, it.d);
@@ -662,8 +788,8 @@ function buildBookcase(M, { cloth, leather }) {
     if (it.lean) { m.rotation.z = -0.07; m.position.x -= 0.004; }
     m.userData = { book: it.b, home: m.position.clone(), homeRot: m.rotation.clone(), dyn: true, it };
     if (it.st === 'reading') {     // a red ribbon marks the books being read
-      const rb = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.006, it.t * 0.3), 0.07, 0.002), std({ color: '#9b1d22', roughness: 0.6 }));
-      rb.position.set(0, -it.h / 2 + 0.02, it.d / 2 + 0.0015); m.add(rb);
+      const rb = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.006, it.t * 0.28), 0.045, 0.002), std({ color: '#9b1d22', roughness: 0.6 }));
+      rb.position.set(0, it.h / 2 + 0.012, it.d / 2 - 0.02); m.add(rb);
     }
     bookMeshes.push(m);
   }
@@ -672,7 +798,7 @@ function buildBookcase(M, { cloth, leather }) {
   for (const fr of freeRows) {
     const room = innerR - fr.from;
     if (room < 0.22) continue;
-    const y = rowsY[fr.r], z = ZF - 0.12;
+    const y = rowsY[fr.r], z = ZF - 0.13;
     const kind = decor++ % 3;
     const x0 = fr.from + (room > 0.6 ? room * 0.35 : 0.04);
     if (kind === 0) {
@@ -694,8 +820,9 @@ function buildBookcase(M, { cloth, leather }) {
   }
 
   // one picking target for the whole case (books are picked first)
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(W + 0.1, BODY + 0.5, D), new THREE.MeshBasicMaterial({ visible: false }));
-  hit.position.set(0, (BODY + 0.5) / 2, ZC); hit.userData.station = 'shelf'; scene.add(hit);
+  const HT = AY + HS + RISE;
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(W + 0.1, HT, D), new THREE.MeshBasicMaterial({ visible: false }));
+  hit.position.set(0, HT / 2, ZC); hit.userData.station = 'shelf'; scene.add(hit);
 
   // spine lettering, all books on one texture (one material for every spine)
   let mat = null;
@@ -824,7 +951,7 @@ function shadeTex() {
 // ---------------------------------------------------------------- the fireplace (left wall, nearer the front)
 function buildFireplace(MOD) {
   const g = new THREE.Group(); scene.add(g);
-  const M = buildFireplace.M, X = -3.0, Z = 1.45, D = 0.32, W = 1.6, OW = 0.9, OH = 0.75, MH = 1.06;
+  const M = buildFireplace.M, X = -3.0, Z = 1.68, D = 0.32, W = 1.6, OW = 0.9, OH = 0.75, MH = 1.06;
   // stone surround, brick-lined firebox, slate hearth, wooden mantel
   box(D, MH, (W - OW) / 2, M.stoneSurround, X + D / 2, MH / 2, Z - OW / 2 - (W - OW) / 4, g);
   box(D, MH, (W - OW) / 2, M.stoneSurround, X + D / 2, MH / 2, Z + OW / 2 + (W - OW) / 4, g);
@@ -897,6 +1024,13 @@ function buildFireplace(MOD) {
     if (cs) { placeModel(cs, X + 0.2, MT, Z + sz * 0.78, 0, 1.15); const fl = flameSprite(); fl.position.set(X + 0.2, MT + 0.275, Z + sz * 0.78); scene.add(fl); }
   }
   placeModel(MOD.vase, X + 0.19, MT, Z - 0.42, 0.3, 0.45);
+  // a big painting over the mantel: Highland cattle on the moor, in the ornate gilt frame
+  if (MOD.painting) {
+    const art = MOD.painting.clone(true);
+    const tex = texLoader.load('tex/painting_highland.webp'); tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso;
+    art.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); o.material.map = tex; o.material.color.set('#ffffff'); o.material.needsUpdate = true; } });
+    placeModel(art, X + 0.005, MT + 0.62, Z, Math.PI / 2, 2.25, { cast: false });
+  }
   placeModel(MOD.elephant, X + 0.2, MT, Z + 0.42, Math.PI / 2 + 0.3, 1.7);
   const dog = buildDog(); dog.position.set(X + 1.08, 0, Z + 0.05); dog.rotation.y = 0.5; scene.add(dog);
   let base = 2;
@@ -1167,8 +1301,8 @@ function buildTome(M) {
   for (let i = 0; i < 7; i++) {
     const a = (i / 7) * Math.PI * 2 + r0() * 0.4, tw = 1.5 + r0() * 0.5, out = 0.3 + r0() * 0.18;
     const P = (rad, y, da) => new THREE.Vector3(Math.cos(a + da) * rad, y, Math.sin(a + da) * rad);
-    const curve = new THREE.CatmullRomCurve3([P(out + 0.12, 0.0, -0.25), P(out, 0.025, 0), P(0.2, 0.09, 0.35), P(0.075, 0.32, tw * 0.45), P(0.055, 0.56, tw * 0.75),
-      P(0.07, 0.74, tw), P(0.15 + r0() * 0.05, 0.86, tw + 0.35), P(0.2 + r0() * 0.05, 0.9 + r0() * 0.03, tw + 0.55)]);
+    const curve = new THREE.CatmullRomCurve3([P(out + 0.12, 0.0, -0.25), P(out, 0.025, 0), P(0.2, 0.09, 0.35), P(0.075, 0.32, tw * 0.45), P(0.055, 0.55, tw * 0.75),
+      P(0.07, 0.7, tw), P(0.11 + r0() * 0.03, 0.79, tw + 0.3), P(0.14 + r0() * 0.03, 0.815, tw + 0.5)]);
     branches.push(taperTube(curve, 90, 10, (t) => 1.35 * (t < 0.14 ? 0.01 + 0.042 * (t / 0.14) : t < 0.55 ? 0.052 - 0.016 * ((t - 0.14) / 0.41) : 0.036 - 0.026 * ((t - 0.55) / 0.45))));
   }
   mesh(mergeGeometries(branches, false), M.bark, g);
@@ -1369,7 +1503,7 @@ const STATIONS = {
   room: { p: [1.0, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 },
   shelf: { p: [0, 1.4, -0.95], t: [0, 1.2, -2.4], w: 1.25, h: 1.0, max: 1.9 },
   desk: { p: [-1.25, 1.55, 0.55], t: [-2.65, 0.82, -0.6], w: 1.5, h: 1.2, max: 2.4 },
-  hearth: { p: [-0.55, 1.5, 2.05], t: [-2.6, 0.5, 1.35], w: 2.1, h: 1.6, max: 2.8 },
+  hearth: { p: [-0.5, 1.45, 2.3], t: [-2.7, 0.95, 1.6], w: 2.1, h: 2.0, max: 2.9 },
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
 };
