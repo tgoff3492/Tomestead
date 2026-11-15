@@ -956,10 +956,10 @@ function buildFireplace(MOD) {
   box(D, MH, (W - OW) / 2, M.stoneSurround, X + D / 2, MH / 2, Z - OW / 2 - (W - OW) / 4, g);
   box(D, MH, (W - OW) / 2, M.stoneSurround, X + D / 2, MH / 2, Z + OW / 2 + (W - OW) / 4, g);
   box(D, MH - OH, OW, M.stoneSurround, X + D / 2, OH + (MH - OH) / 2, Z, g);
-  box(0.03, OH, OW, M.firebrick, X + 0.015, OH / 2, Z, g);
-  box(D - 0.03, OH, 0.025, M.firebrick, X + D / 2, OH / 2, Z - OW / 2 + 0.0125, g);
-  box(D - 0.03, OH, 0.025, M.firebrick, X + D / 2, OH / 2, Z + OW / 2 - 0.0125, g);
-  box(D - 0.03, 0.02, OW, M.firebrick, X + D / 2, OH - 0.01, Z, g);
+  box(0.03, OH, OW, M.firebrick, X + 0.05, OH / 2, Z, g);           // stands just in front of the wall panelling, so the two never overlap
+  box(D - 0.07, OH, 0.025, M.firebrick, X + 0.065 + (D - 0.07) / 2, OH / 2, Z - OW / 2 + 0.0125, g);
+  box(D - 0.07, OH, 0.025, M.firebrick, X + 0.065 + (D - 0.07) / 2, OH / 2, Z + OW / 2 - 0.0125, g);
+  box(D - 0.07, 0.02, OW - 0.05, M.firebrick, X + 0.065 + (D - 0.07) / 2, OH - 0.011, Z, g);
   box(0.72, 0.04, W + 0.3, M.slate, X + 0.36, 0.02, Z, g);
   box(0.44, 0.065, W + 0.26, M.trim, X + 0.22, MH + 0.0325, Z, g);
   box(0.38, 0.035, W + 0.12, M.trim, X + 0.19, MH - 0.0175, Z, g);
