@@ -62,3 +62,17 @@ canvas#scene.dragging { cursor: grabbing; }
 
 .nogl { position: fixed; inset: 0; z-index: 30; background: #140d08; display: grid; place-content: center; text-align: center; padding: 24px; font-family: var(--serif); font-size: 1.1rem; }
 .nogl a { color: var(--brass-lt); }
+
+/* the bookcase browse bar: one book in hand, big targets for thumbs */
+.card.shelfbar { padding: 10px 10px 8px; }
+.card.shelfbar .card-x { top: 2px; right: 4px; font-size: 1.25rem; }
+.sb { display: flex; align-items: stretch; gap: 6px; }
+.sb-nav { flex: 0 0 48px; min-height: 52px; border: 0; border-radius: 10px; background: rgba(42,30,22,.08); color: var(--ink); font: 400 2rem/1 var(--serif); cursor: pointer; }
+.sb-nav:disabled { opacity: .3; cursor: default; }
+.sb-nav:not(:disabled):active { background: rgba(42,30,22,.18); }
+.sb-mid { flex: 1; min-width: 0; border: 0; background: none; text-align: center; cursor: pointer; padding: 2px 22px 2px 4px; color: var(--ink); display: flex; flex-direction: column; justify-content: center; }
+.sb-title { font-family: var(--serif); font-size: 1.2rem; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-sub { font-size: .9rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.sb-sub, .sb-sub * { letter-spacing: .02em; }
+.sb-count { text-align: center; font-size: .75rem; color: var(--ink-soft); margin-top: 4px; }
+.sb-more { border-top: 1px solid rgba(42,30,22,.15); margin-top: 8px; padding-top: 6px; }
