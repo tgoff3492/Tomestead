@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#140d08">
+  <meta name="robots" content="noindex">
+  <title>Tomestead · The Reading Room (prototype)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="room.css">
+</head>
+<body>
+  <canvas id="scene" aria-label="A 3D reading room with a bookcase, a desk and a magic tome"></canvas>
+
+  <div id="veil" class="veil"><div class="veil-title">Tomestead</div><div class="veil-sub" id="veil-sub">Lighting the lamps…</div></div>
+
+  <header class="top">
+    <a class="back" href="../../">← Tomestead</a>
+    <div class="label">The Reading Room <span>prototype</span></div>
+    <button class="round" id="light" type="button" aria-label="Switch to night">☾</button>
+  </header>
+
+  <nav class="stations" aria-label="Go to">
+    <button type="button" data-go="room" aria-pressed="true">Room</button>
+    <button type="button" data-go="shelf">Bookshelf</button>
+    <button type="button" data-go="desk">Desk</button>
+    <button type="button" data-go="tome">Magic tome</button>
+  </nav>
+
+  <div class="hint" id="hint">Drag to look around · tap things</div>
+
+  <section class="card" id="card" hidden aria-live="polite">
+    <button class="card-x" type="button" aria-label="Close">×</button>
+    <div id="card-body"></div>
+  </section>
+
+  <button class="perf-btn" id="perf-btn" type="button" aria-label="Speed check" aria-expanded="false">⏱</button>
+  <div class="perf" id="perf" hidden></div>
+
+  <div class="nogl" id="nogl" hidden>
+    <p>This device can't show the 3D room (WebGL is off or unavailable).</p>
+    <p>That's what the fallback is for: the app would keep the current 2D opening scene here.</p>
+    <a href="../../">Back to Tomestead</a>
+  </div>
+
+  <script type="module" src="room.js"></script>
+</body>
+</html>
