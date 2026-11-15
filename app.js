@@ -73,7 +73,6 @@
   }
   prefs.tagList = cleanTags(Array.isArray(prefs.tagList) ? prefs.tagList : TAG_PRESETS);
   let tagFilter = null;        // show only books with this tag
-  let reviewFilter = false;    // show only books still waiting for a review
   let query = '';
   let justAdded = null;
   let editingId = null;
@@ -137,7 +136,6 @@
   // on your read shelves: finished at least once (a book you're rereading stays there too)
   const isRead = (b) => statusOf(b) === 'read' || datesOf(b).length > 0;
   const readBooks = () => books.filter(isRead);
-  const needsReview = (b) => statusOf(b) === 'read' && !String(b.review || '').trim();
   const FORMATS = { print: 'Print', ebook: 'Ebook', audio: 'Audiobook' };
   const formatOf = (b) => (FORMATS[b.format] ? b.format : 'print');
   const PAGES_PER_HOUR = 30;   // so an audiobook gets a spine about as thick as the printed book
@@ -261,7 +259,7 @@
   function trophiesShown() {
     const y = prefs.year;
     const all = Object.keys(prefs.trophies).sort().map(yr => ({ year: yr, ...prefs.trophies[yr] }));
-    if (y === 'none' || STATUSES.includes(y) || query.trim() || tagFilter || reviewFilter) return [];
+    if (y === 'none' || STATUSES.includes(y) || query.trim() || tagFilter) return [];
     return y === 'all' ? all : all.filter(t => t.year === y);
   }
 
@@ -274,13 +272,12 @@
     if (y === 'none') return read.filter(b => !datesOf(b).length);
     return read.filter(b => inYear(b, y));
   }
-  const filtering = () => !!(query.trim() || tagFilter || reviewFilter);
+  const filtering = () => !!(query.trim() || tagFilter);
   function visibleBooks() {
     const q = query.trim().toLowerCase();
     const has = (v) => String(v || '').toLowerCase().includes(q);
     let list = shelfBooks().filter(b => !q || has(b.title) || has(b.author) || has(b.genre) || has(b.series) || tagsOf(b).some(has));
     if (tagFilter) list = list.filter(b => tagsOf(b).some(t => t.toLowerCase() === tagFilter.toLowerCase()));
-    if (reviewFilter) list = list.filter(needsReview);
     const byStr = (k) => (a, b) => (a[k] || '').localeCompare(b[k] || '', undefined, { sensitivity: 'base' });
     switch (prefs.sort) {
       case 'title': list.sort(byStr('title')); break;
@@ -319,13 +316,13 @@
     const st = statusOf(b);
     const el = document.createElement('button');
     el.type = 'button';
-    // a slip of paper sticks up from books waiting for a review; a ribbon marks your place in one you're reading
-    const mark = opts.plain ? '' : st === 'reading' ? ' ribbon' : needsReview(b) ? ' slip' : '';
+    // a ribbon marks your place in a book you're reading
+    const mark = opts.plain ? '' : st === 'reading' ? ' ribbon' : '';
     el.className = `book v${d.variant}${c.light ? ' light' : ''}${b.id === justAdded ? ' arrive' : ''}${mark}`;
     el.style.cssText = `--w:${d.width}px;--h:${d.height}px;--bg:${c.bg};--ink:${c.ink};--fs:${d.fs}px`;
     el.dataset.id = b.id;
     const r = b.rating || 0;
-    const note = st === 'reading' ? ', reading now' : st === 'want' ? ', want to read' : st === 'dnf' ? ', set aside' : needsReview(b) ? ', waiting for your review' : '';
+    const note = st === 'reading' ? ', reading now' : st === 'want' ? ', want to read' : st === 'dnf' ? ', set aside' : '';
     el.setAttribute('aria-label', `${b.title} by ${b.author || 'unknown author'}${r ? `, ${r} of 5 stars` : ''}${note}`);
     const fm = FORMAT_MARK[formatOf(b)];
     el.innerHTML =
@@ -668,7 +665,7 @@
       const note = document.createElement('div');
       note.className = 'empty-note';
       if (filtering()) {
-        note.innerHTML = `<p>${query.trim() ? `No books match “${esc(query)}”` : 'No books here'}${tagFilter || reviewFilter ? ' with that filter' : ''}.</p><button class="btn btn-brass" data-clear>Clear ${query.trim() ? 'search' : 'filter'}</button>`;
+        note.innerHTML = `<p>${query.trim() ? `No books match “${esc(query)}”` : 'No books here'}${tagFilter ? ' with that filter' : ''}.</p><button class="btn btn-brass" data-clear>Clear ${query.trim() ? 'search' : 'filter'}</button>`;
       } else if (y === 'reading') {
         note.innerHTML = `<p>Nothing on the go right now.</p><button class="btn btn-brass" data-add="reading">Start a book</button>`;
       } else if (y === 'want') {
@@ -763,7 +760,7 @@
         ${thumbHTML(b)}
         <span><h3>${esc(b.title)}</h3><span class="by">${esc(b.author || '')}${extra ? `, ${extra}` : ''}</span></span>
         <span class="right">${listRight(b)}</span>
-        ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : needsReview(b) ? `<p class="excerpt muted">Waiting for your review</p>` : ''}
+        ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : ''}
         ${tags.length ? `<span class="ledger-tags">${tags.map(t => `<span class="tag-pill">${esc(t)}</span>`).join('')}</span>` : ''}
       </button></li>`;
     }).join('');
@@ -786,9 +783,8 @@
     const rated = read.filter(b => b.rating);
     const avg = rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : 0;
     const y = thisYear();
-    const waiting = onCustomize() || onYear() ? 0 : books.filter(needsReview).length;
     $('#stats').innerHTML = n
-      ? `${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}${waiting ? ` <button type="button" class="linkbtn stats-link" data-review>${waiting} waiting for a review</button>` : ''}`
+      ? `${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}`
       : (books.length ? 'Your first finished book goes on the shelf.' : 'Every book you’ve read, on one shelf.');
     $('#genres').innerHTML = [...new Set(books.map(b => b.genre).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
     $('#seriesList').innerHTML = [...new Set(books.map(b => b.series).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
@@ -815,12 +811,11 @@
     if (on && on.offsetLeft + on.offsetWidth > $('#years').clientWidth) $('#years').scrollLeft = on.offsetLeft - 40;
   }
 
-  // active filters (a tag, books waiting for a review), each with a way out
+  // active filter (a tag), with a way out
   function renderFilters() {
     const bar = $('#filterBar');
     const chips = [];
     if (tagFilter) chips.push(`<button type="button" class="filter-chip" data-unfilter="tag" aria-label="Stop showing only “${esc(tagFilter)}”">Tagged <strong>${esc(tagFilter)}</strong> <span aria-hidden="true">✕</span></button>`);
-    if (reviewFilter) chips.push(`<button type="button" class="filter-chip" data-unfilter="review" aria-label="Show all books again">Waiting for a review <span aria-hidden="true">✕</span></button>`);
     bar.hidden = !chips.length;
     bar.innerHTML = chips.join('');
   }
@@ -1067,8 +1062,8 @@
     el.innerHTML = T.html;
   }
 
-  // the opening scene: once a day (the default), every time, or never — kept per device
-  const introMode = () => { try { return localStorage.getItem('tomestead.intro.mode') || 'day'; } catch { return 'day'; } };
+  // the opening scene: every time (the default), once a day, or never — kept per device
+  const introMode = () => { try { return localStorage.getItem('tomestead.intro.mode') || 'always'; } catch { return 'always'; } };
   function setIntroMode(m) {
     try { localStorage.setItem('tomestead.intro.mode', m); } catch {}
     renderCustomize();
@@ -1194,7 +1189,7 @@
     document.querySelectorAll('#fStatus [data-status]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.status === st)));
     document.querySelectorAll('#bookForm [data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(st); });
     const lbl = { read: 'Your review', reading: 'Thoughts so far', want: 'Why you want to read it', dnf: 'Why you put it down' }[st];
-    $('#fReviewLabel').innerHTML = `${lbl} <span class="opt">(${st === 'read' ? 'you can add it later' : 'optional'})</span>`;
+    $('#fReviewLabel').innerHTML = `${lbl} <span class="opt">(optional)</span>`;
     $('#fReview').placeholder = st === 'read' ? 'What stayed with you?' : st === 'want' ? 'Who recommended it, what caught your eye…' : '';
     if (!editingId) $('#saveBtn').textContent = { read: 'Put it on the shelf', reading: 'Start reading', want: 'Add to my to-read pile', dnf: 'Set it aside' }[st];
     if (st === 'read' && !$('#fFinished').value) $('#fFinished').value = defaultFinished || today();
@@ -1626,7 +1621,6 @@
   // ---------- tags ----------
   function showTag(t) {
     tagFilter = t;
-    reviewFilter = false;
     // look on the pile that has the most books with this tag (your read shelves when it's a tie)
     const has = (y) => shelfBooks(y).filter(b => tagsOf(b).some(x => x.toLowerCase() === t.toLowerCase())).length;
     const here = STATUSES.includes(prefs.year) || prefs.year === 'all' ? prefs.year : 'all';
@@ -2133,7 +2127,7 @@
       const now = e.target.closest('[data-now]');
       if (now) return openProgress(now.dataset.now, now.querySelector('.now-cover'));
       const unf = e.target.closest('[data-unfilter]');
-      if (unf) { if (unf.dataset.unfilter === 'tag') tagFilter = null; else reviewFilter = false; caseIndex = 0; return render(); }
+      if (unf) { tagFilter = null; caseIndex = 0; return render(); }
       const add = e.target.closest('[data-add]');
       if (add) return openEditor(null, null, null, STATUSES.includes(add.dataset.add) ? { status: add.dataset.add } : {});
       if (e.target.closest('[data-goal]')) return openGoal();
@@ -2141,7 +2135,7 @@
       if (cg) return openGoalEditor({ id: cg.dataset.cgoal });
       if (e.target.closest('[data-goals]')) return openGoals();
       if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
-      if (e.target.closest('[data-clear]')) { query = ''; tagFilter = null; reviewFilter = false; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
+      if (e.target.closest('[data-clear]')) { query = ''; tagFilter = null; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
     });
 
     // bookcase paging
@@ -2242,10 +2236,6 @@
     // Goodreads / StoryGraph
     $('#imGo').addEventListener('click', () => { if ($('#imGo').dataset.step === 'go') doImport(); else $('#imFile').click(); });
     $('#imFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) readImport(f); e.target.value = ''; });
-    $('#stats').addEventListener('click', e => {
-      if (!e.target.closest('[data-review]')) return;
-      reviewFilter = true; tagFilter = null; prefs.year = 'all'; caseIndex = 0; savePrefs(); render();
-    });
 
     // goals
     $('#goalForm').addEventListener('submit', saveGoal);

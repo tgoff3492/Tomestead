@@ -1279,18 +1279,8 @@ html.reading .sunlight, html.reading .motes, html.intro-on .motes { opacity: 0; 
    Reading life: statuses, progress, quotes, tags, import, year in review
    ========================================================= */
 
-/* spine marks: a paper slip for "write your review", a silk ribbon for "reading now" */
+/* spine mark: a silk ribbon for "reading now" */
 .book .s-mark { position: absolute; pointer-events: none; z-index: 1; }
-.book.slip .s-mark {
-  top: -9px; left: 22%; width: 52%; height: 14px; border-radius: 1px 1px 0 0;
-  background: linear-gradient(180deg, #f8efd8, #e9dcbc);
-  box-shadow: 0 0 0 .5px rgba(60,40,15,.35), 0 -1px 2px rgba(0,0,0,.18);
-  transform: rotate(-4deg); transform-origin: 50% 100%;
-}
-.book.slip .s-mark::after {
-  content: ""; position: absolute; left: 20%; right: 20%; top: 4px; height: 1px;
-  background: rgba(90,60,30,.35); box-shadow: 0 3px 0 rgba(90,60,30,.25);
-}
 .book.ribbon .s-mark {
   top: -12px; right: 24%; width: 6px; height: 18px;
   background: linear-gradient(90deg, #6e1520, #a3283a 50%, #6e1520);
@@ -1303,7 +1293,6 @@ html.reading .sunlight, html.reading .motes, html.intro-on .motes { opacity: 0; 
 /* status pills after the years */
 .pill-gap { flex: 0 0 auto; width: 1px; margin: 4px 3px; background: currentColor; opacity: .25; color: var(--chrome-soft); }
 .pills .pill-n { font-size: .74rem; opacity: .7; margin-left: 1px; }
-.stats-link { font-size: inherit; margin-left: 2px; white-space: nowrap; }
 
 /* filter chips */
 .filterbar { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 6px 12px; }

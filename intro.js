@@ -6,11 +6,18 @@
   const el = document.getElementById('intro');
   if (!el) return;
   const KEY = 'tomestead.intro';
+  // the scene now plays every time by default; move devices that were on the old once-a-day default over (once)
+  try {
+    if (!localStorage.getItem('tomestead.intro.v2')) {
+      if (localStorage.getItem('tomestead.intro.mode') === 'day') localStorage.setItem('tomestead.intro.mode', 'always');
+      localStorage.setItem('tomestead.intro.v2', '1');
+    }
+  } catch {}
   // the sign-in card comes first; the scene plays once you're in
   if (document.documentElement.classList.contains('auth-gate')) { el.remove(); return; }
   let seen = false;
   try {
-    const mode = localStorage.getItem('tomestead.intro.mode') || 'day';
+    const mode = localStorage.getItem('tomestead.intro.mode') || 'always';
     const d = new Date(), day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     seen = mode === 'never' || (mode === 'day' && localStorage.getItem('tomestead.intro.day') === day) || sessionStorage.getItem(KEY) === '1';
     localStorage.setItem('tomestead.intro.day', day);
