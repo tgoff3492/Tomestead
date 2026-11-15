@@ -23,7 +23,8 @@
     localStorage.setItem('tomestead.intro.day', day);
     sessionStorage.setItem(KEY, '1');
   } catch {}
-  if (seen) { el.remove(); return; }
+  // (the early check in index.html already hid it: don't play an invisible scene behind the shelf)
+  if (seen || document.documentElement.classList.contains('no-intro')) { el.remove(); return; }
 
   const Art = window.TomesteadArt, D = window.TomesteadDecor;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
