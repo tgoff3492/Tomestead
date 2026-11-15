@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -153,6 +155,76 @@ function worldUV(g) {
 }
 function tile(tex, w, h) { const t = tex.clone(); t.repeat.set(1 / w, 1 / h); t.needsUpdate = true; return t; }
 
+// ---------------------------------------------------------------- free assets (Poly Haven, CC0; see CREDITS.md)
+const extra = {};
+const texLoader = new THREE.TextureLoader();
+function loadTex(n, srgb) {
+  return new Promise((res) => texLoader.load('tex/' + n + '.webp', (t) => {
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; res(t);
+  }, undefined, () => res(null)));
+}
+async function loadSet(id) {
+  const [map, normal, arm] = await Promise.all([loadTex(id + '_diff', true), loadTex(id + '_nor'), loadTex(id + '_arm')]);
+  return map ? { map, normal, arm } : null;
+}
+// a material from a texture set, tiled in meters (the room's geometry has world-scale UVs)
+function pbrMat(set, w, h, { color = '#ffffff', rot = false, normalScale = 1, roughness = 1 } = {}) {
+  const t = (tex) => { if (!tex) return null; const c = tex.clone(); c.repeat.set(1 / w, 1 / h); if (rot) { c.rotation = Math.PI / 2; } c.needsUpdate = true; return c; };
+  const arm = t(set.arm);
+  return std({ map: t(set.map), normalMap: t(set.normal), normalScale: new THREE.Vector2(normalScale, normalScale), roughnessMap: arm, aoMap: arm, aoMapIntensity: 0.7, roughness, color });
+}
+const MODELS = ['desk', 'deskchair', 'armchair', 'ottoman', 'sidetable', 'oillamp', 'chandelier', 'plant', 'teaset', 'painting', 'grandfather'];
+const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+function loadModel(n) {
+  return gltfLoader.loadAsync('models/' + n + '.glb').then((g) => g.scene).catch((e) => { console.warn('model failed', n, e && e.message); return null; });
+}
+function placeModel(obj, x, y, z, ry = 0, s2 = 1, { cast = true } = {}) {
+  if (!obj) return null;
+  obj.position.set(x, y, z); obj.rotation.y = ry; obj.scale.setScalar(s2);
+  obj.traverse((o) => { if (o.isMesh) { o.castShadow = cast; o.receiveShadow = true; o.userData.model = true; } });
+  scene.add(obj);
+  return obj;
+}
+function placeFurniture(MOD) {
+  const lights = [];
+  // the reading corner: armchair, ottoman with a tea tray, a tall side table with an oil lamp, a painting above
+  placeModel(MOD.armchair, 1.75, 0, -2.0, -0.5, 1);
+  placeModel(MOD.ottoman, 1.2, 0, -1.2, -0.4, 0.8);
+  placeModel(MOD.teaset, 1.2, 0.624 * 0.8, -1.2, -0.4, 0.55);
+  placeModel(MOD.sidetable, 2.55, 0, -2.38, 0, 1);
+  placeModel(MOD.painting, 1.85, 1.78, -2.69, 0, 1.6, { cast: false });
+  let oilGlow = null, flameMats = [];
+  if (MOD.oillamp) {
+    placeModel(MOD.oillamp, 2.55, 0.761, -2.38, 0.4, 0.9);
+    MOD.oillamp.traverse((o) => { if (o.isMesh && /flame/.test(o.material.name)) flameMats.push(o.material); });
+    oilGlow = new THREE.PointLight('#ffae55', 0, 3.4, 2); oilGlow.position.set(2.5, 1.25, -2.25); scene.add(oilGlow);
+  }
+  // the grandfather clock and the big plant in the back-left corner
+  if (placeModel(MOD.grandfather, -1.6, 0, -2.5, 0, 0.95)) {
+    MOD.grandfather.traverse((o) => { if (o.isMesh && /glass/.test(o.material.name)) { o.material.transparent = true; o.material.opacity = 0.18; o.material.depthWrite = false; o.castShadow = false; } });
+  }
+  placeModel(MOD.plant, -2.5, 0, -2.25, 0.6, 1.3);
+  // a brass chandelier over the rug
+  let chand = null, chandGlow = null, bulbs = [];
+  if (MOD.chandelier) {
+    placeModel(MOD.chandelier, 0, 2.97 - 0.908 * 0.85, 0.05, 0, 0.85, { cast: false });
+    MOD.chandelier.traverse((o) => { if (o.isMesh && /bulb/.test(o.material.name)) bulbs.push(o.material); });
+    chand = new THREE.PointLight('#ffc27a', 0, 7, 2); chand.position.set(0, 2.35, 0.05); scene.add(chand);
+    const gm = new THREE.SpriteMaterial({ map: canvasTex(glowTex(), { repeat: false }), color: '#ffcf8a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    chandGlow = new THREE.Sprite(gm); chandGlow.scale.set(1.1, 1.1, 1); chandGlow.position.set(0, 2.42, 0.05); scene.add(chandGlow);
+  }
+  return {
+    setLight(L) {
+      if (oilGlow) oilGlow.intensity = L.oil;
+      flameMats.forEach((m) => { m.emissive && m.emissive.set('#ffb35c'); m.emissiveIntensity = L.oil ? 3 : 0.4; });
+      if (chand) chand.intensity = L.chand;
+      if (chandGlow) chandGlow.visible = L.chand > 0;
+      bulbs.forEach((m) => { m.emissive && m.emissive.set('#ffd9a0'); m.emissiveIntensity = L.chand ? 2.5 : 0.1; });
+    },
+  };
+}
+
 // ---------------------------------------------------------------- helpers
 const statics = [];
 function mesh(geo, mat, parent = scene, { cast = true, recv = true } = {}) {
@@ -175,8 +247,15 @@ async function build() {
     document.fonts ? document.fonts.load('40px "IM Fell English"').catch(() => {}) : Promise.resolve(),
     new Promise((r) => setTimeout(r, 1800)),
   ]);
-  const [floorImg, woodV, woodH, plaster, cloth, leather] = await Promise.all(
-    ['floor', 'wood-v', 'wood-h', 'plaster', 'cloth', 'leather'].map((n) => loadImg(TEX + n + '.webp')));
+  const woodSet = { oak: 'oak_veneer_01', walnut: 'walnut_veneer', cherry: 'lacquered_cherry_wood' }[lib.theme.wood || 'oak'] || 'oak_veneer_01';
+  const SETS = ['herringbone_parquet', 'plastered_wall', 'wooden_panels', 'dark_wooden_planks', woodSet];
+  const [imgs, sets, MOD] = await Promise.all([
+    Promise.all(['floor', 'wood-v', 'wood-h', 'plaster', 'cloth', 'leather'].map((n) => loadImg(TEX + n + '.webp'))),
+    Promise.all(SETS.map(loadSet)).then((a) => Object.fromEntries(SETS.map((k, i) => [k, a[i]]))),
+    Promise.all(MODELS.map(loadModel)).then((a) => Object.fromEntries(MODELS.map((k, i) => [k, a[i]]))),
+    Promise.all([loadTex('poly_wool_herringbone_nor'), loadTex('brown_leather_nor')]).then(([w, l]) => { extra.wool = w; extra.leather = l; }),
+  ]);
+  const [floorImg, woodV, woodH, plaster, cloth, leather] = imgs;
   $('veil-sub').textContent = 'Shelving the books…';
 
   // ----- materials
@@ -203,14 +282,25 @@ async function build() {
     tomeLeather: std({ map: canvasTex(tinted(leather, '#3b2350', 0.9)), roughness: 0.6 }),
     dark: std({ color: '#1b120b', roughness: 0.8 }),
   };
+  const W = sets[woodSet];
+  if (W) {
+    const tint = { oak: '#f0c890', walnut: '#ffffff', cherry: '#ffffff' }[lib.theme.wood || 'oak'] || wood[0];
+    M.caseSide = pbrMat(W, 0.7, 1.4, { color: tint, roughness: 1 });
+    M.caseShelf = pbrMat(W, 0.7, 1.4, { color: tint, rot: true });
+    M.caseDark = pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.55) });
+    M.trim = pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.5), rot: true });
+  }
+  if (sets.dark_wooden_planks) M.beam = pbrMat(sets.dark_wooden_planks, 2.2, 2.2, { color: '#b9a48c' });
+  if (extra.leather) { M.tomeLeather.normalMap = tile(extra.leather, 0.15, 0.15); M.tomeLeather.needsUpdate = true; }
   const floorT = canvasTex(floorImg || tinted(null, '#8e5f35'));
-  const floorMat = std({ map: tile(floorT, 2.2, 0.52), roughness: 0.62 });
+  const floorMat = sets.herringbone_parquet ? pbrMat(sets.herringbone_parquet, 1.5, 1.5, { color: '#f2dcc2' }) : std({ map: tile(floorT, 2.2, 0.52), roughness: 0.62 });
   const plasterT = canvasTex(tinted(plaster, '#c7ab82', 0.9));
   const starT = canvasTex(starChart());
-  const wallMat = std({ map: tile(plasterT, 1.6, 1.6), roughness: 0.92 });
+  const PW = sets.plastered_wall;
+  const wallMat = PW ? pbrMat(PW, 2.2, 2.2, { color: '#ecc995', normalScale: 0.6 }) : std({ map: tile(plasterT, 1.6, 1.6), roughness: 0.92 });
   const wallDay = wallMat.map, wallNight = tile(starT, 1.8, 1.8);
-  const panelMat = std({ map: canvasTex(panelTex(woodH)), roughness: 0.6 });
-  panelMat.map.repeat.set(1 / 1.2, 1 / 0.9);
+  const panelMat = sets.wooden_panels ? pbrMat(sets.wooden_panels, 1.2, 1.2, { color: '#d9b48f' }) : std({ map: canvasTex(panelTex(woodH)), roughness: 0.6 });
+  if (!sets.wooden_panels) panelMat.map.repeat.set(1 / 1.2, 1 / 0.9);
 
   // ----- the room: 6m wide, 5.4m deep, 3m tall
   const floor = mesh(new THREE.PlaneGeometry(6, 5.4).rotateX(-Math.PI / 2), floorMat, scene, { cast: false });
@@ -237,7 +327,7 @@ async function build() {
   // ----- window
   const winMid = (WIN.z0 + WIN.z1) / 2, winW = WIN.z1 - WIN.z0, winH = WIN.y1 - WIN.y0;
   box(0.08, 0.1, winW + 0.24, M.trim, -2.97, WIN.y1 + 0.05, winMid);
-  box(0.22, 0.05, winW + 0.3, M.trim, -2.92, WIN.y0 - 0.02, winMid);
+  box(0.09, 0.04, winW + 0.3, M.trim, -2.965, WIN.y0 - 0.02, winMid);
   box(0.08, winH, 0.1, M.trim, -2.97, (WIN.y0 + WIN.y1) / 2, WIN.z0 - 0.05);
   box(0.08, winH, 0.1, M.trim, -2.97, (WIN.y0 + WIN.y1) / 2, WIN.z1 + 0.05);
   box(0.04, winH, 0.035, M.trim, -3.04, (WIN.y0 + WIN.y1) / 2, winMid);
@@ -259,17 +349,17 @@ async function build() {
   // ----- the arched bookcase
   const books = buildBookcase(M, { cloth, leather });
   // ----- the desk under the window
-  const desk = buildDesk(M, woodH);
+  const desk = buildDesk(M, woodH, MOD);
+  const furniture = placeFurniture(MOD);
   // ----- the magic tome
   const tome = buildTome(M);
   // ----- a rug, a plant, a star map
-  const rug = mesh(new THREE.PlaneGeometry(2.8, 1.9).rotateX(-Math.PI / 2), std({ map: canvasTex(rugTex(), { repeat: false }), roughness: 0.95 }), scene, { cast: false });
-  rug.position.set(0, 0.004, -0.55);
-  buildPlant(M, -2.55, -2.3);
+  const rug = mesh(new THREE.PlaneGeometry(2.8, 1.9).rotateX(-Math.PI / 2), std({ map: canvasTex(rugTex(), { repeat: false }), roughness: 0.95, normalMap: extra.wool ? tile(extra.wool, 0.25, 0.25) : null }), scene, { cast: false });
+  rug.position.set(0, 0.004, -0.35);
   const map = mesh(new THREE.PlaneGeometry(1.0, 1.25).rotateY(-Math.PI / 2), std({ map: canvasTex(starChart(true), { repeat: false }), roughness: 0.8 }), scene, { cast: false });
-  map.position.set(2.985, 1.75, -0.6);
-  box(0.04, 0.05, 1.12, M.gold, 2.98, 2.4, -0.6); box(0.04, 0.05, 1.12, M.gold, 2.98, 1.1, -0.6);
-  box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, -1.15); box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, -0.05);
+  map.position.set(2.985, 1.75, 0.1);
+  box(0.04, 0.05, 1.12, M.gold, 2.98, 2.4, 0.1); box(0.04, 0.05, 1.12, M.gold, 2.98, 1.1, 0.1);
+  box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, -0.45); box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, 0.65);
 
   // ----- light
   const hemi = new THREE.HemisphereLight('#ffe6c4', '#4a3020', 1);
@@ -299,9 +389,9 @@ async function build() {
   const motes = buildMotes(WIN, sunDir);
 
   const LOOK = {
-    day: { hemi: ['#ffe8c8', '#4a3020', 0.55], sun: ['#ffb46b', 8.5], bounce: 3.0, fill: 1.3, fillC: '#ffd9a8', lamp: 0.6, candle: 0, tome: 0.5, shelf: 0,
+    day: { hemi: ['#ffe8c8', '#4a3020', 0.55], sun: ['#ffb46b', 8.5], bounce: 3.0, fill: 1.3, fillC: '#ffd9a8', lamp: 0.6, candle: 0, tome: 0.5, shelf: 0, oil: 0, chand: 0,
       env: 0.3, exposure: 1.0, beam: [1, 0.78, 0.5], beamA: 0.85, mote: [1, 0.9, 0.7], moteA: 1, wall: wallDay, wallC: '#ffffff', sky: 'day', bg: '#140d08' },
-    night: { hemi: ['#6f86c0', '#120c10', 0.22], sun: ['#8fa8ff', 1.1], bounce: 0.25, fill: 0.5, fillC: '#8094d0', lamp: 3.4, candle: 1.6, tome: 1.6, shelf: 2.2,
+    night: { hemi: ['#6f86c0', '#120c10', 0.32], sun: ['#8fa8ff', 1.1], bounce: 0.25, fill: 0.7, fillC: '#8094d0', lamp: 3.4, candle: 1.6, tome: 1.6, shelf: 1.2, oil: 2.8, chand: 5.5,
       env: 0.08, exposure: 1.08, beam: [0.55, 0.66, 1], beamA: 0.22, mote: [0.9, 0.75, 0.5], moteA: 0.45, wall: wallNight, wallC: '#ffffff', sky: 'night', bg: '#07080e' },
   };
   const skyCanvases = { day: skyMat.map, night: canvasTex(skyTex('night'), { repeat: false }) };
@@ -312,6 +402,7 @@ async function build() {
     bounce.intensity = L.bounce; bounce.color.set(mode === 'day' ? '#ffb87a' : '#7d90d0');
     fill.intensity = L.fill; fill.color.set(L.fillC); shelfGlow.intensity = L.shelf;
     desk.setLight(L.lamp, L.candle);
+    furniture.setLight(L);
     tome.setLight(L.tome);
     scene.environmentIntensity = L.env;
     renderer.toneMappingExposure = L.exposure;
@@ -334,7 +425,7 @@ async function build() {
   mergeStatics();
   scene.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
   renderer.shadowMap.needsUpdate = true;
-  return { books, desk, tome, beam, motes, applyLook };
+  return { books, desk, tome, beam, motes, applyLook, furniture };
 }
 
 function mergeStatics() {
@@ -682,11 +773,15 @@ function globeTex() {
 }
 
 // ---------------------------------------------------------------- the desk
-function buildDesk(M, woodH) {
+function buildDesk(M, woodH, MOD) {
   const g = new THREE.Group(); scene.add(g);
-  g.position.set(-2.3, 0, -0.6);
-  const TOP = 0.76;
-  const topTex = canvasTex(tinted(woodH, wood[2], 0.6)); topTex.repeat.set(0.6, 1); topTex.rotation = Math.PI / 2;
+  // a carved console from Poly Haven stands against the wall; without it, a simple wooden desk
+  const model = MOD.desk;
+  g.position.set(model ? -2.7 : -2.3, 0, -0.6);
+  const TOP = model ? 0.756 : 0.76;
+  if (model) { placeModel(model, -2.7, 0, -0.6, Math.PI / 2, 0.82); }
+  else {
+    const topTex = canvasTex(tinted(woodH, wood[2], 0.6)); topTex.repeat.set(0.6, 1); topTex.rotation = Math.PI / 2;
   const topMat = std({ map: topTex, roughness: 0.38 });
   const top = mesh(new RoundedBoxGeometry(0.72, 0.045, 1.4, 2, 0.012), topMat, g); top.position.y = TOP;
   box(0.64, 0.11, 1.3, M.trim, 0, TOP - 0.075, 0, g);
@@ -695,6 +790,7 @@ function buildDesk(M, woodH) {
     leg.position.set(sx * 0.3, 0, sz * 0.62);
   }
   for (const z of [-0.35, 0.35]) { const k = mesh(new THREE.SphereGeometry(0.014, 12, 8), M.brass, g); k.position.set(0.325, TOP - 0.075, z); }
+  }
   // banker's lamp
   const lamp = new THREE.Group(); g.add(lamp); lamp.position.set(-0.17, TOP + 0.022, -0.46);
   mesh(lathe([[0, 0], [0.085, 0], [0.085, 0.015], [0.06, 0.03], [0.012, 0.035], [0, 0.035]]), M.brass, lamp);
@@ -717,11 +813,6 @@ function buildDesk(M, woodH) {
   pg.computeVertexNormals();
   const pages = mesh(pg, pageMat, open, { cast: false }); pages.userData.deskBook = true;
   // tea, glasses, a candle, a little stack
-  const tea = new THREE.Group(); g.add(tea); tea.position.set(0.13, TOP + 0.022, 0.42);
-  mesh(lathe([[0, 0], [0.07, 0], [0.075, 0.008], [0.072, 0.01], [0, 0.008]]), M.ceramic, tea);
-  mesh(lathe([[0, 0.008], [0.03, 0.01], [0.042, 0.03], [0.048, 0.07], [0.044, 0.07], [0.038, 0.032], [0, 0.03]]), M.ceramic, tea);
-  const tl = mesh(new THREE.CircleGeometry(0.043, 20).rotateX(-Math.PI / 2), std({ color: '#5a2e12', roughness: 0.1 }), tea, { cast: false }); tl.position.y = 0.06;
-  const handle = mesh(new THREE.TorusGeometry(0.018, 0.005, 8, 16), M.ceramic, tea); handle.position.set(0.05, 0.045, 0);
   const gls = new THREE.Group(); g.add(gls); gls.position.set(0.17, TOP + 0.028, 0.18); gls.rotation.y = 0.5;
   for (const sx of [-1, 1]) { const r = mesh(new THREE.TorusGeometry(0.022, 0.0025, 8, 24).rotateX(Math.PI / 2), M.gold, gls); r.position.x = sx * 0.028; }
   const br = mesh(new THREE.TorusGeometry(0.008, 0.002, 6, 10, Math.PI), M.gold, gls); br.rotation.x = -Math.PI / 2;
@@ -734,8 +825,9 @@ function buildDesk(M, woodH) {
   [[0.26, 0.04, '#2E5E5E'], [0.24, 0.032, '#C2902F'], [0.22, 0.045, '#5B2F4A']].reduce((yy, [w, th, col], i) => {
     const b = box(w * 0.7, th, w, std({ color: col, roughness: 0.65 }), 0, yy + th / 2, 0, g); b.position.set(-0.16, TOP + 0.022, 0.12); b.rotation.y = i * 0.12; return yy + th;
   }, 0);
-  // a Windsor chair
-  const chair = new THREE.Group(); g.add(chair); chair.position.set(0.72, 0, 0.05); chair.rotation.y = Math.PI / 2;
+  // a green upholstered desk chair (Poly Haven), or a simple Windsor chair
+  if (MOD.deskchair) placeModel(MOD.deskchair, -1.95, 0, -0.05, -Math.PI / 2 + 0.55, 1);
+  const chair = new THREE.Group(); if (!MOD.deskchair) g.add(chair); chair.position.set(0.72, 0, 0.05); chair.rotation.y = Math.PI / 2;
   const seat = mesh(new RoundedBoxGeometry(0.44, 0.04, 0.42, 2, 0.015), M.trim, chair); seat.position.y = 0.46;
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const l = mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.47, 10), M.trim, chair); l.position.set(sx * 0.17, 0.225, sz * 0.15); l.rotation.set(sz * 0.08, 0, -sx * 0.08);
@@ -782,6 +874,13 @@ function pageTex(b) {
   }
   return c;
 }
+function glowTex() {
+  const [c, x] = mkCanvas(128, 128);
+  const g = x.createRadialGradient(64, 64, 2, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,240,210,.9)'); g.addColorStop(0.25, 'rgba(255,200,120,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  return c;
+}
 function flameTex() {
   const [c, x] = mkCanvas(64, 128);
   const g = x.createRadialGradient(32, 84, 2, 32, 74, 50);
@@ -793,7 +892,7 @@ function flameTex() {
 // ---------------------------------------------------------------- the magic tome
 function buildTome(M) {
   const g = new THREE.Group(); scene.add(g);
-  g.position.set(1.65, 0, -1.45); g.rotation.y = -0.72;
+  g.position.set(2.25, 0, 0.1); g.rotation.y = -1.1;
   const rug = mesh(new THREE.CircleGeometry(0.85, 48).rotateX(-Math.PI / 2), std({ map: canvasTex(roundRugTex(), { repeat: false }), roughness: 0.95 }), g, { cast: false });
   rug.position.y = 0.006;
   mesh(lathe([[0, 0], [0.22, 0], [0.22, 0.05], [0.18, 0.08], [0.16, 0.12], [0.1, 0.18], [0.085, 0.3], [0.09, 0.62], [0.11, 0.7], [0.15, 0.78], [0.17, 0.8], [0.17, 0.84], [0, 0.84]], 32), M.stone, g);
@@ -994,8 +1093,9 @@ function buildMotes(WIN, dir) {
 const STATIONS = {
   room: { p: [1.0, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 },
   shelf: { p: [0, 1.45, -0.4], t: [0, 1.32, -2.4], w: 2.3, h: 2.5, max: 2.9 },
-  desk: { p: [-0.95, 1.5, 0.45], t: [-2.35, 0.8, -0.7], w: 1.5, h: 1.3, max: 2.4 },
-  tome: { p: [0.35, 1.6, 0.05], t: [1.65, 1.08, -1.45], w: 1.3, h: 1.4, max: 2.4 },
+  desk: { p: [-1.2, 1.5, 0.4], t: [-2.7, 0.85, -0.65], w: 1.5, h: 1.3, max: 2.4 },
+  tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
+  nook: { p: [0.2, 1.5, 0.2], t: [1.9, 0.95, -2.0], w: 1.9, h: 1.7, max: 3.0 },
 };
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0 };
 let station = 'room', tween = null;

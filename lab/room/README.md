@@ -12,12 +12,17 @@ Open it at `https://tgoff3492.github.io/Tomestead/lab/room/` on the phone where 
 - ⏱ Speed check: how long the first view took, what was downloaded, frame rate while moving, draw calls.
 - Devices without WebGL get a message; in the app they'd keep the 2D opening scene.
 
+## Furniture and textures
+Free Poly Haven models and textures (all CC0; list in `CREDITS.md`): a carved console desk and green chair under the window, a reading corner (armchair, ottoman with a tea set, tall side table with an oil lamp, a painting), a grandfather clock, a big potted plant, a brass chandelier, herringbone parquet, plastered walls, wood-panel wainscot and plank ceiling. The bookcase uses a wood veneer that follows your wood choice (oak, walnut or cherry; other finishes tint the oak). If any of these fail to load, the room falls back to the hand-built pieces.
+
+To add or swap one: download it with `api.polyhaven.com`, shrink it with gltf-transform (WebP textures at 512–1024 px, meshopt compression), drop it in `models/` and place it in `placeFurniture()`.
+
 ## How it stays fast
 - Shadows are drawn once, since nothing in the room moves.
 - Every still piece that shares a material is fused into one mesh (about 100 draw calls).
 - All spines share one painted texture; textures are the app's own `tex/` files, tinted in the browser.
 - When nothing is moving, it draws 30 frames a second instead of 60; if a phone struggles while moving, it lowers the resolution.
-- One script, about 170 KB compressed (three.js included), cached after the first visit.
+- One script, about 170 KB compressed (three.js included), plus about 3.3 MB of furniture and textures; all cached after the first visit.
 
 ## Building
 The source is `src/main.js`; `room.js` is the bundled, minified file the page loads.
