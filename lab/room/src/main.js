@@ -658,7 +658,7 @@ function plateTex(text, w = 512, h = 96) {
 }
 function buildBookcase(M, { cloth, leather }) {
   const g = new THREE.Group(); scene.add(g);
-  const W = 1.9, D = 0.4, P = 0.055, PL = 0.1, ROWH = 0.38, PLK = 0.035, ROWS = 3, HS = 0.12, RISE = 0.27;
+  const W = 1.65, D = 0.4, P = 0.055, PL = 0.12, ROWH = 0.43, PLK = 0.035, ROWS = 3, HS = 0.16, RISE = 0.3;
   const ZB = -2.68, ZF = ZB + D, ZC = ZB + D / 2;
   const plankY = (k) => PL + k * (ROWH + PLK);
   const SILL = plankY(ROWS);                       // the sill sits where a fourth plank would
