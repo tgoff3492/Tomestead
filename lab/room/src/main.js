@@ -14,6 +14,9 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const T0 = performance.now();
 const TEX = '../../tex/';
+// every build gets its own tag, so browsers fetch fresh files instead of reusing an older copy
+const V = typeof __BUILD__ !== 'undefined' ? __BUILD__ : String(Date.now());
+const q = (u) => u + '?v=' + V;
 
 // ---------------------------------------------------------------- your library
 const PALETTE = [
@@ -160,7 +163,7 @@ function tile(tex, w, h) { const t = tex.clone(); t.repeat.set(1 / w, 1 / h); t.
 const extra = {};
 const texLoader = new THREE.TextureLoader();
 function loadTex(n, srgb) {
-  return new Promise((res) => texLoader.load('tex/' + n + '.webp', (t) => {
+  return new Promise((res) => texLoader.load(q('tex/' + n + '.webp'), (t) => {
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; res(t);
   }, undefined, () => res(null)));
@@ -178,7 +181,7 @@ function pbrMat(set, w, h, { color = '#ffffff', rot = false, normalScale = 1, ro
 const MODELS = ['deskchair', 'armchair', 'ottoman', 'sidetable', 'oillamp', 'chandelier', 'plant', 'teacup', 'painting', 'grandfather', 'clock', 'candlestick', 'vase', 'elephant'];
 const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 function loadModel(n) {
-  return gltfLoader.loadAsync('models/' + n + '.glb').then((g) => g.scene).catch((e) => { console.warn('model failed', n, e && e.message); return null; });
+  return gltfLoader.loadAsync(q('models/' + n + '.glb')).then((g) => g.scene).catch((e) => { console.warn('model failed', n, e && e.message); return null; });
 }
 function placeModel(obj, x, y, z, ry = 0, s2 = 1, { cast = true } = {}) {
   if (!obj) return null;
@@ -1027,7 +1030,7 @@ function buildFireplace(MOD) {
   // a big painting over the mantel: Highland cattle on the moor, in the ornate gilt frame
   if (MOD.painting) {
     const art = MOD.painting.clone(true);
-    const tex = texLoader.load('tex/painting_highland.webp'); tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso;
+    const tex = texLoader.load(q('tex/painting_highland.webp')); tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso;
     art.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); o.material.map = tex; o.material.color.set('#ffffff'); o.material.needsUpdate = true; } });
     placeModel(art, X + 0.005, MT + 0.62, Z, Math.PI / 2, 2.25, { cast: false });
   }

@@ -25,11 +25,11 @@ To add or swap one: download it with `api.polyhaven.com`, shrink it with gltf-tr
 - One script, about 170 KB compressed (three.js included), plus about 3.3 MB of furniture and textures; all cached after the first visit.
 
 ## Building
-The source is `src/main.js`; `room.js` is the bundled, minified file the page loads.
+The source is `src/main.js`; `room.js` is the bundled, minified file the page loads. `build.sh` also stamps a build tag on the script, stylesheet and asset URLs, so phones fetch the new version right away instead of reusing a cached copy for up to 10 minutes.
 
 ```
 npm i three@0.187.0 esbuild
-NODE_PATH=./node_modules npx esbuild lab/room/src/main.js --bundle --minify --format=esm --target=es2020 --outfile=lab/room/room.js
+sh lab/room/build.sh --minify
 ```
 
 Handy URL options: `?t=day` / `?t=night`, `?st=shelf|desk|hearth|tome|nook` (start at a station), `?sample=1` (sample books), `?perf=1` (open the speed check).
