@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v21';
+const VERSION = 'tomestead-v22';
 const SHELL = [
   './',
   'index.html',
@@ -60,13 +60,15 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.open(VERSION).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: req.mode === 'navigate' });
+      // the room's files carry a build tag (?v=…): keep one copy of each, under its plain address
+      const key = url.pathname.includes('/room/') ? url.origin + url.pathname : req;
+      const cached = await cache.match(key, { ignoreSearch: req.mode === 'navigate' });
       // Fonts, cover images, cover photos and the (versioned) sign-in code don't change: serve from cache first.
       if ((isFont || isCover || isSdk || isPhoto) && cached) return cached;
       // App files: get the newest copy when online, fall back to the saved copy offline.
       try {
         const res = await fetch(req);
-        if (res && (res.ok || (res.type === 'opaque' && !isCover))) cache.put(req, res.clone());
+        if (res && (res.ok || (res.type === 'opaque' && !isCover))) cache.put(key, res.clone());
         return res;
       } catch {
         return cached || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());

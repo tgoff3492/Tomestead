@@ -1647,3 +1647,22 @@ html[data-light="night"] .shelf-label { filter: brightness(1.15); }
   .shelf-label { height: 13px; font-size: .62rem; padding: 0 8px; }
   .ledger-list li.ledger-head { padding-left: 16px; }
 }
+
+/* ---------- the 3D reading room as home ---------- */
+#roomOrigin { position: fixed; pointer-events: none; visibility: hidden; }
+html.room-mode, html.room-mode body { overflow: hidden; overscroll-behavior: none; }
+html.room-mode body { background: #140d08; }
+html.room-mode #stage { pointer-events: none; min-height: 0; }
+html.room-mode .topbar, html.room-mode .toolbar { pointer-events: auto; }
+html.room-mode #libraryPage main, html.room-mode #years, html.room-mode .toolbar-right,
+html.room-mode #floor, html.room-mode .sunlight, html.room-mode .motes { display: none !important; }
+html.room-mode #stage::before { content: ""; position: fixed; left: 0; right: 0; top: 0; height: calc(env(safe-area-inset-top) + 150px); pointer-events: none;
+  background: linear-gradient(180deg, rgba(12,7,3,.72), rgba(12,7,3,.38) 55%, rgba(12,7,3,0)); }
+html.room-mode .topbar, html.room-mode .toolbar { position: relative; }
+html.room-mode {
+  --chrome-title: #e6c886; --chrome-title-shadow: 0 2px 12px rgba(0,0,0,.7);
+  --chrome-dim: rgba(239,227,200,.82); --chrome-ink: #fff4dc; --chrome-soft: rgba(239,227,200,.85);
+  --chrome-pill: rgba(20,12,6,.6); --chrome-pill-shadow: 0 0 0 1px rgba(230,200,134,.28);
+  --chrome-on: #efe3c8; --chrome-on-ink: #2a1e16; --chrome-accent: #e6c886; --chrome-text-shadow: 0 1px 6px rgba(0,0,0,.7);
+}
+html.room-mode .stats { text-shadow: 0 1px 6px rgba(0,0,0,.7); }

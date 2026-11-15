@@ -60,6 +60,11 @@
   }
   prefs.goals = prefs.goals || {};
   prefs.trophies = prefs.trophies || {};
+  // the 3D reading room became home in Nov 2026: move every device there once (Classic is one tap away)
+  if (!prefs.roomV1) { prefs.view = 'room'; prefs.roomV1 = true; }
+  // the room needs WebGL 2; anything without it keeps the classic bookcase
+  let canRoom = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext && c.getContext('webgl2')); } catch { return false; } })();
+  const viewNow = () => (prefs.view === 'room' && !canRoom ? 'shelf' : prefs.view);
   prefs.recs = prefs.recs || { dismissed: [] };
   // tags: a starter set you can change, plus any you make yourself
   const TAG_PRESETS = ['Favorite', 'Comfort read', 'Book club', 'Cozy', 'Dark', 'Funny', 'Hopeful', 'Emotional', 'Mysterious', 'Adventurous', 'Thought-provoking', 'Fast-paced'];
@@ -991,6 +996,7 @@
     syncTrophies();
     syncGoalMarks();
     const cz = onCustomize(), yr = onYear();
+    if (cz || yr) roomHide();
     $('#libraryPage').hidden = cz || yr;
     $('#customizePage').hidden = !cz;
     $('#yearPage').hidden = !yr;
@@ -1002,13 +1008,15 @@
     renderFilters();
     renderNow();
     renderGoalBar();
-    const shelf = prefs.view === 'shelf';
+    const view = viewNow(), shelf = view === 'shelf', room = view === 'room';
     $('#shelfView').hidden = !shelf;
-    $('#listView').hidden = shelf;
+    $('#listView').hidden = view !== 'list';
+    $('#tab-room').hidden = !canRoom;
+    $('#tab-room').setAttribute('aria-selected', String(room));
     $('#tab-shelf').setAttribute('aria-selected', String(shelf));
-    $('#tab-list').setAttribute('aria-selected', String(!shelf));
+    $('#tab-list').setAttribute('aria-selected', String(view === 'list'));
     $('#sort').value = prefs.sort;
-    if (shelf) renderShelf(); else renderList();
+    if (room) roomShow(); else { roomHide(); if (shelf) renderShelf(); else renderList(); }
     placeFloor();
     justAdded = null;
   }
@@ -1025,7 +1033,7 @@
   }
   function placeFloor() {
     const fl = $('#floor');
-    const show = !onCustomize() && !onYear() && prefs.view === 'shelf';
+    const show = !onCustomize() && !onYear() && viewNow() === 'shelf';
     fl.hidden = !show;
     if (!show) return;
     const stage = $('#stage'), cases = $('#cases');
@@ -1084,6 +1092,9 @@
     buildCases($('#czPreview'), pv.map(b => ({ type: 'book', b, sec: statusOf(b) })), { maxRows: 1, minRows: 2, perCase: 2, plate: () => 'Preview', labels: new Set(pv.map(statusOf)).size > 1 ? {} : null });
     const im = introMode();
     document.querySelectorAll('#czIntro [data-intro]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.intro === im)));
+    $('#czHomeSec').hidden = !canRoom;
+    const home = viewNow() === 'room' ? 'room' : 'shelf';
+    document.querySelectorAll('#czHome [data-home]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.home === home)));
 
     $('#czWall').innerHTML = D.WALLPAPERS.map(w => `
       <button type="button" class="tile" role="radio" aria-checked="${t.wall === w.key}" data-wall="${w.key}">
@@ -1238,7 +1249,7 @@
   let listTimer;
   function scheduleListRefresh() {
     clearTimeout(listTimer);
-    listTimer = setTimeout(() => { if (prefs.view === 'list' && !onCustomize() && !(reader && reader.isOpen())) renderList(); }, 400);
+    listTimer = setTimeout(() => { if (viewNow() === 'list' && !onCustomize() && !(reader && reader.isOpen())) renderList(); }, 400);
   }
 
   let reader = null;
@@ -2285,7 +2296,7 @@
     let st;
     $('#cases').addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(updatePager, 60); }, { passive: true });
     document.addEventListener('keydown', e => {
-      if (onCustomize() || onYear() || prefs.view !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden || (reader && reader.isOpen())) return;
+      if (onCustomize() || onYear() || viewNow() !== 'shelf' || document.querySelector('dialog[open]') || !$('#celebrate').hidden || (reader && reader.isOpen())) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
       if (e.key === 'ArrowRight') goCase(currentCase() + 1);
       if (e.key === 'ArrowLeft') goCase(currentCase() - 1);
@@ -2414,6 +2425,7 @@
     $('#csvBtn').addEventListener('click', () => { more.open = false; openImport(); });
     $('#yrDone').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); render(); window.scrollTo(0, 0); });
     $('#czIntro').addEventListener('click', e => { const b = e.target.closest('[data-intro]'); if (b) setIntroMode(b.dataset.intro); });
+    $('#czHome').addEventListener('click', e => { const b = e.target.closest('[data-home]'); if (!b) return; prefs.view = b.dataset.home; savePrefs(); renderCustomize(); });
     $('#czBookendFor').addEventListener('click', e => { const b = e.target.closest('[data-befor]'); if (b) { bookendFor = b.dataset.befor; renderCustomize(); } });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     $('#signOutBtn').addEventListener('click', () => { more.open = false; Sync.signOut(); });
@@ -2673,6 +2685,42 @@
     d.reviewEmpty = { read: 'You haven’t written a review yet.', reading: 'Nothing noted yet.', want: 'No note yet.', dnf: 'No note yet.' }[st];
     d.reviewCta = { read: 'Write my review', reading: 'Add a note', want: 'Add a note', dnf: 'Add a note' }[st];
     return d;
+  }
+
+  // ---------- the 3D reading room ----------
+  // room/room.js is loaded the first time the room is shown; it draws behind the page and hands
+  // back to the app's own screens (the reading table, progress, suggestions, goals, year in review).
+  let roomLoading = false;
+  function roomOrigin(rect) {
+    // a stand-in for the spine the reading table flies the book out of
+    const el = $('#roomOrigin');
+    Object.assign(el.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, visibility: 'visible' });
+    return el;
+  }
+  window.TomesteadRoomHost = {
+    data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies }),
+    openBook: (id, rect) => openDetail(id, rect ? roomOrigin(rect) : null),
+    openProgress: (id) => openProgress(id),
+    openRecs: () => recommender.open(),
+    openGoals: () => openGoals(),
+    openYear: () => { location.hash = 'year'; },
+    addBook: () => openEditor(),
+    unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
+    ready: (room) => { if (viewNow() === 'room' && !onCustomize() && !onYear()) room.setActive(true); else room.setActive(false); },
+  };
+  function roomShow() {
+    if (Sync.gated) return roomHide();          // the sign-in card comes first; the page reloads once you're in
+    document.documentElement.classList.add('room-mode');
+    $('#room3d').hidden = false;
+    if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
+    if (roomLoading) return;
+    roomLoading = true;
+    import('./room/room.js?v=20261115134856').catch(() => window.TomesteadRoomHost.unavailable());
+  }
+  function roomHide() {
+    document.documentElement.classList.remove('room-mode');
+    $('#room3d').hidden = true;
+    if (window.TomesteadRoom) window.TomesteadRoom.setActive(false);
   }
 
   reader = window.TomesteadReader({

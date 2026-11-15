@@ -17,6 +17,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="room/room.css?v=20261115134856">
+  <script>try { var u = localStorage.getItem('tomestead.uid'), pv = JSON.parse(localStorage.getItem('tomestead.prefs.v1' + (u ? ':' + u : '')) || '{}') || {}, cv = document.createElement('canvas'); if (!(pv.roomV1 && pv.view !== 'room') && cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
 <body>
@@ -30,6 +32,26 @@
     </div>
     <p class="intro-skip">Tap to skip</p>
   </div>
+  <!-- the 3D reading room: home when the device can draw it (room/ holds its code, models and textures) -->
+  <div id="room3d" class="rm" hidden>
+    <canvas id="rm-scene" aria-label="Your reading room: a bookcase, a desk, a fireplace and a magic tome"></canvas>
+    <div id="rm-veil" class="veil"><div class="veil-title">Tomestead</div><div class="veil-sub" id="rm-veil-sub">Lighting the lamps…</div></div>
+    <nav class="stations" aria-label="Go to">
+      <button type="button" data-go="room" aria-pressed="true">Room</button>
+      <button type="button" data-go="shelf">Shelf</button>
+      <button type="button" data-go="desk">Desk</button>
+      <button type="button" data-go="hearth">Fireside</button>
+      <button type="button" data-go="tome">Tome</button>
+    </nav>
+    <div class="hint" id="rm-hint">Drag to look around · tap things</div>
+    <section class="card" id="rm-card" hidden aria-live="polite">
+      <button class="card-x" type="button" aria-label="Close">×</button>
+      <div id="rm-card-body"></div>
+    </section>
+    <button class="perf-btn" id="rm-perf-btn" type="button" aria-label="Speed check" aria-expanded="false" hidden>⏱</button>
+    <div class="perf" id="rm-perf" hidden></div>
+  </div>
+  <div id="roomOrigin" aria-hidden="true"></div>
   <div id="stage">
   <div id="floor" class="floor" aria-hidden="true" hidden></div>
   <header class="topbar">
@@ -66,6 +88,7 @@
   <div id="libraryPage">
     <div class="toolbar">
       <div class="viewtoggle pills" role="tablist" aria-label="View">
+        <button role="tab" id="tab-room" aria-selected="false" data-view="room">Room</button>
         <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">Shelf</button>
         <button role="tab" id="tab-list" aria-selected="false" data-view="list">List</button>
       </div>
@@ -126,9 +149,17 @@
     </div>
     <div id="czPreview" class="cz-preview cases" aria-label="Preview"></div>
     <div class="cz-panel paper-panel">
+      <section class="cz-section" id="czHomeSec">
+        <h3>Home</h3>
+        <p class="cz-hint">Where the app opens: the 3D reading room, or the classic flat bookcase. (Room · Shelf · List at the top switches any time.)</p>
+        <div id="czHome" class="spans" role="radiogroup" aria-label="Home">
+          <button type="button" role="radio" data-home="room">3D reading room</button>
+          <button type="button" role="radio" data-home="shelf">Classic bookcase</button>
+        </div>
+      </section>
       <section class="cz-section">
         <h3>Opening scene</h3>
-        <p class="cz-hint">The walk into your library when you open the app. Tap it any time to skip.</p>
+        <p class="cz-hint">The walk into your library when you open the classic bookcase. Tap it any time to skip. (The 3D room has its own.)</p>
         <div id="czIntro" class="spans" role="radiogroup" aria-label="Opening scene">
           <button type="button" role="radio" data-intro="always">Every time</button>
           <button type="button" role="radio" data-intro="day">Once a day</button>
