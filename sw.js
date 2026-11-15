@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v17';
+const VERSION = 'tomestead-v18';
 const SHELL = [
   './',
   'index.html',
@@ -15,6 +15,7 @@ const SHELL = [
   'importer.js',
   'scan.js',
   'yearreview.js',
+  'goals.js',
   'motes.js',
   'vine.js',
   'tex/wood-v.webp',

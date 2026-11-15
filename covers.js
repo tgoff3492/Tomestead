@@ -106,12 +106,31 @@
   const FIND_FIELDS = 'key,title,author_name,cover_i,first_publish_year,number_of_pages_median,subject,edition_count';
   const isbnOf = (s) => { const d = String(s || '').replace(/[\s-]/g, '').toUpperCase(); return /^(97[89]\d{10}|\d{9}[\dX])$/.test(d) ? d : ''; };
   // Returns [{ olKey, title, author, year, pages, cover, subjects }]
+  // what you type is a title: search titles only, so "Laura" finds the book, not authors named Laura
   async function search(text, limit = 7) {
     const isbn = isbnOf(text);
     if (isbn) { const one = await byISBN(isbn); return one ? [one] : []; }
-    const q = new URLSearchParams({ q: text, limit: String(limit), fields: FIND_FIELDS });
-    const docs = (await getJSON(`${OL}/search.json?${q}`)).docs || [];
-    return docs.filter(d => d.title).map(fromDoc);
+    const ask = async (params) => (await getJSON(`${OL}/search.json?${new URLSearchParams(Object.assign({ limit: '20', fields: FIND_FIELDS }, params))}`)).docs || [];
+    let docs = titleMatches(await ask({ title: text }), text);
+    // still typing the last word ("the hobb"): search the whole words, then match the rest by prefix
+    if (!docs.length && /\s/.test(text.trim())) docs = titleMatches(await ask({ title: text.trim().replace(/\s+\S*$/, '') }), text);
+    return docs.slice(0, limit).map(fromDoc);
+  }
+  // keep only books whose title has every word you typed (the last one can be half-typed), best matches first
+  const foldWords = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’']/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+  function titleMatches(docs, text) {
+    const want = foldWords(text);
+    if (!want.length) return [];
+    const last = want[want.length - 1], whole = want.slice(0, -1);
+    const typed = want.join(' ');
+    const seen = new Set();
+    return docs.filter(d => d && d.title).map((d, i) => {
+      const words = foldWords(d.title), t = words.join(' ');
+      const ok = whole.every(w => words.includes(w)) && words.some(w => w.startsWith(last));
+      const rank = t === typed ? 0 : t.startsWith(typed) ? 1 : (' ' + t + ' ').includes(' ' + typed + ' ') ? 2 : 3;
+      return { d, i, ok, rank, len: t.length, key: t + '|' + (d.author_name || [''])[0] };
+    }).filter(x => x.ok && !seen.has(x.key) && seen.add(x.key))
+      .sort((a, b) => a.rank - b.rank || (a.rank === 1 ? a.len - b.len : 0) || a.i - b.i).map(x => x.d);
   }
   const fromDoc = (d) => ({
     olKey: d.key || null, title: d.title, author: (d.author_name || []).slice(0, 2).join(' & '),
@@ -230,5 +249,5 @@
     });
   }
 
-  window.TomesteadCovers = { coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, byISBN, isbnOf, genreFrom };
+  window.TomesteadCovers = { coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, titleMatches, byISBN, isbnOf, genreFrom };
 })();

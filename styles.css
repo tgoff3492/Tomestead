@@ -1342,6 +1342,8 @@ html.reading .sunlight, html.reading .motes, html.intro-on .motes { opacity: 0; 
 
 /* ---------- the add / edit form ---------- */
 .linkbtn.ink { color: #7a4a1a; text-decoration-color: rgba(122,74,26,.35); font-size: .92rem; }
+.date-today { margin-left: 8px; font-weight: 400; font-size: .86rem; }
+.field-note { display: block; margin-top: 4px; font-size: .82rem; color: var(--ink-soft); }
 .find { position: relative; }
 .find-row { display: flex; gap: 6px; }
 .find-row input { flex: 1 1 auto; min-width: 0; }

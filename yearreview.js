@@ -117,9 +117,11 @@ window.TomesteadYear = function (api) {
     if (!all) {
       const target = api.goalFor(sel), t = api.trophies()[sel];
       if (target) {
-        goal = t
-          ? `<div class="yr-goal met"><span class="yr-trophy" aria-hidden="true">${api.drawTrophy(sel, t.goal, 0.32)}</span><p>You set out to read ${api.plural(target, 'book')} and did it${t.at ? `, on ${esc(api.fmtDate(t.at))}` : ''}.</p></div>`
-          : `<div class="yr-goal"><p>Your goal: ${api.plural(target, 'book')}. ${target - n > 0 ? `${target - n} to go.` : ''}</p><span class="yr-meter"><span style="width:${Math.min(100, Math.round((n / target) * 100))}%"></span></span></div>`;
+        // the goal counts books finished after it was set, so it can differ from the year's total
+        const done = api.goalDone(sel);
+        goal = t && t.goal >= target
+          ? `<div class="yr-goal met"><span class="yr-trophy" aria-hidden="true">${api.drawTrophy(sel, t.goal, 0.32)}</span><p>You set out to read ${api.plural(t.goal, 'book')} and did it${t.at ? `, on ${esc(api.fmtDate(t.at))}` : ''}.</p></div>`
+          : `<div class="yr-goal"><p>Your goal: ${api.plural(target, 'book')}. ${done} counted${target - done > 0 ? `, ${target - done} to go` : ''}.</p><span class="yr-meter"><span style="width:${Math.min(100, Math.round((done / target) * 100))}%"></span></span></div>`;
       }
     } else {
       const ts = Object.keys(api.trophies());

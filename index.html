@@ -258,8 +258,9 @@
           <input id="fStarted" type="date">
         </div>
         <div class="field" data-for="read">
-          <label for="fFinished">Finished on</label>
+          <label for="fFinished">Finished on <button type="button" class="linkbtn ink date-today" id="fToday">Today</button></label>
           <input id="fFinished" name="finished" type="date">
+          <span class="field-note">Leave blank if you don’t remember.</span>
         </div>
         <div class="field" data-for="dnf">
           <label for="fStopped">Put it down on</label>
@@ -457,7 +458,7 @@
   <dialog id="goalsDialog" class="paper narrow">
     <article>
       <h2>Reading goals</h2>
-      <p class="meta">Set a goal for the year, or for any stretch of time: a month, a summer, a long trip. Every book you finish in that window counts.</p>
+      <p class="meta">Set a goal for the year, or for any stretch of time: a month, a summer, a long trip. It counts the books you finish from the day you set it; books already on your shelf don’t count.</p>
       <ul id="goalsList" class="goals-list"></ul>
       <p id="goalsEmpty" class="goals-empty" hidden>No goals yet.</p>
       <div class="actions">
@@ -546,6 +547,7 @@
   <script src="importer.js"></script>
   <script src="scan.js"></script>
   <script src="yearreview.js"></script>
+  <script src="goals.js"></script>
   <script src="app.js"></script>
   <script src="motes.js"></script>
 </body>

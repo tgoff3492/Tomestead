@@ -175,10 +175,18 @@
   // every time you finished a book counts (a reread in a new year counts again)
   const countInYear = (y) => books.reduce((n, b) => n + datesOf(b).filter(d => d.slice(0, 4) === y).length, 0);
   const goalFor = (y) => (prefs.goals[y] > 0 ? prefs.goals[y] : 0);
+  // years you can still set a goal for: this one and next (a goal counts from the day you set it)
+  const goalYearOpen = (y) => /^\d{4}$/.test(y) && y >= thisYear() && y <= String(+thisYear() + 1);
+  // ask "set a goal?" only when no goal is set for that year and none of your own is running or coming up
+  const offerYearGoal = (y) => goalYearOpen(y) && !goalFor(y) && !prefs.customGoals.some(g => g.end >= today());
 
   // ---------- goals with your own timeline ----------
-  // { id, name, target, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', createdAt, metAt? }
-  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  // { id, name, target, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', createdAt, since, skip[], metAt? }
+  // A goal counts books you finish from the day you set it (since); the finishes already on your
+  // shelf that day are listed in skip so they don't count. The rules live in goals.js.
+  const G = window.TomesteadGoals;
+  const ISO = G.ISO, dayNum = G.dayNum, isoOf = G.isoOf;
+  const cleanSkip = (a) => (Array.isArray(a) ? a.filter(k => typeof k === 'string' && k.length < 200).slice(0, 3000) : []);
   function cleanGoals(arr) {
     if (!Array.isArray(arr)) return [];
     return arr.filter(g => g && validId(String(g.id || '')) && ISO.test(g.start) && ISO.test(g.end) && g.end >= g.start && Number(g.target) > 0)
@@ -186,20 +194,46 @@
         id: String(g.id), name: String(g.name || '').slice(0, 60).trim(),
         target: Math.min(999, Math.floor(Number(g.target))), start: g.start, end: g.end,
         createdAt: Number(g.createdAt) || Date.now(),
-      }, ISO.test(g.metAt || '') ? { metAt: g.metAt } : {}));
+      }, ISO.test(g.since || '') ? { since: g.since, skip: cleanSkip(g.skip) } : {}, ISO.test(g.metAt || '') ? { metAt: g.metAt } : {}));
   }
-  const dayNum = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); };
-  const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
-  // the finish dates that fall in a window, oldest first (one per time a book was finished)
-  function finishesBetween(a, z) {
-    const out = [];
-    for (const b of books) for (const d of datesOf(b)) { const f = d.slice(0, 10); if (ISO.test(f) && f >= a && f <= z) out.push(f); }
-    return out.sort();
+  function cleanSince(o) {
+    const out = {};
+    if (o && typeof o === 'object') for (const [y, v] of Object.entries(o)) if (/^\d{4}$/.test(y) && v && ISO.test(v.since || '')) out[y] = { since: v.since, skip: cleanSkip(v.skip) };
+    return out;
+  }
+  const localDay = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  // a year's goal, as a window like any other
+  function yearGoal(y) {
+    const s = prefs.goalSince[y] || {};
+    return { start: `${y}-01-01`, end: `${y}-12-31`, target: goalFor(y), since: s.since, skip: s.skip };
+  }
+  const goalFinishes = (g) => G.counted(g, books, datesOf);
+  // how many books count toward the year's goal (not the same as how many you finished that year)
+  const countForGoal = (y) => (goalFor(y) ? goalFinishes(yearGoal(y)).length : 0);
+  // a goal you're setting right now: from today, not counting what's already on the shelf
+  const stampGoal = (g) => G.stamp(Object.assign({}, g, { since: '' }), books, datesOf, today());
+  // goals saved before that rule: a dated goal counts from the day it was made; a year goal from
+  // today (or the whole year, for a year that's already over)
+  function adoptOldGoals() {
+    if (!books.length) return;           // wait for the library to load, or nothing would be skipped
+    let changed = false;
+    for (const g of prefs.customGoals) {
+      if (g.since) continue;
+      Object.assign(g, G.adoptOld(g, books, datesOf, today(), localDay(g.createdAt || Date.now())));
+      changed = true;
+    }
+    for (const y of Object.keys(prefs.goals)) {
+      if (!goalFor(y) || prefs.goalSince[y]) continue;
+      prefs.goalSince[y] = y < thisYear() ? { since: `${y}-01-01`, skip: [] } : stampGoal(yearGoal(y));
+      changed = true;
+    }
+    if (changed) savePrefs();
   }
   function shortDate(iso, withYear) {
     const [y, m, d] = iso.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined, withYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
   }
+  const shortAuto = (iso) => shortDate(iso, iso.slice(0, 4) !== thisYear());
   function rangeText(a, z) {
     const sameYear = a.slice(0, 4) === z.slice(0, 4);
     const showYear = !sameYear || a.slice(0, 4) !== thisYear();
@@ -211,48 +245,36 @@
 
   // where a goal stands today
   function goalInfo(g) {
-    const done = g.done ?? finishesBetween(g.start, g.end).length;
-    const t = dayNum(today()), a = dayNum(g.start), z = dayNum(g.end);
-    const status = t < a ? 'upcoming' : t > z ? 'ended' : 'active';
-    const met = done >= g.target;
-    const left = Math.max(0, g.target - done);
-    const daysLeft = status === 'upcoming' ? z - a + 1 : Math.max(0, z - t + 1);
-    let note;
-    if (met) note = g.metAt ? `Reached ${shortDate(g.metAt, g.metAt.slice(0, 4) !== thisYear())}` : 'Goal reached';
-    else if (status === 'ended') note = `Ended ${shortDate(g.end, g.end.slice(0, 4) !== thisYear())} with ${done} of ${g.target}`;
-    else if (status === 'upcoming') note = `Starts ${shortDate(g.start, g.start.slice(0, 4) !== thisYear())} · ${plural(daysLeft, 'day')}`;
-    else {
-      // how fast you'd need to go from here, and whether you're keeping pace
-      const total = z - a + 1, elapsed = t - a + 1;
-      const every = Math.floor(daysLeft / left);
-      const pace = daysLeft >= left ? (every === 1 ? '1 book a day' : `1 book every ${every} days`) : `${left} in ${plural(daysLeft, 'day')}`;
-      const expected = Math.floor((g.target * elapsed) / total);
-      const track = elapsed > 1 && done < expected ? ' · a little behind' : (done > 0 && done >= expected ? ' · on pace' : '');
-      note = `${daysLeft === 1 ? 'Last day' : `${daysLeft} days left`} · ${pace}${track}`;
-    }
-    return { done, met, left, status, daysLeft, note, pct: Math.min(100, Math.round((done / g.target) * 100)) };
+    const done = g.done ?? goalFinishes(g).length;
+    return G.info(g, done, today(), g.metAt, shortAuto);
   }
   // remember the day each goal was reached (the finish date of the book that got you there)
   function syncGoalMarks() {
     let changed = false;
     for (const g of prefs.customGoals) {
-      const hits = finishesBetween(g.start, g.end);
-      const at = hits.length >= g.target ? hits[g.target - 1] : '';
+      const at = G.reachedOn(goalFinishes(g), g.target, today());
       if ((g.metAt || '') !== at) { if (at) g.metAt = at; else delete g.metAt; changed = true; }
     }
     if (changed) savePrefs();
   }
   prefs.customGoals = cleanGoals(prefs.customGoals);
-  const customMet = () => new Set(prefs.customGoals.filter(g => goalInfo(g).met).map(g => g.id));
+  prefs.goalSince = cleanSince(prefs.goalSince);
+  // which goals are reached right now (years and your own), to spot the one a book just finished
+  const goalsMet = () => new Set([
+    ...prefs.customGoals.filter(g => goalInfo(g).met).map(g => g.id),
+    ...Object.keys(prefs.goals).filter(y => goalFor(y) && countForGoal(y) >= goalFor(y)).map(y => 'y' + y),
+  ]);
 
   // a trophy is earned the moment a year's goal is met, and stays earned
   function syncTrophies() {
     let changed = false;
     Object.keys(prefs.goals).forEach(y => {
       const g = goalFor(y);
-      if (!g || countInYear(y) < g) return;
+      if (!g) return;
+      const hits = goalFinishes(yearGoal(y));
+      if (hits.length < g) return;
       const t = prefs.trophies[y];
-      if (!t || t.goal < g) { prefs.trophies[y] = { goal: g, at: (t && t.at) || today() }; changed = true; }
+      if (!t || t.goal < g) { prefs.trophies[y] = { goal: g, at: G.reachedOn(hits, g, today()) || today() }; changed = true; }
     });
     if (changed) savePrefs();
   }
@@ -644,8 +666,8 @@
     if (y === 'dnf') return `${shelfBooks(y).length} set aside`;
     if (y === 'all') return `${readBooks().length} read`;
     if (y === 'none') return `${shelfBooks('none').length} undated`;
-    const done = countInYear(y), goal = goalFor(y);
-    return goal ? `${y}: ${done} of ${goal}` : `${done} read in ${y}`;
+    const goal = goalFor(y);
+    return goal ? `${y} goal: ${countForGoal(y)} of ${goal}` : `${countInYear(y)} read in ${y}`;
   }
 
   function renderShelf() {
@@ -654,9 +676,9 @@
     const items = list.map(b => ({ type: 'book', b }));
     const y = prefs.year;
     const goal = (/^\d{4}$/.test(y) && !filtering()) ? goalFor(y) : 0;
-    const remaining = Math.max(0, goal - countInYear(y));
-    const ghostCount = Math.min(remaining, 300);
-    for (let i = 0; i < ghostCount; i++) items.push({ type: 'ghost', year: y, n: countInYear(y) + i + 1 });
+    const counted = goal ? countForGoal(y) : 0;
+    const ghostCount = Math.min(Math.max(0, goal - counted), 300);
+    for (let i = 0; i < ghostCount; i++) items.push({ type: 'ghost', year: y, n: counted + i + 1 });
 
     const plate = plateText();
     const cases = buildCases(wrap, items, { plate: (i) => plate, trophies: trophiesShown() });
@@ -675,7 +697,7 @@
       } else if (y === 'none') {
         note.innerHTML = `<p>Every book on your shelves has a finish date.</p><button class="btn btn-brass" data-all>Show all years</button>`;
       } else if (y !== 'all') {
-        note.innerHTML = `<p>No books finished in ${esc(y)} yet.</p><button class="btn btn-brass" data-goal>Set a ${esc(y)} reading goal</button>`;
+        note.innerHTML = `<p>No books finished in ${esc(y)} yet.</p>${offerYearGoal(y) ? `<button class="btn btn-brass" data-goal>Set a ${esc(y)} reading goal</button>` : `<button class="btn btn-brass" data-add>Add a book</button>`}`;
       } else {
         note.innerHTML = `<p>Your shelves are waiting. Add the first book you’ve read.</p><button class="btn btn-brass" data-add>Add a book</button>`;
       }
@@ -849,12 +871,16 @@
     if (/^\d{4}$/.test(y)) {
       const goal = goalFor(y), done = countInYear(y);
       if (!goal) {
-        rows.push(`<div class="goal-row"><p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button></div>`);
+        // only ask for a year goal when there's no goal at all yet (and the year isn't over)
+        if (offerYearGoal(y)) rows.push(`<div class="goal-row"><p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button></div>`);
       } else {
-        const pct = Math.min(100, Math.round((done / goal) * 100));
-        const met = done >= goal;
-        rows.push(`<div class="goal-row${met ? ' met' : ''}"><p class="goal-text"><strong>${done} of ${goal}</strong> ${met ? '· goal reached' : `· ${goal - done} to go`}</p>
-          <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(done, goal)}"><span style="width:${pct}%"></span></div>
+        const counted = countForGoal(y);
+        const pct = Math.min(100, Math.round((counted / goal) * 100));
+        const met = counted >= goal;
+        const from = G.countsFrom(yearGoal(y));
+        const since = from > `${y}-01-01` && !met ? ` since ${shortDate(from, false)}` : '';
+        rows.push(`<div class="goal-row${met ? ' met' : ''}"><p class="goal-text"><strong>${counted} of ${goal}</strong>${since} ${met ? '· goal reached' : `· ${goal - counted} to go`}</p>
+          <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(counted, goal)}"><span style="width:${pct}%"></span></div>
           <button class="linkbtn" data-goal>Change</button></div>`);
       }
     }
@@ -878,6 +904,7 @@
   const onYear = () => location.hash === '#year';
 
   function render() {
+    adoptOldGoals();
     syncTrophies();
     syncGoalMarks();
     const cz = onCustomize(), yr = onYear();
@@ -1192,7 +1219,12 @@
     $('#fReviewLabel').innerHTML = `${lbl} <span class="opt">(optional)</span>`;
     $('#fReview').placeholder = st === 'read' ? 'What stayed with you?' : st === 'want' ? 'Who recommended it, what caught your eye…' : '';
     if (!editingId) $('#saveBtn').textContent = { read: 'Put it on the shelf', reading: 'Start reading', want: 'Add to my to-read pile', dnf: 'Set it aside' }[st];
-    if (st === 'read' && !$('#fFinished').value) $('#fFinished').value = defaultFinished || today();
+    // a book you were reading and now mark read: finished today. A new book: no date unless you give one,
+    // so books you're adding from the past don't land on today (and don't count toward a goal)
+    if (st === 'read' && !$('#fFinished').value) {
+      const was = editingId && books.find(x => x.id === editingId);
+      $('#fFinished').value = defaultFinished || (was && statusOf(was) === 'reading' ? today() : '');
+    }
     if (st === 'reading' && !$('#fStarted').value && !editingId) $('#fStarted').value = today();
     if (st === 'dnf' && !$('#fStopped').value) $('#fStopped').value = today();
     setProgressLabel();
@@ -1346,7 +1378,7 @@
     $('#fTitle').value = b?.title || prefill?.title || '';
     $('#fAuthor').value = b?.author || prefill?.author || '';
     $('#fStarted').value = b?.started || '';
-    $('#fFinished').value = b ? (b.finished || '') : (finished || today());
+    $('#fFinished').value = b ? (b.finished || '') : (finished || '');
     $('#fStopped').value = b?.stopped || '';
     $('#fProgress').value = b && b.progress != null ? b.progress : '';
     $('#fPages').value = b?.pages || prefill?.pages || '';
@@ -1430,9 +1462,7 @@
     } else if (st === 'dnf') data.progress = old?.progress ?? null;
     else data.progress = null;
     if (pick && pick.isbn) data.isbn = pick.isbn;
-    const y = yearOf(data);
-    const before = y ? countInYear(y) : 0;
-    const metBefore = customMet();
+    const metBefore = goalsMet();
     let target;
     if (old) {
       const b = target = old;
@@ -1465,13 +1495,13 @@
     save();
     $('#editor').close();
     render();
-    const goal = y ? goalFor(y) : 0;
     if (wasEditing && reader && reader.currentId() === wasEditing) reader.refresh();
-    if (goal && before < goal && countInYear(y) >= goal) celebrate(y);
-    else {
-      const won = prefs.customGoals.find(g => !metBefore.has(g.id) && goalInfo(g).met);
-      if (won) celebrateGoal(won);
-    }
+    // the book that got you there: a year's trophy first, then a goal with your own dates
+    const metNow = goalsMet();
+    const wonYear = Object.keys(prefs.goals).sort().find(y => metNow.has('y' + y) && !metBefore.has('y' + y));
+    const won = !wonYear && prefs.customGoals.find(g => metNow.has(g.id) && !metBefore.has(g.id));
+    if (wonYear) celebrate(wonYear);
+    else if (won) celebrateGoal(won);
   }
 
   // ---------- moving a book between piles ----------
@@ -1675,7 +1705,7 @@
     for (const g of prefs.customGoals) cards.push({ kind: 'c', g, i: goalInfo(g) });
     for (const y of Object.keys(prefs.goals)) {
       if (!goalFor(y)) continue;
-      const g = { id: y, name: `${y} reading goal`, target: goalFor(y), start: `${y}-01-01`, end: `${y}-12-31`, done: countInYear(y), metAt: prefs.trophies[y] && prefs.trophies[y].at };
+      const g = Object.assign(yearGoal(y), { id: y, name: `${y} reading goal`, done: countForGoal(y), metAt: prefs.trophies[y] && prefs.trophies[y].at });
       cards.push({ kind: 'y', g, i: goalInfo(g) });
     }
     // running now first (soonest deadline first), then coming up, then finished
@@ -1685,6 +1715,7 @@
       <li><button type="button" class="gcard ${i.status}${i.met ? ' met' : ''}" ${kind === 'y' ? `data-ygoal="${esc(g.id)}"` : `data-cgoal="${esc(g.id)}"`}>
         <span class="gc-head"><span class="gc-name">${i.met ? '<span class="gc-check" aria-hidden="true">✓</span>' : ''}${esc(kind === 'y' ? g.name : goalName(g))}</span><span class="gc-count">${i.done} of ${g.target}</span></span>
         ${kind === 'c' && g.name ? `<span class="gc-range">${esc(rangeText(g.start, g.end))}</span>` : ''}
+        ${G.countsFrom(g) > g.start && !i.met && i.status !== 'upcoming' ? `<span class="gc-range">Counting books finished from ${esc(shortAuto(G.countsFrom(g)))}</span>` : ''}
         <span class="gc-meter" aria-hidden="true"><span style="width:${i.pct}%"></span></span>
         <span class="gc-note">${esc(i.note)}</span>
       </button></li>`).join('');
@@ -1694,20 +1725,7 @@
   // one goal: a whole year (trophy + empty spots on that year's shelf) or your own dates
   let goalEdit = null;          // { kind: 'year'|'custom', id? }
   let goalSpan = 'month';
-  function spanRange(span) {
-    const t = today(), n = dayNum(t);
-    if (span === 'month') {
-      const [y, m] = t.split('-').map(Number);
-      return [`${y}-${String(m).padStart(2, '0')}-01`, isoOf(dayNum(`${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`) - 1)];
-    }
-    if (span === '30') return [t, isoOf(n + 29)];
-    if (span === '90') {
-      const [y, m, d] = t.split('-').map(Number);
-      const e = new Date(Date.UTC(y, m - 1 + 3, d));
-      return [t, isoOf(Math.round(e.getTime() / 86400000) - 1)];
-    }
-    return null;
-  }
+  const spanRange = (span) => G.spanRange(span, today());
   function setSpan(span, fill = true) {
     goalSpan = span;
     document.querySelectorAll('#gSpans [data-span]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.span === span)));
@@ -1722,43 +1740,60 @@
     if (year && fill) $('#gCount').value = goalFor($('#gYear').value) || $('#gCount').value;
     goalHint();
   }
-  // a live line under the form: how many already count, how long the window is
+  // the dated goal being edited (null for a new one)
+  const editingCustom = () => (goalEdit && goalEdit.kind === 'custom' && goalEdit.id ? prefs.customGoals.find(x => x.id === goalEdit.id) : null);
+  // a live line under the form: what counts, how long the window is
   function goalHint() {
     const sub = $('#goalSub');
+    const n = parseInt($('#gCount').value, 10);
     if (goalSpan === 'year') {
-      const y = $('#gYear').value;
-      sub.textContent = `${countInYear(y)} finished in ${y} so far. Empty spots on the ${y} shelf hold space for the rest, and reaching it earns a trophy for the arch of your bookcase.`;
-      $('#goalTitle').textContent = goalEdit && goalEdit.kind === 'year' ? `${y} reading goal` : (goalEdit ? 'Edit goal' : 'New reading goal');
-      $('#goalRemove').hidden = !(goalEdit && goalEdit.kind === 'year' && goalFor(y));
+      const y = $('#gYear').value, has = goalFor(y) > 0;
+      const g = has ? yearGoal(y) : { start: `${y}-01-01`, end: `${y}-12-31`, since: today() };
+      const from = G.countsFrom(g), counted = has ? countForGoal(y) : 0;
+      let line = has
+        ? `${plural(counted, 'book')} counted so far${from > g.start ? `, finished since ${shortAuto(from)}` : ''}.`
+        : (from > g.start ? `Counts the books you finish from today on. Books already on your shelf don’t count.` : `Counts the books you finish in ${y}.`);
+      line += ` Empty spots on the ${y} shelf hold space for the rest, and reaching it earns a trophy for the arch of your bookcase.`;
+      sub.textContent = line;
+      $('#goalTitle').textContent = has ? `${y} reading goal` : 'New reading goal';
+      $('#goalRemove').hidden = !has;
       return;
     }
-    $('#goalTitle').textContent = goalEdit && goalEdit.id ? 'Edit goal' : 'New reading goal';
-    $('#goalRemove').hidden = !(goalEdit && goalEdit.kind === 'custom' && goalEdit.id);
+    const cur = editingCustom();
+    $('#goalTitle').textContent = cur ? 'Edit goal' : 'New reading goal';
+    $('#goalRemove').hidden = !cur;
     const a = $('#gStart').value, z = $('#gEnd').value;
     if (!ISO.test(a) || !ISO.test(z) || z < a) { sub.textContent = 'Pick when it starts and ends.'; return; }
-    const days = dayNum(z) - dayNum(a) + 1;
-    const already = finishesBetween(a, z).length;
-    const n = parseInt($('#gCount').value, 10);
-    let line = `${rangeText(a, z)} · ${plural(days, 'day')}.`;
-    if (already) line += ` ${plural(already, 'book')} you’ve logged already ${already === 1 ? 'counts' : 'count'}.`;
-    else line += ' Every book you finish in that window counts.';
-    if (n > 0 && n > already) {
-      const per = days / n;
-      line += per >= 1.5 ? ` That’s about one book every ${Math.round(per)} days.` : ` That’s about ${Math.round(n / days * 7)} books a week.`;
+    const g = { start: a, end: z, since: cur ? cur.since : today(), skip: cur ? cur.skip : [] };
+    const from = G.countsFrom(g);
+    if (from > z) { sub.textContent = 'That stretch is already over. Pick an end date from today on.'; return; }
+    const days = dayNum(z) - dayNum(from) + 1;
+    const counted = cur ? goalFinishes(g).length : 0;
+    let line = `${rangeText(a, z)} · ${plural(dayNum(z) - dayNum(a) + 1, 'day')}.`;
+    if (cur) line += ` ${plural(counted, 'book')} counted so far.`;
+    else line += from > a ? ` Counts the books you finish from today on.` : ` Counts the books you finish in that window.`;
+    if (!cur) line += ' Books already on your shelf don’t count.';
+    const left = n - counted;
+    if (n > 0 && left > 0) {
+      const daysLeft = Math.min(days, dayNum(z) - Math.max(dayNum(today()), dayNum(from)) + 1);
+      const per = daysLeft / left;
+      line += per >= 1.5 ? ` That’s about one book every ${Math.round(per)} days.` : ` That’s about ${Math.max(1, Math.round(left / daysLeft * 7))} books a week.`;
     }
     sub.textContent = line;
   }
   function openGoal(year) {
     // opened from the year's goal bar or a trophy: that year's goal
-    const y = year || (prefs.year !== 'all' && prefs.year !== 'none' ? prefs.year : thisYear());
-    openGoalEditor({ kind: 'year', year: y });
+    const y = year || (/^\d{4}$/.test(prefs.year) ? prefs.year : thisYear());
+    openGoalEditor({ kind: 'year', year: goalYearOpen(y) || goalFor(y) ? y : thisYear() });
   }
   function openGoalEditor(opts = {}) {
-    const years = [...new Set([thisYear(), String(+thisYear() + 1), ...yearsAvailable()])].sort((a, b) => b.localeCompare(a));
-    const y = opts.year || thisYear();
+    // years you can pick: this one, next one, and any year that already has a goal (to change or remove it)
+    const years = [...new Set([thisYear(), String(+thisYear() + 1), ...Object.keys(prefs.goals).filter(v => goalFor(v))])].sort((a, b) => b.localeCompare(a));
+    const y = opts.year && years.includes(opts.year) ? opts.year : thisYear();
     $('#gYear').innerHTML = years.map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('');
     $('#goalError').hidden = true;
     const spans = $('#gSpanField');
+    $('#gStart').min = ''; $('#gEnd').min = today();
     if (opts.kind === 'year') {
       goalEdit = { kind: 'year' };
       spans.hidden = !!goalFor(y);   // changing an existing year goal: just the number
@@ -1769,6 +1804,7 @@
       if (!g) return;
       goalEdit = { kind: 'custom', id: g.id };
       spans.hidden = false;
+      $('#gEnd').min = '';
       $('#gName').value = g.name; $('#gStart').value = g.start; $('#gEnd').value = g.end; $('#gCount').value = g.target;
       // show which quick pick it matches, if any
       const match = ['month', '30', '90'].find(sp => { const r = spanRange(sp); return r && r[0] === g.start && r[1] === g.end; });
@@ -1793,6 +1829,9 @@
     if (!(n > 0 && n <= 999)) return goalError('Enter how many books you want to read, 1 or more.');
     if (goalSpan === 'year') {
       const y = $('#gYear').value;
+      if (!goalFor(y) && !goalYearOpen(y)) return goalError(`${y} is over. Goals count the books you finish from the day you set them.`);
+      // a new year goal starts counting today; changing the number keeps the day it was set
+      if (!goalFor(y) || !prefs.goalSince[y]) prefs.goalSince[y] = stampGoal(yearGoal(y));
       prefs.goals[y] = n;
       prefs.year = y;
       caseIndex = 0;
@@ -1800,30 +1839,36 @@
       $('#goalDialog').close();
       render();
       if ($('#goalsDialog').open) renderGoals();
-      const left = n - countInYear(y);
-      toast(left > 0 ? `Goal saved: ${n} books in ${y}. ${left} to go.` : `Goal saved. You’ve already read ${countInYear(y)} in ${y}.`);
+      const left = n - countForGoal(y);
+      toast(left > 0 ? `Goal saved: ${plural(n, 'book')} in ${y}. ${left} to go.` : `Goal saved. You’ve reached it: ${plural(countForGoal(y), 'book')} counted.`);
       return;
     }
     const a = $('#gStart').value, z = $('#gEnd').value;
     if (!ISO.test(a) || !ISO.test(z)) return goalError('Pick a start date and an end date.');
     if (z < a) return goalError('The end date comes before the start date.');
     if (dayNum(z) - dayNum(a) > 3660) return goalError('Keep it to ten years or less.');
+    let g = editingCustom();
+    if (!g && z < today()) return goalError('That stretch is already over. Pick an end date from today on.');
     const name = $('#gName').value.trim().slice(0, 60);
-    let g = goalEdit && goalEdit.id && prefs.customGoals.find(x => x.id === goalEdit.id);
     if (g) Object.assign(g, { name, target: n, start: a, end: z });
-    else { g = { id: uid(), name, target: n, start: a, end: z, createdAt: Date.now() }; prefs.customGoals.push(g); }
+    else {
+      g = { id: uid(), name, target: n, start: a, end: z, createdAt: Date.now() };
+      Object.assign(g, stampGoal(g));
+      prefs.customGoals.push(g);
+    }
     syncGoalMarks();
     savePrefs();
     $('#goalDialog').close();
     render();
     if ($('#goalsDialog').open) renderGoals();
     const i = goalInfo(g);
-    toast(i.met ? `Goal saved. You’ve already read ${i.done} in that stretch.` : `Goal saved: ${plural(n, 'book')} by ${shortDate(z, z.slice(0, 4) !== thisYear())}. ${i.left} to go.`);
+    toast(i.met ? `Goal saved. You’ve reached it: ${plural(i.done, 'book')} counted.` : `Goal saved: ${plural(n, 'book')} by ${shortAuto(z)}. ${i.left} to go.`);
   }
   function removeGoal() {
     if (goalSpan === 'year') {
       const y = $('#gYear').value;
       delete prefs.goals[y];
+      delete prefs.goalSince[y];
       toast(`Removed your ${y} goal.`);
     } else if (goalEdit && goalEdit.id) {
       const g = prefs.customGoals.find(x => x.id === goalEdit.id);
@@ -1861,7 +1906,7 @@
 
   function celebrate(y) {
     syncTrophies();
-    $('#celebrateText').textContent = `You read ${countInYear(y)} ${countInYear(y) === 1 ? 'book' : 'books'} in ${y} and hit your goal of ${goalFor(y)}. Your ${y} trophy now stands in the arch of your bookcase.`;
+    $('#celebrateText').textContent = `You read ${plural(countForGoal(y), 'book')} toward your ${y} goal of ${goalFor(y)}. Your ${y} trophy now stands in the arch of your bookcase.`;
     $('#celebrateTrophy').innerHTML = Art.drawTrophy(y, goalFor(y), 0.9);
     $('#celebrateRaise').dataset.year = y;
     delete $('#celebrateRaise').dataset.cgoal;
@@ -1902,7 +1947,7 @@
       for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
     } catch {}
     const clean = books;
-    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList }, uploads };
+    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1973,7 +2018,12 @@
         const st = !Array.isArray(parsed) && parsed.settings;
         if (st) {
           if (st.theme) prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(st.theme));
-          if (st.goals) prefs.goals = Object.assign({}, prefs.goals, st.goals);
+          if (st.goals) {
+            prefs.goals = Object.assign({}, prefs.goals, st.goals);
+            // the day each restored goal was set comes with it (older backups don't have it; adoptOldGoals fills it in)
+            const since = cleanSince(st.goalSince);
+            for (const yr of Object.keys(st.goals)) { if (since[yr]) prefs.goalSince[yr] = since[yr]; else delete prefs.goalSince[yr]; }
+          }
           if (Array.isArray(st.tagList)) prefs.tagList = cleanTags([...prefs.tagList, ...st.tagList]);
           if (Array.isArray(st.customGoals)) {
             for (const g of cleanGoals(st.customGoals)) {
@@ -2239,6 +2289,7 @@
 
     // goals
     $('#goalForm').addEventListener('submit', saveGoal);
+    $('#fToday').addEventListener('click', e => { e.preventDefault(); $('#fFinished').value = today(); });
     $('#gYear').addEventListener('change', () => { $('#gCount').value = goalFor($('#gYear').value) || ''; goalHint(); });
     $('#goalRemove').addEventListener('click', removeGoal);
     $('#gSpans').addEventListener('click', e => { const b = e.target.closest('[data-span]'); if (b) setSpan(b.dataset.span); });
@@ -2393,14 +2444,19 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList };
+    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
     prefs.goals = s.goals && typeof s.goals === 'object' ? s.goals : {};
     prefs.trophies = s.trophies && typeof s.trophies === 'object' ? s.trophies : {};
     // (a device still on an older version doesn't send these; keep what's here rather than wiping them)
-    if (Array.isArray(s.customGoals)) prefs.customGoals = cleanGoals(s.customGoals);
+    if (Array.isArray(s.customGoals)) {
+      // an older device sends goals without the day they were set: keep what this device knows
+      const here = new Map(prefs.customGoals.map(g => [g.id, g]));
+      prefs.customGoals = cleanGoals(s.customGoals).map(g => (!g.since && here.get(g.id) && here.get(g.id).since ? Object.assign(g, { since: here.get(g.id).since, skip: here.get(g.id).skip }) : g));
+    }
+    if (s.goalSince && typeof s.goalSince === 'object') prefs.goalSince = cleanSince(s.goalSince);
     if (Array.isArray(s.tagList)) prefs.tagList = cleanTags(s.tagList);
     prefs.recs = s.recs && typeof s.recs === 'object' ? Object.assign({ dismissed: [] }, s.recs) : { dismissed: [] };
     savePrefsHere();
@@ -2419,6 +2475,7 @@
       books = books.filter(x => !gone.has(x.id));
     }
     saveHere();
+    adoptOldGoals();
     syncTrophies();
     renderSoon();
   }
@@ -2552,12 +2609,12 @@
     save,
     recs: () => prefs.recs,
     dismiss: (key) => { if (!prefs.recs.dismissed.includes(key)) { prefs.recs.dismissed.push(key); savePrefs(); } },
-    addBook: (p) => openEditor(null, today(), p),
+    addBook: (p) => openEditor(null, null, p),
     wantBook: (p) => addWant(p),
   });
   const yearReview = window.TomesteadYear({
     esc, plural, fmtDate, starsHTML, thumbHTML, wireThumbs, colorOf,
-    books: () => books, datesOf, statusOf, formatOf, pagesOf, tagsOf, isRead, goalFor, thisYear, yearsAvailable,
+    books: () => books, datesOf, statusOf, formatOf, pagesOf, tagsOf, isRead, goalFor, goalDone: countForGoal, thisYear, yearsAvailable,
     trophies: () => prefs.trophies,
     drawTrophy: (y, n, sc) => Art.drawTrophy(y, n, sc),
     openBook: (id, el) => openDetail(id, el),
