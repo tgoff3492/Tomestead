@@ -79,6 +79,7 @@
   let pickedRating = 0;
   let caseIndex = 0;
   let defaultFinished = null;
+  let bookendFor = 'read';     // which section Customize → Bookends is choosing for
 
   function loadJSON(key, fallback) {
     try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
@@ -295,10 +296,31 @@
     return read.filter(b => inYear(b, y));
   }
   const filtering = () => !!(query.trim() || tagFilter);
+
+  // The All shelf holds every book, in sections, each between its own pair of bookends:
+  // what you're reading, what's next, what you've read. Set-aside books stay tucked away
+  // (their own pill), except when a search or tag finds one.
+  const SECTIONS = { reading: 'Reading now', want: 'To read', read: 'Read', dnf: 'Set aside' };
+  const SECTION_ORDER = { reading: 0, want: 1, read: 2, dnf: 3 };
+  const sectioned = () => prefs.year === 'all';
+  // which bookends stand at each section; reading and to-read default to styles unlike the rest
+  const BOOKEND_PICKS = { reading: ['owl', 'stones', 'oak', 'marble', 'brass'], want: ['oak', 'marble', 'stones', 'owl', 'brass'] };
+  function sectionBookend(sec) {
+    const t = prefs.theme;
+    if (sec !== 'reading' && sec !== 'want') return t.bookend;
+    const saved = t.bookends && t.bookends[sec];
+    if (saved && D.BOOKENDS[saved]) return saved;
+    if (t.bookend === 'none') return 'none';
+    const taken = [t.bookend];
+    if (sec === 'want') taken.push(sectionBookend('reading'));
+    return BOOKEND_PICKS[sec].find(k => !taken.includes(k)) || t.bookend;
+  }
+
   function visibleBooks() {
     const q = query.trim().toLowerCase();
     const has = (v) => String(v || '').toLowerCase().includes(q);
-    let list = shelfBooks().filter(b => !q || has(b.title) || has(b.author) || has(b.genre) || has(b.series) || tagsOf(b).some(has));
+    const base = sectioned() ? books.filter(b => statusOf(b) !== 'dnf' || filtering()) : shelfBooks();
+    let list = base.filter(b => !q || has(b.title) || has(b.author) || has(b.genre) || has(b.series) || tagsOf(b).some(has));
     if (tagFilter) list = list.filter(b => tagsOf(b).some(t => t.toLowerCase() === tagFilter.toLowerCase()));
     const byStr = (k) => (a, b) => (a[k] || '').localeCompare(b[k] || '', undefined, { sensitivity: 'base' });
     switch (prefs.sort) {
@@ -310,6 +332,8 @@
       case 'series': list.sort((a, b) => (!a.series - !b.series) || byStr('series')(a, b) || ((Number(a.seriesNo) || 0) - (Number(b.seriesNo) || 0)) || surname(a.author).localeCompare(surname(b.author)) || byStr('title')(a, b)); break;
       default: list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     }
+    // sections keep their order; the chosen sort applies within each one
+    if (sectioned()) list.sort((a, b) => SECTION_ORDER[statusOf(a)] - SECTION_ORDER[statusOf(b)]);
     return list;
   }
   // spines carry the surname, like a real shelf ("Hunt & Thomas" stays as is)
@@ -339,8 +363,11 @@
     const el = document.createElement('button');
     el.type = 'button';
     // a ribbon marks your place in a book you're reading
-    const mark = opts.plain ? '' : st === 'reading' ? ' ribbon' : '';
-    el.className = `book v${d.variant}${c.light ? ' light' : ''}${b.id === justAdded ? ' arrive' : ''}${mark}`;
+    // ...and a slip of paper where you stopped in one you set aside
+    const mark = opts.plain ? '' : st === 'reading' ? ' ribbon' : st === 'dnf' ? ' slip' : '';
+    // books in hand lean a little; books still waiting look new
+    const look = opts.plain ? '' : st === 'reading' ? ' lean' : st === 'want' ? ' fresh' : '';
+    el.className = `book v${d.variant}${c.light ? ' light' : ''}${b.id === justAdded ? ' arrive' : ''}${mark}${look}`;
     el.style.cssText = `--w:${d.width}px;--h:${d.height}px;--bg:${c.bg};--ink:${c.ink};--fs:${d.fs}px`;
     el.dataset.id = b.id;
     const r = b.rating || 0;
@@ -376,13 +403,15 @@
   }
 
   // ---------- bookcases ----------
-  // items: [{type:'book', b} | {type:'ghost', year, n}] — packed into rows, 3 rows per bookcase
+  // items: [{type:'book', b, sec} | {type:'ghost', year, n}] — packed into rows, 3 rows per bookcase.
+  // Each run of one section on a shelf stands between that section's bookends; opts.labels puts a
+  // brass label on the shelf edge where a section starts (and again at the top of each bookcase).
   function buildCases(container, items, opts = {}) {
     const s = scale();
-    const theme = prefs.theme;
-    const be = D.BOOKENDS[theme.bookend] || D.BOOKENDS.none;
-    const bookendW = be.w ? be.w * s + 2 : 0;
+    const beOf = (sec) => D.BOOKENDS[sectionBookend(sec)] || D.BOOKENDS.none;
+    const beW = (sec) => { const be = beOf(sec); return be.w ? be.w * s + 2 : 0; };
     const gap = 3;
+    const segGap = Math.round(12 * s);    // breathing room between two sections on one shelf
 
     container.innerHTML = '';
     // measure the inside of one bookcase
@@ -397,15 +426,19 @@
     const nicheEl = probe.querySelector('.niche');
     const niche = { w: nicheEl.clientWidth, h: nicheEl.clientHeight };
     container.removeChild(probe);
-    const avail = Math.max(100, inner - bookendW * 2);
+    const room = Math.max(100 + beW(null) * 2, inner);
 
     const width = (it) => (it.type === 'book' ? dims(it.b).width : dims({ id: `ghost-${it.year}-${it.n}`, title: 'ghost' }).width);
+    const secOf = (it) => it.sec || null;
+    // what an item adds to a shelf: itself, plus a pair of bookends when it starts a new run
+    const adds = (it, prev) => width(it) + (prev && secOf(prev) === secOf(it) ? 0 : beW(secOf(it)) * 2 + (prev ? segGap : 0));
+    const rowWidth = (row) => row.reduce((t, it, i) => t + adds(it, row[i - 1]) + gap, 0);
     const rows = [];
     let cur = [], used = 0;
     for (const it of items) {
-      const w = width(it);
-      if (cur.length && used + w > avail) { rows.push(cur); cur = []; used = 0; }
-      cur.push(it); used += w + gap;
+      if (cur.length && used + adds(it, cur[cur.length - 1]) > room) { rows.push(cur); cur = []; used = 0; }
+      used += adds(it, cur[cur.length - 1]) + gap;
+      cur.push(it);
     }
     if (cur.length) rows.push(cur);
     const maxRows = opts.maxRows || Infinity;
@@ -415,29 +448,49 @@
     while (rows.length < minRows || rows.length % perCase) rows.push([]);
 
     // where each trinket goes: every piece appears once, somewhere sensible
-    const info = rows.map((row, ri) => {
-      const w = row.reduce((t, it) => t + width(it) + gap, 0) + (row.length ? bookendW * 2 : 0);
-      return { ri, books: row.length > 0, free: inner - w, caseIdx: Math.floor(ri / perCase) };
-    });
+    const info = rows.map((row, ri) => ({ ri, books: row.length > 0, free: inner - rowWidth(row), caseIdx: Math.floor(ri / perCase) }));
     const nichePlan = planNiches(niche, rows.length / perCase, opts.trophies || [], s);
     const plan = planTrinkets(info, s, rowH, nichePlan.used);
 
     const cases = [];
+    let labeled = new Set();
     rows.forEach((row, ri) => {
       if (ri % perCase === 0) {
         const c = makeCase(opts.plate ? opts.plate(Math.floor(ri / perCase)) : '');
         container.appendChild(c);
         fillNiche(c.querySelector('.niche'), nichePlan.cases[cases.length] || []);
         cases.push(c);
+        labeled = new Set();
       }
       const shelves = cases[cases.length - 1].querySelector('.shelves');
       const shelf = document.createElement('div');
       shelf.className = 'shelf';
       const r = document.createElement('div');
       r.className = 'shelf-row' + (row.length ? '' : ' sparse');
-      if (row.length && be.w) r.appendChild(decorEl(D.sized(be.svg, s), 'bookend left'));
-      row.forEach(it => r.appendChild(it.type === 'book' ? spine(it.b) : ghostSpine(it)));
-      if (row.length && be.w) r.appendChild(decorEl(D.sized(be.svg, s), 'bookend right'));
+      const starts = [];
+      row.forEach((it, i) => {
+        const prev = row[i - 1];
+        const fresh = !prev || secOf(prev) !== secOf(it);
+        if (fresh && prev) {
+          const pb = beOf(secOf(prev));
+          if (pb.w) r.appendChild(decorEl(D.sized(pb.svg, s), 'bookend right'));
+        }
+        const be = beOf(secOf(it));
+        let first = null;
+        if (fresh && be.w) r.appendChild(first = decorEl(D.sized(be.svg, s), 'bookend left'));
+        const el = it.type === 'book' ? spine(it.b) : ghostSpine(it);
+        r.appendChild(el);
+        if (fresh) {
+          first = first || el;
+          if (prev) first.style.marginLeft = `${segGap}px`;
+          if (it.sec) first.classList.add('sec-start');
+          if (opts.labels && it.sec && !labeled.has(it.sec)) { labeled.add(it.sec); starts.push({ sec: it.sec, el: first }); }
+        }
+      });
+      if (row.length) {
+        const lb = beOf(secOf(row[row.length - 1]));
+        if (lb.w) r.appendChild(decorEl(D.sized(lb.svg, s), 'bookend right'));
+      }
       if (plan[ri].length) r.appendChild(nookEl(plan[ri], info[ri], s));
 
       shelf.appendChild(r);
@@ -445,6 +498,16 @@
       plank.className = 'plank';
       shelf.appendChild(plank);
       shelves.appendChild(shelf);
+      // a small brass label on the shelf edge where each section begins
+      starts.forEach(({ sec, el }) => {
+        const n = opts.labels[sec];
+        const tag = document.createElement('span');
+        tag.className = `shelf-label sec-${sec}`;
+        tag.textContent = n != null ? `${SECTIONS[sec]} · ${n}` : SECTIONS[sec];
+        plank.appendChild(tag);
+        const x = Math.max(4, Math.min(el.offsetLeft, plank.clientWidth - tag.offsetWidth - 4));
+        tag.style.left = `${Math.round(x)}px`;
+      });
     });
 
     container.classList.remove('has-top');
@@ -673,7 +736,12 @@
   function renderShelf() {
     const wrap = $('#cases');
     const list = visibleBooks();
-    const items = list.map(b => ({ type: 'book', b }));
+    const secs = sectioned();
+    const items = list.map(b => ({ type: 'book', b, sec: secs ? statusOf(b) : null }));
+    // label the sections once there's more than one on the bookcase
+    const counts = {};
+    if (secs) list.forEach(b => { const k = statusOf(b); counts[k] = (counts[k] || 0) + 1; });
+    const labels = Object.keys(counts).length > 1 ? counts : null;
     const y = prefs.year;
     const goal = (/^\d{4}$/.test(y) && !filtering()) ? goalFor(y) : 0;
     const counted = goal ? countForGoal(y) : 0;
@@ -681,7 +749,7 @@
     for (let i = 0; i < ghostCount; i++) items.push({ type: 'ghost', year: y, n: counted + i + 1 });
 
     const plate = plateText();
-    const cases = buildCases(wrap, items, { plate: (i) => plate, trophies: trophiesShown() });
+    const cases = buildCases(wrap, items, { plate: (i) => plate, trophies: trophiesShown(), labels });
 
     if (!items.length) {
       const note = document.createElement('div');
@@ -698,8 +766,10 @@
         note.innerHTML = `<p>Every book on your shelves has a finish date.</p><button class="btn btn-brass" data-all>Show all years</button>`;
       } else if (y !== 'all') {
         note.innerHTML = `<p>No books finished in ${esc(y)} yet.</p>${offerYearGoal(y) ? `<button class="btn btn-brass" data-goal>Set a ${esc(y)} reading goal</button>` : `<button class="btn btn-brass" data-add>Add a book</button>`}`;
+      } else if (books.length) {
+        note.innerHTML = `<p>Every book here is set aside.</p><button class="btn btn-brass" data-add>Add a book</button>`;
       } else {
-        note.innerHTML = `<p>Your shelves are waiting. Add the first book you’ve read.</p><button class="btn btn-brass" data-add>Add a book</button>`;
+        note.innerHTML = `<p>Your shelves are waiting. Add a book you’ve read, are reading, or want to read.</p><button class="btn btn-brass" data-add>Add a book</button>`;
       }
       cases[0].querySelector('.shelf-row').appendChild(note);
     }
@@ -775,18 +845,29 @@
   function renderList() {
     const ol = $('#list');
     const list = visibleBooks();
-    ol.innerHTML = list.map(b => {
-      const extra = [b.genre, seriesText(b), formatOf(b) !== 'print' ? FORMATS[formatOf(b)] : ''].filter(Boolean).map(esc).join(', ');
-      const tags = tagsOf(b);
-      return `<li><button type="button" class="ledger-item" data-id="${esc(b.id)}">
-        ${thumbHTML(b)}
-        <span><h3>${esc(b.title)}</h3><span class="by">${esc(b.author || '')}${extra ? `, ${extra}` : ''}</span></span>
-        <span class="right">${listRight(b)}</span>
-        ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : ''}
-        ${tags.length ? `<span class="ledger-tags">${tags.map(t => `<span class="tag-pill">${esc(t)}</span>`).join('')}</span>` : ''}
-      </button></li>`;
+    // on All, the list follows the bookcase's sections, with a heading for each
+    const heads = sectioned() && new Set(list.map(statusOf)).size > 1;
+    ol.innerHTML = list.map((b, i) => {
+      const sec = statusOf(b);
+      const head = heads && (!i || statusOf(list[i - 1]) !== sec)
+        ? `<li class="ledger-head" aria-hidden="true">${SECTIONS[sec]} <span>${list.filter(x => statusOf(x) === sec).length}</span></li>` : '';
+      return head + listItem(b);
     }).join('');
     wireThumbs(ol);
+    finishList(list);
+  }
+  function listItem(b) {
+    const extra = [b.genre, seriesText(b), formatOf(b) !== 'print' ? FORMATS[formatOf(b)] : ''].filter(Boolean).map(esc).join(', ');
+    const tags = tagsOf(b);
+    return `<li><button type="button" class="ledger-item" data-id="${esc(b.id)}">
+      ${thumbHTML(b)}
+      <span><h3>${esc(b.title)}</h3><span class="by">${esc(b.author || '')}${extra ? `, ${extra}` : ''}</span></span>
+      <span class="right">${listRight(b)}</span>
+      ${b.review ? `<p class="excerpt">${esc(b.review)}</p>` : ''}
+      ${tags.length ? `<span class="ledger-tags">${tags.map(t => `<span class="tag-pill">${esc(t)}</span>`).join('')}</span>` : ''}
+    </button></li>`;
+  }
+  function finishList(list) {
     const empty = $('#listEmpty');
     empty.hidden = list.length > 0;
     if (filtering()) empty.textContent = query.trim() ? `No books match “${query}”.` : 'No books with that filter.';
@@ -795,7 +876,8 @@
     else if (prefs.year === 'dnf') empty.textContent = 'No books set aside.';
     else if (prefs.year === 'none') empty.textContent = 'Every book has a finish date.';
     else if (prefs.year !== 'all') empty.textContent = `No books finished in ${prefs.year} yet.`;
-    else empty.textContent = 'Nothing logged yet. Add a book you’ve read and it will appear here.';
+    else if (books.length) empty.textContent = 'Every book here is set aside. Tap “Set aside” to see them.';
+    else empty.textContent = 'Nothing logged yet. Add a book you’ve read, are reading or want to read and it will appear here.';
   }
 
   // ---------- header, years, goal bar ----------
@@ -846,7 +928,8 @@
   function renderNow() {
     const bar = $('#nowBar');
     const now = books.filter(b => statusOf(b) === 'reading').sort((a, b) => (b.progressAt || b.addedAt || 0) - (a.progressAt || a.addedAt || 0));
-    const show = now.length && !filtering() && prefs.year !== 'reading';
+    // (on All, the Reading now section of the bookcase takes its place)
+    const show = now.length && !filtering() && prefs.year !== 'reading' && !sectioned();
     bar.hidden = !show;
     if (!show) { bar.innerHTML = ''; return; }
     bar.innerHTML = now.map(b => {
@@ -992,9 +1075,13 @@
   function renderCustomize() {
     const t = prefs.theme;
     // preview: one bookcase with the newest books (or sample classics)
-    const read = readBooks();
-    const src = read.length ? [...read].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 14) : SAMPLE;
-    buildCases($('#czPreview'), src.map(b => ({ type: 'book', b })), { maxRows: 1, minRows: 2, perCase: 2, plate: () => 'Preview' });
+    // a shelf with each section on it: a book or two you're reading, a couple to read, then books you've read
+    const newest = (st) => books.filter(b => statusOf(b) === st).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    const sample = (i, status) => ({ ...SAMPLE[i], status, rating: status === 'read' ? SAMPLE[i].rating : 0 });
+    let pv = books.length
+      ? [...newest('reading').slice(0, 2), ...newest('want').slice(0, 3), ...newest('read').slice(0, 12)]
+      : [sample(0, 'reading'), sample(1, 'want'), sample(2, 'want'), ...SAMPLE.slice(3).map((b, i) => sample(i + 3, 'read'))];
+    buildCases($('#czPreview'), pv.map(b => ({ type: 'book', b, sec: statusOf(b) })), { maxRows: 1, minRows: 2, perCase: 2, plate: () => 'Preview', labels: new Set(pv.map(statusOf)).size > 1 ? {} : null });
     const im = introMode();
     document.querySelectorAll('#czIntro [data-intro]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.intro === im)));
 
@@ -1033,8 +1120,12 @@
         <span class="tile-label">${v.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
 
+    // each section of the bookcase can have its own bookends
+    document.querySelectorAll('#czBookendFor [data-befor]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.befor === bookendFor)));
+    const beNow = sectionBookend(bookendFor);
+    $('#czBookend').setAttribute('aria-label', `Bookends for ${SECTIONS[bookendFor]}`);
     $('#czBookend').innerHTML = Object.entries(D.BOOKENDS).map(([k, b]) => `
-      <button type="button" class="tile" role="radio" aria-checked="${t.bookend === k}" data-bookend="${k}">
+      <button type="button" class="tile" role="radio" aria-checked="${beNow === k}" data-bookend="${k}">
         <span class="tile-art">${b.svg ? D.sized(b.svg, 0.6) : '<span style="align-self:center;color:#cdbf9f;font-size:.85rem">None</span>'}</span>
         <span class="tile-label">${b.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
@@ -2323,6 +2414,7 @@
     $('#csvBtn').addEventListener('click', () => { more.open = false; openImport(); });
     $('#yrDone').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); render(); window.scrollTo(0, 0); });
     $('#czIntro').addEventListener('click', e => { const b = e.target.closest('[data-intro]'); if (b) setIntroMode(b.dataset.intro); });
+    $('#czBookendFor').addEventListener('click', e => { const b = e.target.closest('[data-befor]'); if (b) { bookendFor = b.dataset.befor; renderCustomize(); } });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     $('#signOutBtn').addEventListener('click', () => { more.open = false; Sync.signOut(); });
     more.addEventListener('toggle', () => {
@@ -2357,7 +2449,15 @@
       const t = e.target.closest('.tile'); if (!t) return;
       if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
       else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
-      else if (t.dataset.bookend) setTheme({ bookend: t.dataset.bookend });
+      else if (t.dataset.bookend) {
+        const k = t.dataset.bookend;
+        if (bookendFor === 'read') {
+          // keep the other sections' current look when Read changes
+          const keep = { ...(prefs.theme.bookends || {}) };
+          ['reading', 'want'].forEach(sec => { if (!keep[sec]) keep[sec] = sectionBookend(sec); });
+          setTheme({ bookend: k, bookends: keep });
+        } else setTheme({ bookends: { ...(prefs.theme.bookends || {}), [bookendFor]: k } });
+      }
       else if (t.dataset.light) setTheme({ light: t.dataset.light });
       else if (t.dataset.vine) setTheme({ vine: t.dataset.vine });
       else if (t.dataset.table) setTheme({ table: t.dataset.table });
@@ -2376,7 +2476,7 @@
       const again = $(`#customizePage .tile${sel}`); again && again.focus();
     });
     $('#czReset').addEventListener('click', () => {
-      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] });
+      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems], bookends: {} });
       toast('Back to the original look.');
     });
 

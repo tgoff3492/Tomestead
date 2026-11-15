@@ -1581,3 +1581,69 @@ dialog.scan.found .scan-frame span { box-shadow: 0 0 0 9999px rgba(0,0,0,.42), i
 /* once the book lies open, the turned cover and blank leaf sit under the left page:
    let taps through to the page (its links, tags and buttons) */
 .b3d.is-open .leaf.cover, .b3d.is-open .leaf.f1 { pointer-events: none; }
+
+/* =========================================================
+   Sections of the bookcase: Reading now · To read · Read
+   ========================================================= */
+
+/* a little brass label on the shelf edge where a section begins */
+.shelf-label {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  height: 14px; padding: 0 9px; border-radius: 2px;
+  display: inline-flex; align-items: center; white-space: nowrap; pointer-events: none;
+  font-family: var(--serif); font-style: italic; font-size: .7rem; line-height: 1; letter-spacing: .02em; color: #3a2610;
+  background: linear-gradient(180deg, #f3dca0, var(--brass-lt) 35%, var(--brass) 75%, #8e6a30);
+  box-shadow: 0 1px 1.5px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(0,0,0,.18);
+}
+/* two tiny screws */
+.shelf-label::before, .shelf-label::after {
+  content: ""; position: absolute; top: 50%; width: 3px; height: 3px; margin-top: -1.5px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3cf, #8e6a30 70%);
+  box-shadow: 0 0 0 .5px rgba(58,38,16,.5);
+}
+.shelf-label::before { left: 3px; }
+.shelf-label::after { right: 3px; }
+html[data-light="night"] .shelf-label { filter: brightness(1.15); }
+
+/* books you're reading lean a little, as if just put back */
+.book.lean { transform-origin: 0 100%; transform: rotate(-2.5deg); }
+.book.lean:hover, .book.lean:focus-visible { transform: rotate(-2.5deg) translateY(-8px); }
+.decor.bookend.left + .book.lean { margin-left: 8px; }
+.book.lean.arrive { animation-name: arrive-lean; }
+@keyframes arrive-lean {
+  0% { transform: translateY(-60px) rotate(-8deg); opacity: 0; }
+  70% { opacity: 1; }
+  100% { transform: rotate(-2.5deg); opacity: 1; }
+}
+
+/* books waiting to be read: crisp and new, no shelf wear */
+.book.fresh {
+  filter: saturate(1.08) brightness(1.06);
+  box-shadow: 4px 0 7px -3px rgba(0,0,0,.45), 1px 0 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,250,235,.22), inset 1px 0 0 rgba(255,250,235,.12);
+}
+.book.fresh:hover, .book.fresh:focus-visible { filter: saturate(1.08) brightness(1.14); }
+
+/* a slip of paper marks where you stopped in a book you set aside */
+.book.slip .s-mark {
+  top: -15px; left: 30%; width: 8px; height: 22px;
+  background: linear-gradient(90deg, #e9dcbc, #f7efd9 45%, #e2d3ae);
+  clip-path: polygon(0 6%, 40% 0, 100% 4%, 100% 100%, 0 100%);
+  transform: rotate(4deg); transform-origin: 50% 100%;
+  box-shadow: 0 -1px 2px rgba(0,0,0,.25);
+}
+
+/* list view: a heading for each section */
+.ledger-list li.ledger-head {
+  padding: 14px 20px 4px 70px; border-top: 0;
+  font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: #7a5a2a;
+}
+.ledger-list li.ledger-head span { font-style: normal; font-size: .8rem; opacity: .7; margin-left: 4px; }
+.ledger-list li.ledger-head + li { border-top: 0; }
+.ledger-list li:first-child.ledger-head { padding-top: 6px; }
+
+.cz-befor { margin-bottom: 12px; }
+
+@media (max-width: 640px) {
+  .shelf-label { height: 13px; font-size: .62rem; padding: 0 8px; }
+  .ledger-list li.ledger-head { padding-left: 16px; }
+}
