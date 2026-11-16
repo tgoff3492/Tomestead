@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v22';
+const VERSION = 'tomestead-v23';
 const SHELL = [
   './',
   'index.html',
@@ -8,6 +8,7 @@ const SHELL = [
   'art.js',
   'decor.js',
   'intro.js',
+  'quotes.js',
   'table.js',
   'covers.js',
   'reader.js',

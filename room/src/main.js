@@ -1534,7 +1534,7 @@ const STATIONS = {
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0 };
 let station = 'room', tween = null;
 function portrait() { return innerWidth / innerHeight < 1; }
-let shelfSpan = null;
+let shelfSpan = null, shelfY = null;
 function framing(name) {
   const s = STATIONS[name];
   const p = new THREE.Vector3(...s.p), t = new THREE.Vector3(...s.t);
@@ -1543,15 +1543,32 @@ function framing(name) {
   const need = Math.max(s.w / 2 / Math.tan(hf / 2), s.h / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
   const d = Math.min(s.max, Math.max(base, need));
   const pos = t.clone().addScaledVector(dir, -d);
-  if (name === 'shelf' && shelfSpan) {
-    // look straight at the books: centred on them when they fit the screen, otherwise lined up
-    // with the start of the shelf (Reading now) so the first books are in view
-    const wv = 2 * d * Math.tan(hf / 2), [x0, x1] = shelfSpan;
-    const tx = x1 - x0 <= wv - 0.12 ? (x0 + x1) / 2 : x0 + wv / 2 - 0.06;
-    pos.x += tx - t.x; t.x = tx;
-  }
+  if (name === 'shelf' && shelfSpan) return shelfFraming(dir);
   pos.x = THREE.MathUtils.clamp(pos.x, -2.75, 2.75); pos.z = Math.min(pos.z, 2.6);
   return { pos, dir: t.clone().sub(pos).normalize(), dist: t.distanceTo(pos) };
+}
+// The bookcase view: close enough that spines are readable and easy to tap on a phone, with every
+// shelf of books in the band between the top bar and the book bar at the bottom. When the books are
+// wider than the screen the view starts on the book in hand and slides along as you browse.
+function shelfFraming(dir) {
+  const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), ht = vt * camera.aspect;
+  const H = innerHeight, top = Math.min(0.2, 64 / H), bot = Math.max(top + 0.4, (H - 196) / H);
+  const band = bot - top, mid = (top + bot) / 2;
+  const [x0, x1] = shelfSpan, [y0, y1] = shelfY;
+  const dV = (y1 - y0 + 0.08) / band / 2 / vt;
+  const dW = Math.min(x1 - x0, portrait() ? 0.66 : 1.25) / 2 / ht;
+  const d = THREE.MathUtils.clamp(Math.max(dV, dW), 0.75, STATIONS.shelf.max);
+  const wv = 2 * d * ht, vh = 2 * d * vt;
+  let tx;
+  if (x1 - x0 <= wv - 0.1) tx = (x0 + x1) / 2;
+  else {
+    const m = world && world.books.meshes.length ? shelfOrder()[Math.max(0, browseIdx)] : null;
+    tx = THREE.MathUtils.clamp(m ? m.userData.home.x : x0, x0 + wv / 2 - 0.05, x1 - wv / 2 + 0.05);
+  }
+  // aim a little below the books so they sit in the middle of the clear band
+  const t = new THREE.Vector3(tx, (y0 + y1) / 2 - (0.5 - mid) * vh, STATIONS.shelf.t[2]);
+  const pos = t.clone().addScaledVector(dir, -d);
+  return { pos, dir: dir.clone(), dist: d };
 }
 function go(name, dur = 1.5) {
   station = name;
@@ -1631,7 +1648,11 @@ canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.r
 
 function tap(px, py) {
   if (!world) return;
-  if (station === 'shelf') { const m = nearestBook(px, py); if (m) return selectBook(shelfOrder().indexOf(m)); }
+  if (station === 'shelf') {
+    const m = nearestBook(px, py);
+    if (m && m === pulled && HOST) return HOST.openBook(m.userData.book.id, bookRect(m));
+    if (m) return selectBook(shelfOrder().indexOf(m));
+  }
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(scene.children, true);
@@ -1660,11 +1681,22 @@ function shelfOrder() {
   if (!world.books.order) world.books.order = [...world.books.meshes].sort((a, b) => b.userData.it.row - a.userData.it.row || a.userData.home.x - b.userData.home.x);
   return world.books.order;
 }
+// a warm halo (a slightly larger copy of the book, drawn from the inside) so the book in hand stands out
+const glowMat = new THREE.MeshBasicMaterial({ color: '#ffcf7a', side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+function glowFor(m) {
+  if (!m.userData.glow) {
+    const g = new THREE.Mesh(m.geometry, glowMat.clone());
+    g.scale.set(1 + 0.007 / m.userData.it.t, 1 + 0.007 / m.userData.it.h, 1 + 0.004 / m.userData.it.d);
+    g.castShadow = g.receiveShadow = false; g.renderOrder = 2;
+    m.add(g); m.userData.glow = g;
+  }
+  return m.userData.glow;
+}
 function selectBook(i, { focus = true } = {}) {
   const list = shelfOrder(); if (!list.length || i < 0) return;
   browseIdx = Math.min(list.length - 1, i);
   const m = list[browseIdx];
-  if (pulled !== m) { if (pulled) pulled.userData.anim = -1; pulled = m; m.userData.anim = 0; }
+  if (pulled !== m) { if (pulled) pulled.userData.anim = -1; pulled = m; m.userData.anim = 0; glowFor(m); }
   shelfBar();
   if (focus) focusOn(m);
   kick(900);
@@ -1685,18 +1717,24 @@ function nearestBook(px, py) {
 // slide the view along the shelf when the chosen book is near an edge (or under the bar)
 function focusOn(m) {
   const [, , p] = toScreen(m.userData.home);
-  if (Math.abs(p.x) < 0.6 && p.y > -0.25 && p.y < 0.8) return;
+  if (Math.abs(p.x) < 0.55 && p.y > -0.45 && p.y < 0.8) return;
   const dir = lookDir(), d = Math.max(0.5, m.userData.home.clone().sub(cam.pos).dot(dir));
   const hf = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), wv = hf * camera.aspect;
   const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
-  const delta = right.multiplyScalar(Math.abs(p.x) >= 0.6 ? p.x * wv * d : 0).add(new THREE.Vector3(0, (p.y <= -0.25 || p.y >= 0.8) ? (p.y - 0.25) * hf * d : 0, 0));
+  const delta = right.multiplyScalar(Math.abs(p.x) >= 0.55 ? p.x * wv * d : 0).add(new THREE.Vector3(0, (p.y <= -0.45 || p.y >= 0.8) ? (p.y - 0.25) * hf * d : 0, 0));
   cam.dir.copy(dir); cam.yaw = 0; cam.pitch = 0;
   tween = { t: 0, dur: 0.45, flat: true, from: { pos: cam.pos.clone(), dir: dir.clone(), dist: cam.dist }, to: { pos: cam.pos.clone().add(delta), dir: dir.clone(), dist: cam.dist } };
+}
+// "To read · 2 of 5": where the book in hand sits within its own section
+function secPos(list) {
+  const st = (b) => b.status || 'read', cur = st(list[browseIdx].userData.book);
+  const same = list.filter((m) => st(m.userData.book) === cur);
+  return `${STATUS[cur]} · ${same.indexOf(list[browseIdx]) + 1} of ${same.length}`;
 }
 function shelfBar() {
   const list = shelfOrder(), b = list[browseIdx].userData.book, st = b.status || 'read';
   const r = Math.round(b.rating || 0);
-  const sub = [b.author, st === 'read' && r ? '★'.repeat(r) + '☆'.repeat(5 - r) : STATUS[st]].filter(Boolean).map(esc).join(' · ');
+  const sub = [b.author, st === 'read' && r ? '★'.repeat(r) + '☆'.repeat(5 - r) : ''].filter(Boolean).map(esc).join(' · ');   // the section is on the line below
   const pr = st === 'reading' ? progressOf(b) : null;
   const meta = [STATUS[st], b.pages ? `${b.pages} pages` : '', b.format === 'audio' && b.hours ? `${b.hours} h audiobook` : '', b.finished ? `Finished ${fmtDate(b.finished)}` : ''].filter(Boolean).join(' · ');
   openCard(`<div class="sb">
@@ -1704,7 +1742,7 @@ function shelfBar() {
       <button type="button" class="sb-mid" aria-expanded="${detailsOpen}"><span class="sb-title">${esc(b.title)}</span><span class="sb-sub">${sub}</span></button>
       <button type="button" class="sb-nav" data-step="1" aria-label="Next book" ${browseIdx === list.length - 1 ? 'disabled' : ''}>›</button>
     </div>
-    <div class="sb-count">${browseIdx + 1} of ${list.length} · ${HOST ? 'tap the title to open it, swipe to browse' : 'swipe the shelf to browse'}</div>
+    <div class="sb-count">${secPos(list)}${world.books.hidden ? ` · ${world.books.hidden} more in Classic` : ''} · ${HOST ? 'tap it again to open' : 'swipe to browse'}</div>
     ${detailsOpen ? `<div class="sb-more"><div class="meta">${esc(meta)}</div>
       ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ''}
       <div class="note">In the app, opening a book would carry it to the desk and open it to your review.</div>${sampleNote()}</div>` : ''}`, 'shelf');
@@ -1744,8 +1782,9 @@ function animateBooks(dt) {
     const out = m === pulled;
     m.userData.p = THREE.MathUtils.clamp((m.userData.p || 0) + (out ? dt : -dt) * 3.2, 0, 1);
     const k = ease(m.userData.p);
-    m.position.copy(m.userData.home); m.position.z += k * 0.11; m.position.y += k * 0.012;
-    m.rotation.set(m.userData.homeRot.x, m.userData.homeRot.y + k * 0.2, m.userData.homeRot.z * (1 - k));
+    m.position.copy(m.userData.home); m.position.z += k * 0.13; m.position.y += k * 0.018;
+    m.rotation.set(m.userData.homeRot.x, m.userData.homeRot.y + k * 0.1, m.userData.homeRot.z * (1 - k));
+    if (m.userData.glow) m.userData.glow.material.opacity = 0.32 * k;
     if (!out && m.userData.p === 0) { delete m.userData.anim; m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot); }
     moving = true;
   }
@@ -1892,6 +1931,8 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 function frameShelf() {
   const bys = world.books.meshes.map((m) => m.userData.home.y);
   if (bys.length) { const cy = (Math.min(...bys) + Math.max(...bys)) / 2; STATIONS.shelf.t[1] = cy; STATIONS.shelf.p[1] = cy + 0.2; }
+  const ys = world.books.meshes.flatMap((m) => [m.userData.home.y - m.userData.it.h / 2, m.userData.home.y + m.userData.it.h / 2 + 0.03]);
+  shelfY = ys.length ? [Math.min(...ys), Math.max(...ys)] : null;
   const bxs = world.books.meshes.flatMap((m) => [m.userData.home.x - m.userData.it.t / 2, m.userData.home.x + m.userData.it.t / 2]);
   shelfSpan = bxs.length ? [Math.min(...bxs) - 0.07, Math.max(...bxs) + 0.07] : null;   // a little room for the bookends
 }
@@ -1936,14 +1977,25 @@ function setActive(on) {
   updateCamera(0);
   renderer.compile(scene, camera);
   requestAnimationFrame(frame);
+  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st) };
+  if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
+  // the title screen stays up long enough to read its quote (tap to step in sooner)
+  const Q = window.TomesteadQuotes, veil = $('veil');
+  const wait = Math.max(0, (Q ? T0 + Q.readMs : 0) - performance.now());
+  await new Promise((done) => {
+    if (!wait) return done();
+    veil.classList.add('ready');
+    $('veil-sub').textContent = 'Tap to step inside';
+    const t = setTimeout(done, wait);
+    veil.addEventListener('pointerup', () => { clearTimeout(t); done(); }, { once: true });
+  });
+  if (Q) Q.seen();
   requestAnimationFrame(() => {
-    $('veil').classList.add('gone');
-    setTimeout(() => $('veil').remove(), 1400);
+    veil.classList.add('gone');
+    setTimeout(() => veil.remove(), 1400);
     if (!start) go('room', 2.6);
     else { station = start; document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === start))); if (start === 'shelf' && world.books.meshes.length) selectBook(0, { focus: false }); }
     setTimeout(() => { $('hint').classList.add('show'); setTimeout(() => $('hint').classList.remove('show'), 4200); }, start ? 300 : 2600);
     if (params.get('perf') === '1') { $('perf').hidden = false; showPerf(); }
   });
-  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st) };
-  if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
 })();

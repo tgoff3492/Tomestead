@@ -9,7 +9,17 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .veil { position: fixed; inset: 0; z-index: 20; background: #140d08; display: grid; place-content: center; text-align: center; transition: opacity 1.2s ease; }
 .rm .veil.gone { opacity: 0; pointer-events: none; }
 .rm .veil-title { font-family: var(--serif); font-size: clamp(2.4rem, 9vw, 4.2rem); color: var(--brass-lt); letter-spacing: .02em; }
-.rm .veil-sub { margin-top: 6px; font-style: italic; font-family: var(--serif); opacity: .75; }
+.rm .veil-sub { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); font-style: italic; font-family: var(--serif); font-size: .9rem; color: rgba(239,227,200,.5); transition: color .6s ease; }
+.rm .veil.ready .veil-sub { color: rgba(239,227,200,.8); }
+.rm .veil.ready { cursor: pointer; }
+/* a famous line under the title, a new one each time the app opens (quotes.js) */
+.rm .veil { padding: 0 24px; }
+.rm .veil-quote { margin: 14px auto 0; max-width: 32ch; display: flex; flex-direction: column; align-items: center; gap: 12px; animation: rm-quote 1.4s ease .25s both; }
+.rm .veil-rule { width: min(220px, 46vw); height: 1px; background: linear-gradient(90deg, transparent, var(--brass), transparent); }
+.rm .veil-quote blockquote { margin: 0; font-family: var(--serif); font-style: italic; font-size: clamp(1.08rem, 4.4vw, 1.4rem); line-height: 1.45; color: var(--paper); text-wrap: balance; }
+.rm .veil-quote figcaption { font-family: var(--sans); font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; color: var(--brass); line-height: 1.5; text-wrap: balance; }
+@keyframes rm-quote { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .rm .veil-quote { animation: none; } }
 .rm .top { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; gap: 10px;
   padding: calc(env(safe-area-inset-top) + 10px) 14px 10px; pointer-events: none;
   background: linear-gradient(180deg, rgba(10,6,3,.55), rgba(10,6,3,0)); }
