@@ -34,7 +34,7 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .stations button { border: 0; background: none; color: rgba(239,227,200,.85); font: 500 .92rem var(--sans); padding: 8px 13px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
 .rm .stations button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
 @media (max-width: 380px) {.rm .stations button { padding: 8px 9px; font-size: .86rem; } }
-.rm .hint { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 70px);
+.rm .hint { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 112px);
   font-family: var(--serif); font-style: italic; font-size: 1rem; color: var(--paper); text-shadow: 0 1px 8px rgba(0,0,0,.9);
   opacity: 0; transition: opacity .8s ease; pointer-events: none; white-space: nowrap; }
 .rm .hint.show { opacity: .95; }
@@ -62,19 +62,20 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .perf .ok { color: #9fd18b; }.rm .perf .meh { color: #e6c886; }.rm .perf .bad { color: #f09a8a; }
 .rm .nogl { position: fixed; inset: 0; z-index: 30; background: #140d08; display: grid; place-content: center; text-align: center; padding: 24px; font-family: var(--serif); font-size: 1.1rem; }
 .rm .nogl a { color: var(--brass-lt); }
-.rm /* the bookcase browse bar: one book in hand, .rm big targets for thumbs */
-.rm .card.shelfbar { padding: 10px 10px 8px; }
-.rm .card.shelfbar .card-x { top: 2px; right: 4px; font-size: 1.25rem; }
-.rm .sb { display: flex; align-items: stretch; gap: 6px; }
-.rm .sb-nav { flex: 0 0 48px; min-height: 52px; border: 0; border-radius: 10px; background: rgba(42,30,22,.08); color: var(--ink); font: 400 2rem/1 var(--serif); cursor: pointer; }
-.rm .sb-nav:disabled { opacity: .3; cursor: default; }
-.rm .sb-nav:not(:disabled):active { background: rgba(42,30,22,.18); }
-.rm .sb-mid { flex: 1; min-width: 0; border: 0; background: none; text-align: center; cursor: pointer; padding: 2px 22px 2px 4px; color: var(--ink); display: flex; flex-direction: column; justify-content: center; }
-.rm .sb-title { font-family: var(--serif); font-size: 1.2rem; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rm .sb-sub { font-size: .9rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.rm .sb-sub, .rm .sb-sub * { letter-spacing: .02em; }
-.rm .sb-count { text-align: center; font-size: .75rem; color: var(--ink-soft); margin-top: 4px; }
-.rm .sb-more { border-top: 1px solid rgba(42,30,22,.15); margin-top: 8px; padding-top: 6px; }
+/* at the bookcase: a small bar with search and, for big libraries, the bookcase arrows */
+.rm .shelf-tools { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 66px);
+  display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(20,12,6,.62); border: 1px solid rgba(230,200,134,.3);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: rm-fade .3s ease; }
+@keyframes rm-fade { from { opacity: 0; } }
+.rm .shelf-tools button { border: 0; background: none; color: var(--brass-lt); min-width: 38px; height: 34px; border-radius: 999px; cursor: pointer;
+  display: inline-grid; place-items: center; font: 400 1.5rem/1 var(--serif); padding: 0 8px; }
+.rm .shelf-tools button:disabled { opacity: .3; cursor: default; }
+.rm .shelf-tools button:not(:disabled):active { background: rgba(239,227,200,.12); }
+.rm .shelf-tools .st-case { display: inline-flex; align-items: center; border-left: 1px solid rgba(230,200,134,.25); margin-left: 2px; padding-left: 2px; }
+.rm .shelf-tools .st-n { font: 500 .8rem var(--sans); color: rgba(239,227,200,.85); white-space: nowrap; padding: 0 2px; }
+.menu-open .rm .shelf-tools { visibility: hidden; }
+/* a book open on the desk: the room's own controls step aside */
+html.reading .rm .stations, html.reading .rm .shelf-tools, html.reading .rm .hint, html.reading .rm .card { visibility: hidden; }
 
 .rm [hidden] { display: none !important; }
 .rm, .rm * { box-sizing: border-box; }
@@ -86,16 +87,6 @@ canvas#rm-scene.dragging { cursor: grabbing; }
   background: linear-gradient(180deg, var(--brass-lt), var(--brass)); color: #2a1a0c; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .rm .card .acts button.quiet { background: rgba(42,30,22,.1); box-shadow: none; color: var(--ink); }
 .rm .card li .acts { margin-top: 6px; }
-
-/* bookcase bar: find, and jump to a section */
-.rm .sb-top { display: flex; align-items: center; gap: 6px; margin: 0 26px 6px 0; min-width: 0; }
-.rm .sb-find { flex: 0 0 auto; width: 36px; height: 32px; border: 0; border-radius: 8px; background: rgba(42,30,22,.08); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
-.rm .sb-secs { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
-.rm .sb-secs::-webkit-scrollbar { display: none; }
-.rm .sb-secs button { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 6px 10px; background: rgba(42,30,22,.07); color: var(--ink-soft); font: 500 .84rem var(--sans); cursor: pointer; white-space: nowrap; }
-.rm .sb-secs button i { font-style: normal; opacity: .65; margin-left: 2px; }
-.rm .sb-secs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-.rm .sb-secs button[aria-pressed="true"] i { opacity: .8; }
 
 /* finding a book: the card moves up out of the keyboard's way */
 .rm .card.searchcard { top: calc(env(safe-area-inset-top) + 10px); bottom: auto; padding: 10px 10px 6px; max-height: 70vh; z-index: 14; }

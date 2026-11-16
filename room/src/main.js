@@ -8,7 +8,6 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
 
 // When the room runs inside the Tomestead app, the app hands over its books and its screens
 // through window.TomesteadRoomHost; on its own (the lab page) it reads the browser's saved library.
@@ -321,7 +320,7 @@ async function build() {
     Promise.all(['floor', 'wood-v', 'wood-h', 'plaster', 'cloth', 'leather'].map((n) => loadImg(TEX + n + '.webp'))),
     Promise.all(SETS.map(loadSet)).then((a) => Object.fromEntries(SETS.map((k, i) => [k, a[i]]))),
     Promise.all(MODELS.map(loadModel)).then((a) => Object.fromEntries(MODELS.map((k, i) => [k, a[i]]))),
-    Promise.all([loadTex('wool_boucle_nor'), loadTex('brown_leather_nor'), loadTex('faux_fur_geometric_nor'), loadTex('rug_claret', true)]).then(([w, l, f, r]) => { extra.wool = w; extra.leather = l; extra.fur = f; extra.rug = r; }),
+    Promise.all([loadTex('wool_boucle_nor'), loadTex('brown_leather_nor'), loadTex('rug_claret', true)]).then(([w, l, r]) => { extra.wool = w; extra.leather = l; extra.rug = r; }),
   ]);
   const [floorImg, woodV, woodH, plaster, cloth, leather] = imgs;
   $('veil-sub').textContent = 'Shelving the books…';
@@ -733,7 +732,7 @@ function buildBookcase(M, { cloth, leather }) {
   // a light bead moulding along the outside of the arch
   const arcPts = []; for (let i = 0; i <= 48; i++) { const a = Math.PI - (i / 48) * Math.PI; arcPts.push(new THREE.Vector3(Math.cos(a) * (rx + 0.004), AY + HS + Math.sin(a) * (RISE + 0.004), ZF + 0.002)); }
   mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arcPts), 64, 0.009, 8, false), M.caseShelf, g);
-  // trinkets under the arch: a candlestick, a globe, and the year's trophy once a goal is met
+  // trinkets under the arch: a candlestick, a globe and a little stack (trophies stand on the mantel)
   const AT = SILL + 0.045, AZ = ZC + 0.02;
   const cand = new THREE.Group(); g.add(cand); cand.position.set(-0.32, AT, AZ);
   mesh(lathe([[0, 0], [0.045, 0], [0.045, 0.01], [0.012, 0.02], [0.012, 0.09], [0.03, 0.1], [0.03, 0.11], [0, 0.11]]), M.brass, cand);
@@ -744,7 +743,7 @@ function buildBookcase(M, { cloth, leather }) {
   const gl = mesh(new THREE.SphereGeometry(0.065, 24, 16), std({ map: canvasTex(globeTex(), { repeat: false }), roughness: 0.5 }), globe);
   gl.position.y = 0.125; gl.rotation.z = 0.4;
   const ring = mesh(new THREE.TorusGeometry(0.075, 0.004, 6, 32, Math.PI * 1.2), M.brass, globe); ring.position.y = 0.125; ring.rotation.set(0, Math.PI / 2, 0.4 - Math.PI / 2);
-  globe.position.set(-0.16, AT, AZ);
+  globe.position.set(-0.04, AT, AZ);
   [[0.26, 0.032, '#1F3350'], [0.23, 0.028, '#e9dcbc'], [0.25, 0.034, '#6E1F24']].reduce((yy, [w, th, col]) => {
     box(w, th, 0.17, std({ color: col, roughness: 0.7 }), 0.3, yy + th / 2, AZ, g); return yy + th;
   }, AT);
@@ -767,12 +766,6 @@ function buildBookcase(M, { cloth, leather }) {
   const nRead = lib.books.filter((b) => (b.status || 'read') === 'read').length;
   const plate = mesh(new THREE.PlaneGeometry(0.2, 0.034), std({ map: canvasTex(plateTex(`${nRead} read`), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
   plate.position.set(0, SILL + 0.0225, ZF + 0.035 / 2 + 0.0185);
-  if (Object.keys(lib.trophies || {}).length) {
-    const trophy = new THREE.Group(); g.add(trophy);
-    mesh(lathe([[0, 0], [0.06, 0], [0.06, 0.02], [0.035, 0.03], [0.012, 0.05], [0.012, 0.1], [0.03, 0.12], [0.065, 0.17], [0.072, 0.22], [0.066, 0.22], [0.02, 0.13], [0, 0.13]]), M.gold, trophy);
-    for (const sx of [-1, 1]) { const h = mesh(new THREE.TorusGeometry(0.035, 0.006, 8, 20, Math.PI), M.gold, trophy); h.rotation.z = sx * -Math.PI / 2; h.position.set(sx * 0.07, 0.185, 0); }
-    trophy.position.set(0.06, AT, AZ);
-  }
 
   // ---- books, in the app's order: Reading now → To read → Read
   const ORDER = ['reading', 'want', 'read'];
@@ -1111,26 +1104,62 @@ function buildFireplace(MOD) {
     const cs = MOD.candlestick && (sz < 0 ? MOD.candlestick : MOD.candlestick.clone());
     if (cs) { placeModel(cs, X + 0.2, MT, Z + sz * 0.78, 0, 1.15); const fl = flameSprite(); fl.position.set(X + 0.2, MT + 0.275, Z + sz * 0.78); scene.add(fl); }
   }
-  placeModel(MOD.vase, X + 0.19, MT, Z - 0.42, 0.3, 0.45);
+  const vase = placeModel(MOD.vase, X + 0.19, MT, Z - 0.42, 0.3, 0.45);
   // a big painting over the mantel: Highland cattle on the moor, in the ornate gilt frame
   if (MOD.painting) {
     const art = MOD.painting.clone(true);
     art.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); o.material.map = null; o.material.color.set('#3a2a1c'); canvasMats.mantel = o.material; o.material.needsUpdate = true; } });
     placeModel(art, X + 0.005, MT + 0.62, Z, Math.PI / 2, 2.25, { cast: false });
   }
-  placeModel(MOD.elephant, X + 0.2, MT, Z + 0.42, Math.PI / 2 + 0.3, 1.7);
-  const dog = buildDog(); dog.position.set(X + 1.08, 0, Z + 0.05); dog.rotation.y = 0.5; scene.add(dog);
+  const elephant = placeModel(MOD.elephant, X + 0.2, MT, Z + 0.42, Math.PI / 2 + 0.3, 1.7);
+  // the trophies you've earned stand along the mantel (re-made whenever a goal is met)
+  const cups = new THREE.Group(); cups.userData.dyn = true; g.add(cups);
+  function setTrophies(trophies) {
+    cups.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (o.material.map) { o.material.map.dispose(); o.material.dispose(); } } });
+    cups.clear();
+    const years = Object.keys(trophies || {}).sort();
+    const n = years.length;
+    // one or two take the places of the vase and the elephant; more line up either side of the clock
+    let slots;
+    if (n <= 2) slots = [-0.42, 0.42].slice(0, n);
+    else {
+      const L = Math.ceil(n / 2), R = n - L, span = (k, of, sx) => sx * (0.2 + (k + 0.5) * (0.48 / of));
+      slots = [...Array.from({ length: L }, (_, k) => span(k, L, -1)), ...Array.from({ length: R }, (_, k) => span(k, R, 1))];
+    }
+    // the oldest at the ends, the newest nearest the clock
+    slots.sort((a, b) => Math.abs(b) - Math.abs(a));
+    const sc = n > 2 ? Math.min(0.85, (0.48 / Math.ceil(n / 2)) / 0.17) : 0.85;
+    years.forEach((y, i) => {
+      const t = trophyMesh(y, M); t.scale.setScalar(sc);
+      t.position.set(X + 0.21, MT, Z + slots[i]);
+      t.traverse((o) => { o.userData.dyn = true; if (o.isMesh) o.userData.trophy = y; });
+      cups.add(t);
+    });
+    if (vase) vase.visible = !years.length;
+    if (elephant) elephant.visible = years.length < 2;
+    renderer.shadowMap.needsUpdate = true;
+  }
   let base = 2;
   return {
-    dog,
+    setTrophies,
     setLight(L) { base = mode === 'night' ? 4.2 : 1.6; },
     tick(t) {
       fireMat.uniforms.uTime.value = t; sparkMat.uniforms.uTime.value = t;
       const fl = 0.82 + 0.1 * Math.sin(t * 9.1) + 0.08 * Math.sin(t * 23.7 + 1.3) * Math.sin(t * 3.3);
       light.intensity = base * fl; glow.material.opacity = (mode === 'night' ? 0.5 : 0.28) * fl;
-      dog.userData.tick(t);
     },
   };
+}
+// a gold cup with two handles on a little walnut plinth, the year on a brass plate facing the room
+function trophyMesh(year, M) {
+  const g = new THREE.Group();
+  const plinth = mesh(new RoundedBoxGeometry(0.12, 0.045, 0.12, 2, 0.006), M.trim, g); plinth.position.y = 0.0225;
+  const plate = mesh(new THREE.PlaneGeometry(0.08, 0.024).rotateY(Math.PI / 2), std({ map: canvasTex(plateTex(String(year), 256, 76), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
+  plate.position.set(0.0605, 0.0225, 0);
+  const cup = new THREE.Group(); cup.position.y = 0.045; cup.rotation.y = Math.PI / 2; g.add(cup);
+  mesh(lathe([[0, 0], [0.05, 0], [0.05, 0.016], [0.03, 0.026], [0.011, 0.046], [0.011, 0.09], [0.028, 0.11], [0.06, 0.155], [0.067, 0.205], [0.061, 0.205], [0.019, 0.12], [0, 0.12]], 32), M.gold, cup);
+  for (const sx of [-1, 1]) { const h = mesh(new THREE.TorusGeometry(0.032, 0.0055, 8, 20, Math.PI), M.gold, cup); h.rotation.z = sx * -Math.PI / 2; h.position.set(sx * 0.064, 0.17, 0); }
+  return g;
 }
 function coalTex() {
   const [c, x] = mkCanvas(128, 256);
@@ -1149,76 +1178,6 @@ function flameSprite() {
   const s = new THREE.Sprite(m); s.scale.set(0.03, 0.06, 1); return s;
 }
 
-// ---------------------------------------------------------------- a golden dog, curled up asleep
-// The body is one soft shape (metaballs melted together), so it reads as a single furry curl.
-function buildDog() {
-  const g = new THREE.Group(); g.userData.dyn = true;
-  const fur = new THREE.MeshPhysicalMaterial({ color: '#bf7f3f', roughness: 0.95, sheen: 1, sheenColor: new THREE.Color('#ffd9a0'), sheenRoughness: 0.5,
-    normalMap: extra.fur ? tile(extra.fur, 0.06, 0.06) : null, normalScale: new THREE.Vector2(0.6, 0.6) });
-  const furDark = fur.clone(); furDark.color.set('#9c6230');
-  const dark = std({ color: '#21150f', roughness: 0.35 });
-  const S = 0.9;                                        // the blob lives in a 0.9 m cube
-  const mc = new MarchingCubes(52, fur, false, false, 90000);
-  mc.isolation = 80;
-  const P = (a, rad, y) => [Math.cos(a * Math.PI / 180) * rad, y, Math.sin(a * Math.PI / 180) * rad];
-  const ball = ([x, y, z], r) => mc.addBall(x / S + 0.5, y / S + 0.3, z / S + 0.5, (80 + 140) * (r / S) ** 2, 140);   // a high cut-off keeps each ball's reach short, so parts blend without ballooning
-  mc.reset();
-  // back and flank: a smooth ring from the shoulders (a=215) round through the back to the hips (a=-45)
-  for (let k = 0; k <= 18; k++) { const u = k / 18, a = 215 - u * 260; ball(P(a, 0.165, 0.075 + 0.025 * Math.sin(u * Math.PI)), 0.07 + 0.022 * Math.sin(u * Math.PI)); }
-  ball(P(-50, 0.2, 0.1), 0.085); ball(P(-25, 0.21, 0.09), 0.075);     // haunch
-  ball(P(-80, 0.12, 0.03), 0.035);                       // hind foot, tucked in
-  ball(P(232, 0.135, 0.09), 0.058);                      // neck
-  ball(P(258, 0.115, 0.14), 0.072);                      // head, resting on the hip
-  for (let k = 0; k <= 3; k++) ball(P(275 + k * 12, 0.1 - k * 0.006, 0.125 - k * 0.006), 0.042 - k * 0.003);  // muzzle
-  ball(P(245, 0.06, 0.035), 0.03); ball(P(270, 0.045, 0.03), 0.028);  // front paws in the middle
-  ball([0.0, 0.035, 0.01], 0.085); ball(P(150, 0.08, 0.04), 0.06);       // belly filling the middle of the curl
-  for (let k = 0; k <= 12; k++) { const a = -45 - k * 10; ball(P(a, 0.27 - k * 0.004, 0.045), 0.04 - k * 0.0015); }  // tail round the front
-  mc.update();
-  const geo = mc.geometry.clone();
-  geo.setDrawRange(0, mc.count);
-  const pos = geo.attributes.position.array.slice(0, mc.count * 3), nor = geo.attributes.normal.array.slice(0, mc.count * 3);
-  const bg = new THREE.BufferGeometry();
-  bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  bg.scale(S / 2, S / 2, S / 2);
-  // flat on the floor: drop anything below it
-  bg.computeBoundingBox(); bg.translate(0, -bg.boundingBox.min.y - 0.005, 0);
-  // fur UVs from the top view
-  const uv = new Float32Array(mc.count * 2); for (let i = 0; i < mc.count; i++) { uv[i * 2] = pos[i * 3] * S / 2; uv[i * 2 + 1] = pos[i * 3 + 2] * S / 2 + pos[i * 3 + 1] * S / 2; }
-  bg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  const body = new THREE.Mesh(bg, fur); body.castShadow = true; body.receiveShadow = true; g.add(body);
-  // ears, nose and closed eyes on the head
-  const lift = -bg.boundingBox.min.y - 0.005;
-  const head = new THREE.Vector3(...P(258, 0.115, 0.14)); head.y += lift;
-  const fwd = new THREE.Vector3(...P(311, 0.082, 0.107)).sub(new THREE.Vector3(...P(258, 0.115, 0.14))); fwd.y = 0; fwd.normalize();
-  const side = new THREE.Vector3(-fwd.z, 0, fwd.x);
-  for (const sx of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 10), furDark); ear.scale.set(0.3, 1.0, 0.8);
-    ear.position.copy(head).addScaledVector(side, sx * 0.06).addScaledVector(fwd, -0.015); ear.position.y -= 0.005;
-    ear.lookAt(ear.position.clone().add(fwd)); ear.rotateZ(sx * 0.4); ear.castShadow = true; g.add(ear);
-    const lid = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0024, 6, 12, Math.PI), dark);
-    lid.position.copy(head).addScaledVector(side, sx * 0.028).addScaledVector(fwd, 0.05); lid.position.y += 0.022;
-    lid.lookAt(lid.position.clone().add(fwd)); lid.rotateZ(Math.PI); g.add(lid);
-  }
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.017, 12, 8), dark); nose.scale.set(1.3, 0.85, 1);
-  nose.position.copy(new THREE.Vector3(...P(311, 0.082, 0.107))).addScaledVector(fwd, 0.03); nose.position.y += lift + 0.008; g.add(nose);
-  g.traverse((o) => { o.userData.dyn = true; if (o.isMesh) o.userData.dog = true; });
-  // tapping him sends up a few sleepy z's
-  const zTex = canvasTex((() => { const [c, x] = mkCanvas(64, 64); x.fillStyle = '#fff4dc'; x.font = 'italic 52px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('z', 32, 34); return c; })(), { repeat: false });
-  const zs = [0, 1, 2].map(() => { const z = new THREE.Sprite(new THREE.SpriteMaterial({ map: zTex, transparent: true, depthWrite: false, opacity: 0 })); z.scale.set(0.06, 0.06, 1); g.add(z); return z; });
-  let zFrom = -10;
-  g.userData.wag = () => { zFrom = performance.now() / 1000; };
-  g.userData.tick = (t) => {
-    const breath = Math.sin(t * 1.4);
-    body.scale.set(1 + breath * 0.006, 1 + breath * 0.028, 1 + breath * 0.006);
-    zs.forEach((z, i) => {
-      const k = (t - zFrom - i * 0.5) / 2.2;
-      z.material.opacity = k > 0 && k < 1 ? Math.sin(k * Math.PI) * 0.9 : 0;
-      z.position.copy(head).add(new THREE.Vector3(Math.sin(k * 4 + i) * 0.03, 0.12 + k * 0.35, 0));
-      z.scale.setScalar(0.04 + k * 0.05);
-    });
-  };
-  return g;
-}
 function buildPedestalDesk(M, g, topY) {
   const D = 0.66, L = 1.32, PH = topY - 0.04;
   const top = mesh(new RoundedBoxGeometry(D, 0.04, L, 2, 0.008), M.trim, g); top.position.y = topY - 0.02;
@@ -1269,7 +1228,7 @@ function buildDesk(M, woodH, MOD) {
   const lampLight = new THREE.PointLight('#ffb35c', 1, 3.2, 2); lampLight.position.set(0.06, 0.27, 0); lamp.add(lampLight);
   // the book you're reading, open
   const reading = lib.books.find((b) => b.status === 'reading') || null;
-  const open = new THREE.Group(); g.add(open); open.position.set(0.06, TOP + 0.024, 0.0); open.rotation.y = -Math.PI / 2;
+  const open = new THREE.Group(); g.add(open); open.userData.dyn = true; open.position.set(0.06, TOP + 0.024, 0.0); open.rotation.y = -Math.PI / 2;   // (set aside while a book from the shelf lies here)
   const [cb] = reading ? colorOf(reading) : ['#6E1F24'];
   box(0.36, 0.008, 0.25, std({ color: cb, roughness: 0.6 }), 0, 0.004, 0, open);
   const pageMat = std({ map: canvasTex(pageTex(reading), { repeat: false }), roughness: 0.9 });
@@ -1305,7 +1264,7 @@ function buildDesk(M, woodH, MOD) {
   const hit = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.4, 1.6), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set(0, 0.7, 0); hit.userData.station = 'desk'; g.add(hit);
   return {
-    reading,
+    reading, openBook: open,
     setLight(l, c) {
       lampLight.intensity = l; shadeMat.emissiveIntensity = mode === 'night' ? 0.35 : 0.05;
       bulbMat.color.set(mode === 'night' ? '#ffe2a8' : '#c9b48a');
@@ -1594,7 +1553,7 @@ const STATIONS = {
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
 };
-const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0 };
+const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 let station = 'room', tween = null;
 function portrait() { return innerWidth / innerHeight < 1; }
 let shelfSpan = null, shelfY = null;
@@ -1611,12 +1570,12 @@ function framing(name) {
   return { pos, dir: t.clone().sub(pos).normalize(), dist: t.distanceTo(pos) };
 }
 // The bookcase view: close enough that spines are readable and easy to tap on a phone, with every
-// shelf of books in the band between the top bar and the book bar at the bottom. When the books are
-// wider than the screen the view starts on the book in hand and slides along as you browse.
-// how far down the screen the controls at the top reach (the app's header, toolbar and timer; or the test page's bar)
+// shelf of books between the controls at the top and the station bar at the bottom. When the books
+// are wider than the screen, drag to slide along them (the view starts on the last book you touched).
+// how far down the screen the controls at the top reach (the app's header, toolbar, timer and goals; or the test page's bar)
 function topInset() {
   let y = 64;
-  for (const sel of ['.topbar', '.toolbar', '#timerChip']) {
+  for (const sel of ['.topbar', '.toolbar', '#timerChip', '#roomGoals']) {
     const el = HOST ? document.querySelector(sel) : null;
     if (el && !el.hidden && el.offsetParent !== null) y = Math.max(y, el.getBoundingClientRect().bottom + 6);
   }
@@ -1624,7 +1583,7 @@ function topInset() {
 }
 function shelfFraming(dir) {
   const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), ht = vt * camera.aspect;
-  const H = innerHeight, top = Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - 236) / H);
+  const H = innerHeight, top = Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - 132) / H);
   const band = bot - top, mid = (top + bot) / 2;
   const [x0, x1] = shelfSpan, [y0, y1] = shelfY;
   const dV = (y1 - y0 + 0.08) / band / 2 / vt;
@@ -1642,28 +1601,58 @@ function shelfFraming(dir) {
   const pos = t.clone().addScaledVector(dir, -d);
   return { pos, dir: dir.clone(), dist: d };
 }
+// how far the view can slide along the shelf (null when every book already fits on the screen)
+function shelfPan() {
+  if (!shelfSpan) return null;
+  const ht = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
+  const wv = 2 * Math.max(0.3, cam.pos.z - STATIONS.shelf.t[2]) * ht;
+  const [x0, x1] = shelfSpan;
+  if (x1 - x0 <= wv - 0.1) return null;
+  return { lo: x0 + wv / 2 - 0.05, hi: x1 - wv / 2 + 0.05, perPx: wv / innerWidth };
+}
 // people who ask their phone for less motion get short, flat moves and no flicks
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 function go(name, dur = 1.5, { arrive = true } = {}) {
+  if (outBook) return;              // a book is out on the desk: closing it brings you back
+  closeCard();
+  if (pulled) { pulled.userData.anim = -1; pulled = null; }
+  glide(name, dur, arrive);
+  if (name !== 'tome' && world) world.tome.rest();
+  if (name === 'shelf' && world && !world.books.meshes.length && HOST) openCard(`<h2>Your shelves are empty</h2><div class="meta">Add the first book and it will stand here, or bring your library over from Goodreads or StoryGraph.</div><div class="acts"><button type="button" data-act="add">Add a book</button><button type="button" class="quiet" data-act="import">Import</button></div>`);
+  else if (name === 'shelf' && world) shelfHint();
+}
+// just the camera move
+function glide(name, dur, arrive) {
   if (calm.matches) dur = Math.min(dur, 0.35);
-  station = name;
+  station = name; cam.vx = 0;
   document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === name)));
   const to = framing(name);
   tween = { t: 0, dur, flat: calm.matches, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to, arrive: arrive ? name : null };
   cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
-  closeCard();
-  if (pulled) { pulled.userData.anim = -1; pulled = null; }
-  if (name !== 'tome' && world) world.tome.rest();
-  if (name === 'shelf' && world && world.books.meshes.length) selectBook(Math.max(0, browseIdx), { focus: false });
-  else if (name === 'shelf' && HOST) openCard(`<h2>Your shelves are empty</h2><div class="meta">Add the first book and it will stand here, or bring your library over from Goodreads or StoryGraph.</div><div class="acts"><button type="button" data-act="add">Add a book</button><button type="button" class="quiet" data-act="import">Import</button></div>`);
+  shelfTools();
 }
 // arriving somewhere opens what's there, so nobody has to guess to tap the desk or the fire
 function arrived(name) {
-  if (name !== station || !HOST || !$('card').hidden || document.querySelector('dialog[open]')) return;
+  if (name !== station || !HOST || outBook || !$('card').hidden || document.querySelector('dialog[open]')) return;
   if (name === 'desk') deskCard();
   else if (name === 'hearth') hearthCard();
   else if (name === 'tome') tomeCard();
   else if (name === 'room') firstRun();
+}
+// a word on how the shelf works, the first few visits
+const HINT_KEY = 'tomestead.shelfhint';
+function shelfHint() {
+  let n = 0; try { n = Number(localStorage.getItem(HINT_KEY)) || 0; } catch {}
+  if (n >= 3) return;
+  try { localStorage.setItem(HINT_KEY, String(n + 1)); } catch {}
+  showHint('Tap a spine to pull it out · tap it again to read it', 4200, 1400);
+}
+let hintTimer = 0;
+function showHint(text, ms, delay = 0) {
+  setTimeout(() => {
+    const h = $('hint'); h.textContent = text; h.classList.add('show');
+    clearTimeout(hintTimer); hintTimer = setTimeout(() => h.classList.remove('show'), ms);
+  }, delay);
 }
 const TOUR_KEY = 'tomestead.tour.v1';
 const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch { return true; } };
@@ -1681,9 +1670,9 @@ function welcomeCard() {
 }
 const TOUR = [
   ['Getting around', 'Tap a place along the bottom (Shelf, Desk, Fireside or Tome) to walk over. Drag anywhere to look around.'],
-  ['Your bookcase', 'One book is always in your hand. Swipe to flip through, use the chips to jump to a section, and tap the book again to open it.'],
-  ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books. Wake the tome for what to read next.'],
-  ['Everything else', '+ Add is up top. The ••• menu has imports, backups, tags, Customize (wallpaper, wood, paintings) and Send feedback.'],
+  ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes down to the desk and opens. Drag to slide along the shelves; the magnifier finds any book.'],
+  ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next.'],
+  ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize (wallpaper, wood, paintings) and Send feedback.'],
 ];
 function tourCard(i) {
   const [h, t] = TOUR[i], last = i === TOUR.length - 1;
@@ -1718,6 +1707,14 @@ function updateCamera(dt) {
     cam.vyaw *= 0.9; cam.vpitch *= 0.9;
     if (Math.abs(cam.vyaw) < 1e-5) cam.vyaw = 0;
     if (Math.abs(cam.vpitch) < 1e-5) cam.vpitch = 0;
+    // a flick along the shelf coasts to a stop
+    if (cam.vx) {
+      const lim = station === 'shelf' ? shelfPan() : null;
+      cam.pos.x += cam.vx * dt * 1000;
+      cam.vx *= Math.pow(0.9, dt * 60);
+      if (!lim || cam.pos.x <= lim.lo || cam.pos.x >= lim.hi) { if (lim) cam.pos.x = THREE.MathUtils.clamp(cam.pos.x, lim.lo, lim.hi); cam.vx = 0; }
+      if (Math.abs(cam.vx) < 2e-6) cam.vx = 0;
+    }
   }
   const yl = portrait() ? 0.7 : 0.5;
   cam.yaw = THREE.MathUtils.clamp(cam.yaw, -yl, yl);
@@ -1730,24 +1727,25 @@ function updateCamera(dt) {
 let drag = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 canvas.addEventListener('pointerdown', (e) => {
-  fling = null;
-  drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: e.timeStamp, moved: 0, swipe: 0, trail: [[e.timeStamp, e.clientX]] };
+  drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: e.timeStamp, moved: 0, trail: [[e.timeStamp, e.clientX]] };
+  cam.vx = 0;
+  if (tween && tween.pan) tween = null;      // grabbing the shelf stops a slide along it
   canvas.setPointerCapture(e.pointerId); canvas.classList.add('dragging'); kick();
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
-  if (drag.moved < 6) return;
-  if (station === 'shelf' && world && world.books.meshes.length && !searching) {
-    // at the bookcase a sideways swipe flips through the books, one spine per step
-    drag.trail.push([e.timeStamp, e.clientX]); if (drag.trail.length > 8) drag.trail.shift();
-    if (turning) return;
-    drag.swipe += dx;
-    const step = swipeStep();
-    while (drag.swipe <= -step && !turning) { selectBook(browseIdx + 1); drag.swipe += step; }
-    while (drag.swipe >= step && !turning) { selectBook(browseIdx - 1); drag.swipe -= step; }
-    kick(); return;
+  if (drag.moved < 6 || outBook) return;
+  if (station === 'shelf' && !searching) {
+    // at the bookcase, dragging slides the view along the shelves (like the classic bookcase scrolls)
+    const lim = shelfPan();
+    if (lim) {
+      if (tween) return;
+      drag.trail.push([e.timeStamp, e.clientX]); if (drag.trail.length > 8) drag.trail.shift();
+      cam.pos.x = THREE.MathUtils.clamp(cam.pos.x - dx * lim.perPx, lim.lo, lim.hi);
+      kick(); return;
+    }
   }
   const k = 2.2 / Math.max(innerWidth, innerHeight);
   cam.yaw += dx * k; cam.pitch += dy * k * 0.8;
@@ -1758,13 +1756,13 @@ function endDrag(e) {
   if (!drag) return;
   const d = drag; drag = null; canvas.classList.remove('dragging');
   if (d.moved < 8 && e.timeStamp - d.t < 450) { tap(e.clientX, e.clientY); return; }
-  // a quick flick at the bookcase keeps going
-  if (station === 'shelf' && d.trail && d.trail.length > 1 && !turning && !searching) {
-    const now = e.timeStamp, recent = d.trail.filter(([t]) => now - t < 110);
-    if (recent.length > 1) {
+  // a quick flick along the shelf keeps the view sliding for a moment
+  if (station === 'shelf' && !outBook && !searching && !calm.matches && d.trail.length > 1) {
+    const lim = shelfPan(), now = e.timeStamp, recent = d.trail.filter(([t]) => now - t < 110);
+    if (lim && recent.length > 1) {
       const [t0, x0] = recent[0], [t1, x1] = recent[recent.length - 1];
       const v = (x1 - x0) / Math.max(16, t1 - t0);
-      if (Math.abs(v) > 0.55 && !calm.matches) { fling = { v: v * 1.15, acc: d.swipe }; kick(400); }
+      if (Math.abs(v) > 0.3) { cam.vx = -v * lim.perPx; kick(600); }
     }
   }
 }
@@ -1773,17 +1771,20 @@ canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.r
 
 function tap(px, py) {
   if (!world) return;
+  if (outBook) { if (!HOST && outBook.phase === 'desk') flyBack(); return; }
   if (station === 'shelf') {
     if (searching) return closeSearch();
     if (turning) return;
+    // like the classic bookcase: the first tap slides a spine out a little, the second takes it down
     const m = nearestBook(px, py);
-    if (m && m === pulled && HOST) return HOST.openBook(m.userData.book.id, bookRect(m));
+    if (m && m === pulled) return openOnDesk(m.userData.book.id);
     if (m) return selectBook(indexOfMesh(m));
+    if (pulled) return putBack();
   }
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(scene.children, true);
-  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.dog ? 'hearth' : u.station || null);
+  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.station || null);
   const first = hits.find((h) => kindOf(h.object.userData));
   if (first) {
     const st = kindOf(first.object.userData);
@@ -1791,7 +1792,8 @@ function tap(px, py) {
     const exact = hits.find((h) => { const u = h.object.userData; return (u.book || u.tome || u.deskBook) && kindOf(u) === st && h.distance < first.distance + 0.8; });
     if (station !== st) return go(st);
     if (exact && exact.object.userData.book) return selectBook(indexOfMesh(exact.object));
-    if (hits.some((h) => h.object.userData.dog && h.distance < first.distance + 0.8)) { world.furniture.hearth.dog.userData.wag(); return; }
+    const cup = hits.find((h) => h.object.userData.trophy && h.distance < first.distance + 0.8);
+    if (cup) return trophyCard(cup.object.userData.trophy);
     if (st === 'tome') return magic();
     if (st === 'desk') return deskCard();
     if (st === 'hearth' && HOST) return hearthCard();
@@ -1801,19 +1803,14 @@ function tap(px, py) {
 }
 
 // ---------------------------------------------------------------- browsing the bookcase
-// Spines are too thin to tap reliably on a phone, so at the bookcase one book is always
-// "in hand": swipe (or flick) or use ‹ › to move along the shelf, tap near a spine to jump to it,
-// tap a section to jump there, or search. When the library is bigger than one bookcase, the
-// books carry on to the next case; moving past the end of one turns the bookcase over to the next.
-let browseIdx = 0, detailsOpen = false, searching = false, searchQ = '';
+// It works like the classic bookcase: drag to slide along the shelves, tap a spine to slide it out
+// a little, tap it again to carry it to the desk and open it. A small bar holds search and, for a
+// library bigger than one bookcase, the arrows that turn to the next case.
+let browseIdx = 0, searching = false, searchQ = '';
 const allBooks = () => (world ? world.books.all : []);
-function shelfOrder() {
-  if (!world.books.order) world.books.order = [...world.books.meshes].sort((a, b) => b.userData.it.row - a.userData.it.row || a.userData.home.x - b.userData.home.x);
-  return world.books.order;
-}
 const meshAt = (i) => { const e = allBooks()[i]; return e && e.page === world.books.page ? world.books.byId.get(e.b.id) || null : null; };
 const indexOfMesh = (m) => allBooks().findIndex((e) => e.b.id === m.userData.book.id);
-// a warm halo (a slightly larger copy of the book, drawn from the inside) so the book in hand stands out
+// a soft warm halo (a slightly larger copy of the book, drawn from the inside) around the book you slid out
 const glowMat = new THREE.MeshBasicMaterial({ color: '#ffcf7a', side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
 function glowFor(m) {
   if (!m.userData.glow) {
@@ -1824,7 +1821,7 @@ function glowFor(m) {
   }
   return m.userData.glow;
 }
-// pick up book i (counting through every bookcase); turns to its bookcase first if needed
+// slide book i (counting through every bookcase) out a little; turns to its bookcase first if needed
 function selectBook(i, { focus = true } = {}) {
   const list = allBooks(); if (!list.length || i < 0) return false;
   i = Math.min(list.length - 1, i);
@@ -1833,7 +1830,6 @@ function selectBook(i, { focus = true } = {}) {
   const m = meshAt(i);
   if (!m) return false;
   if (pulled !== m) { if (pulled) pulled.userData.anim = -1; pulled = m; m.userData.anim = 0; glowFor(m); }
-  if (!searching) shelfBar();
   if (focus) focusOn(m);
   kick(900);
   return true;
@@ -1842,7 +1838,7 @@ function selectBook(i, { focus = true } = {}) {
 let turning = null;
 function turnCase(page, then) {
   if (turning) { turning.page = page; turning.then = then; return; }
-  fling = null;
+  cam.vx = 0;
   if (pulled) { pulled.userData.anim = -1; pulled = null; }
   world.books.meshes.forEach((m, k) => { m.userData.leave = -k * 0.004; });
   turning = { page, then, t: 0 };
@@ -1854,67 +1850,74 @@ function finishTurn() {
   frameShelf();
   renderer.shadowMap.needsUpdate = true;
   world.books.meshes.forEach((m, k) => { m.userData.enter = -k * 0.006; });
-  browseIdx = Math.max(0, Math.min(allBooks().length - 1, then));
+  const list = allBooks();
+  browseIdx = then >= 0 ? Math.min(list.length - 1, then) : Math.max(0, list.findIndex((e) => e.page === page));
   kick(1600);
+  shelfTools();
   if (station !== 'shelf') return;     // (you walked away mid-turn)
   const to = framing('shelf');
   cam.yaw = 0; cam.pitch = 0;
   tween = { t: 0, dur: 0.7, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
-  selectBook(browseIdx, { focus: false });
+  if (then >= 0) selectBook(browseIdx, { focus: false });
 }
 const toScreen = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight, p]; };
 function nearestBook(px, py) {
-  let best = null, bd = Math.max(34, innerWidth / 14);
+  let best = null, bd = Math.max(30, innerWidth / 16);
   for (const m of world.books.meshes) {
     const h = m.userData.it.h / 2;
     const [x, yTop] = toScreen(m.userData.home.clone().add(new THREE.Vector3(0, h, 0)));
     const [, yBot] = toScreen(m.userData.home.clone().add(new THREE.Vector3(0, -h, 0)));
-    if (py < yTop - 30 || py > yBot + 30) continue;
+    if (py < yTop - 24 || py > yBot + 24) continue;
     const d = Math.abs(px - x);
     if (d < bd) { bd = d; best = m; }
   }
   return best;
 }
-// slide the view along the shelf when the chosen book is near an edge (or under the bar)
+// slide the view along the shelf when the chosen book is near an edge
 function focusOn(m) {
   const [, , p] = toScreen(m.userData.home);
-  if (Math.abs(p.x) < 0.55 && p.y > -0.45 && p.y < 0.8) return;
+  if (Math.abs(p.x) < 0.7 && p.y > -0.75 && p.y < 0.8) return;
   const dir = lookDir(), d = Math.max(0.5, m.userData.home.clone().sub(cam.pos).dot(dir));
   const hf = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), wv = hf * camera.aspect;
   const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
-  const delta = right.multiplyScalar(Math.abs(p.x) >= 0.55 ? p.x * wv * d : 0).add(new THREE.Vector3(0, (p.y <= -0.45 || p.y >= 0.8) ? (p.y - 0.25) * hf * d : 0, 0));
+  const delta = right.multiplyScalar(Math.abs(p.x) >= 0.7 ? p.x * wv * d * 0.8 : 0).add(new THREE.Vector3(0, (p.y <= -0.75 || p.y >= 0.8) ? (p.y - 0.25) * hf * d : 0, 0));
+  const to = cam.pos.clone().add(delta);
+  const lim = station === 'shelf' ? shelfPan() : null;
+  if (lim) to.x = THREE.MathUtils.clamp(to.x, lim.lo, lim.hi);
   cam.dir.copy(dir); cam.yaw = 0; cam.pitch = 0;
-  tween = { t: 0, dur: fling ? 0.25 : 0.45, flat: true, from: { pos: cam.pos.clone(), dir: dir.clone(), dist: cam.dist }, to: { pos: cam.pos.clone().add(delta), dir: dir.clone(), dist: cam.dist } };
+  tween = { t: 0, dur: 0.45, flat: true, pan: true, from: { pos: cam.pos.clone(), dir: dir.clone(), dist: cam.dist }, to: { pos: to, dir: dir.clone(), dist: cam.dist } };
 }
 const stOf = (b) => b.status || 'read';
-function sections() {
-  const out = [];
-  allBooks().forEach((e, i) => { const st = stOf(e.b); const last = out[out.length - 1]; if (last && last.st === st) last.n++; else out.push({ st, first: i, n: 1 }); });
-  return out;
-}
-function shelfBar() {
-  const list = allBooks(), e = list[browseIdx]; if (!e) return;
-  const b = e.b, st = stOf(b), r = Number(b.rating) || 0;
-  const sub = [b.author, st === 'read' && r ? starText(r) : ''].filter(Boolean).map(esc).join(' · ');   // the section is on the line below
-  const secs = sections(), cur = secs.find((x) => x.st === st);
-  const pr = st === 'reading' ? progressOf(b) : null;
-  const pages = world.books.pages;
-  const where = [`${browseIdx - cur.first + 1} of ${cur.n} in ${STATUS[st]}`, pages > 1 ? `Bookcase ${e.page + 1} of ${pages}` : '', HOST ? 'tap it again to open' : ''].filter(Boolean).join(' · ');
-  openCard(`<div class="sb-top">
-      <button type="button" class="sb-find" data-find aria-label="Find a book">${SEARCH_ICON}</button>
-      ${secs.length > 1 ? `<div class="sb-secs" role="group" aria-label="Jump to a section">${secs.map((x) => `<button type="button" data-sec="${x.first}" aria-pressed="${x.st === st}" aria-label="${STATUS[x.st]}, ${x.n}">${x.st === 'reading' ? 'Reading' : STATUS[x.st]} <i>${x.n}</i></button>`).join('')}</div>` : '<div class="sb-secs"></div>'}
-    </div>
-    <div class="sb">
-      <button type="button" class="sb-nav" data-step="-1" aria-label="Previous book" ${browseIdx === 0 ? 'disabled' : ''}>‹</button>
-      <button type="button" class="sb-mid" aria-expanded="${detailsOpen}"><span class="sb-title">${esc(b.title)}</span><span class="sb-sub">${sub}</span></button>
-      <button type="button" class="sb-nav" data-step="1" aria-label="Next book" ${browseIdx === list.length - 1 ? 'disabled' : ''}>›</button>
-    </div>
-    <div class="sb-count">${esc(where)}</div>
-    ${detailsOpen ? `<div class="sb-more"><div class="meta">${esc([STATUS[st], b.pages ? `${b.pages} pages` : '', b.finished ? `Finished ${fmtDate(b.finished)}` : ''].filter(Boolean).join(' · '))}</div>
-      ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ''}
-      <div class="note">In the app, opening a book would carry it to the desk and open it to your review.</div>${sampleNote()}</div>` : ''}`, 'shelf');
-}
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+
+// ---- the small bar at the bookcase: find a book, and turn to another bookcase
+const tools = document.createElement('div');
+tools.className = 'shelf-tools'; tools.hidden = true;
+tools.innerHTML = `<button type="button" class="st-find" aria-label="Find a book">${SEARCH_ICON}</button>
+  <span class="st-case"><button type="button" data-case="-1" aria-label="Previous bookcase">‹</button><span class="st-n"></span><button type="button" data-case="1" aria-label="Next bookcase">›</button></span>`;
+$('card').parentElement.appendChild(tools);
+function shelfTools() {
+  const show = active && station === 'shelf' && !!world && world.books.meshes.length > 0 && !outBook && !searching;
+  tools.hidden = !show;
+  if (!show) return;
+  const P = world.books.pages, cs = tools.querySelector('.st-case');
+  cs.hidden = P < 2;
+  if (P > 1) {
+    tools.querySelector('.st-n').textContent = `Bookcase ${world.books.page + 1} of ${P}`;
+    tools.querySelector('[data-case="-1"]').disabled = world.books.page === 0;
+    tools.querySelector('[data-case="1"]').disabled = world.books.page === P - 1;
+  }
+}
+tools.addEventListener('click', (e) => {
+  if (outBook) return;
+  if (e.target.closest('.st-find')) { openSearch(); return; }
+  const c = e.target.closest('[data-case]');
+  if (c && world && !turning) {
+    const p = world.books.page + Number(c.dataset.case);
+    if (p >= 0 && p < world.books.pages) { closeCard(); turnCase(p, -1); }
+  }
+  kick();
+});
 
 // ---- search: find a book anywhere on the shelves and go straight to it
 const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -1933,13 +1936,14 @@ function matches(q) {
   return hits.sort((a, b) => a.score - b.score || String(a.b.title).localeCompare(String(b.b.title))).slice(0, 7);
 }
 function openSearch() {
-  searching = true; fling = null;
+  searching = true; cam.vx = 0;
   openCard(`<form class="sf" role="search" onsubmit="return false">
       <span class="sf-icon">${SEARCH_ICON}</span>
       <input type="search" id="rm-find" placeholder="Title, author, series or tag" autocomplete="off" enterkeyhint="go" aria-label="Find a book" value="${esc(searchQ)}">
       <button type="button" class="sf-cancel" data-find-cancel>Cancel</button>
     </form>
     <ul class="sf-list" id="rm-find-list" role="listbox"></ul>`, 'search');
+  shelfTools();
   const input = $('find');
   input.addEventListener('input', () => { searchQ = input.value; listMatches(); });
   input.addEventListener('keydown', (ev) => {
@@ -1959,62 +1963,32 @@ function listMatches() {
 function closeSearch(goTo) {
   searching = false;
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  closeCard();
   if (goTo != null && goTo >= 0) {
     const e = allBooks()[goTo];
     if (e.page !== world.books.page) { turnCase(e.page, goTo); return; }
     browseIdx = goTo;
-    // fly to it: frame the shelf around the book, then pick it up
+    // fly to it: frame the shelf around the book, then slide it out
     const to = framing('shelf');
     tween = { t: 0, dur: 0.8, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
     selectBook(goTo, { focus: false });
-    return;
   }
-  if (world.books.meshes.length) selectBook(browseIdx, { focus: false }); else closeCard();
 }
-
-// ---- a flick keeps flipping, slowing down like a wheel (it stops at the end of the bookcase)
-let fling = null;
-function stepFling(dtMs) {
-  if (!fling) return;
-  const step = swipeStep();
-  fling.acc += fling.v * dtMs;
-  while (fling && fling.acc <= -step) { fling.acc += step; if (!flipBy(1)) fling = null; }
-  while (fling && fling.acc >= step) { fling.acc -= step; if (!flipBy(-1)) fling = null; }
-  if (!fling) return;
-  fling.v *= Math.pow(0.93, dtMs / 16.7);
-  if (Math.abs(fling.v) < 0.12) fling = null;
-  kick(300);
-}
-// one book along, but not across into another bookcase (that's a deliberate ‹ › or swipe)
-function flipBy(d) {
-  const i = browseIdx + d, e = allBooks()[i];
-  if (!e || e.page !== world.books.page) return false;
-  return selectBook(i);
-}
-const swipeStep = () => Math.max(22, Math.min(48, innerWidth / 13));
 
 $('card-body').addEventListener('click', (e) => {
-  if (e.target.closest('[data-find]')) { openSearch(); return; }
   if (e.target.closest('[data-find-cancel]')) { closeSearch(); return; }
   const hit = e.target.closest('[data-hit]');
   if (hit) {
     const i = Number(hit.dataset.hit);
-    if (i < 0) { searching = false; if (HOST) HOST.openBook(hit.dataset.id, null); closeSearch(); return; }
+    if (i < 0) { closeSearch(); openOnDesk(hit.dataset.id); return; }
     closeSearch(i); return;
   }
-  const sec = e.target.closest('[data-sec]');
-  if (sec) { selectBook(Number(sec.dataset.sec)); return; }
-  const step = e.target.closest('[data-step]');
-  if (step) { selectBook(browseIdx + Number(step.dataset.step)); return; }
-  if (e.target.closest('.sb-mid')) {
-    if (HOST) { const m = meshAt(browseIdx); if (m) HOST.openBook(m.userData.book.id, bookRect(m)); return; }
-    detailsOpen = !detailsOpen; shelfBar();
-  }
   const act = e.target.closest('[data-act]');
+  if (act && act.dataset.act === 'putback') { flyBack(); return; }
   if (act && HOST) {
     const id = act.dataset.id, a = act.dataset.act;
     if (a === 'progress') HOST.openProgress(id);
-    else if (a === 'open') HOST.openBook(id, null);
+    else if (a === 'open') openOnDesk(id);
     else if (a === 'add') HOST.addBook();
     else if (a === 'goals') HOST.openGoals();
     else if (a === 'year') HOST.openYear();
@@ -2030,18 +2004,23 @@ $('card-body').addEventListener('click', (e) => {
   }
 });
 
-// ---------------------------------------------------------------- what tapping does
+// ---------------------------------------------------------------- a book slid out a little
 let pulled = null;
-function pull(m) {
-  if (pulled === m) { putBack(); return; }
-  if (pulled) putBack();
-  pulled = m; m.userData.anim = 0;
-  bookCard(m.userData.book);
-}
 function putBack() { if (pulled) { pulled.userData.anim = -1; pulled = null; } closeCard(); }
+// k = 0 in its slot … 1 slid out: forward a few centimetres, its top tipped toward you
+function pullPose(m, k) {
+  const { home, homeRot } = m.userData;
+  m.position.copy(home); m.position.z += k * 0.075; m.position.y += k * 0.012;
+  m.rotation.set(homeRot.x + k * 0.12, homeRot.y + k * 0.04, homeRot.z * (1 - k));
+}
+function pulledPose(m) {
+  const { home, homeRot } = m.userData;
+  return { pos: home.clone().add(new THREE.Vector3(0, 0.012, 0.075)), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(homeRot.x + 0.12, homeRot.y + 0.04, 0)) };
+}
 function animateBooks(dt) {
   let moving = false;
   for (const m of world.books.meshes) {
+    if (m.userData.fly) continue;          // (on its way to or from the desk)
     if (m.userData.leave !== undefined || m.userData.enter !== undefined) {
       const out = m.userData.leave !== undefined;
       const key = out ? 'leave' : 'enter';
@@ -2056,17 +2035,159 @@ function animateBooks(dt) {
     const a = m.userData.anim;
     if (a === undefined) continue;
     const out = m === pulled;
-    m.userData.p = THREE.MathUtils.clamp((m.userData.p || 0) + (out ? dt : -dt) * 3.2, 0, 1);
+    m.userData.p = THREE.MathUtils.clamp((m.userData.p || 0) + (out ? dt : -dt) * 4, 0, 1);
     const k = ease(m.userData.p);
-    m.position.copy(m.userData.home); m.position.z += k * 0.13; m.position.y += k * 0.018;
-    m.rotation.set(m.userData.homeRot.x, m.userData.homeRot.y + k * 0.1, m.userData.homeRot.z * (1 - k));
-    if (m.userData.glow) m.userData.glow.material.opacity = 0.32 * k;
+    pullPose(m, k);
+    if (m.userData.glow) m.userData.glow.material.opacity = 0.22 * k;
     if (!out && m.userData.p === 0) { delete m.userData.anim; m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot); }
-    moving = true;
+    else if (!(out && m.userData.p === 1)) moving = true;
   }
   if (moving) renderer.shadowMap.needsUpdate = true;
   return moving;
 }
+
+// ---------------------------------------------------------------- carrying a book to the desk
+// The second tap takes the book off the shelf: it slides out of its slot and floats across while the
+// view pans to the desk, lands on the leather and opens there (the app's open book, drawn over the
+// room). Closing it carries it back to its place on the shelf, still slid out a little.
+const DESK_AT = new THREE.Vector3(-2.57, 0.758, -0.6);
+let outBook = null;        // { id, m, from, phase: 'out' | 'desk' | 'back', t, dur, p0, q0, hidden, pending }
+const NOMINAL = { t: 0.032, h: 0.24, d: 0.16 };
+// lying on the desk, cover up, its top toward the window and its spine on your left
+function deskPose(it) {
+  return { pos: DESK_AT.clone().add(new THREE.Vector3(0, it.t / 2 + 0.001, 0)), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.16, Math.PI / 2, 'YXZ')) };
+}
+const bez = (a, c, b, t) => new THREE.Vector3().copy(a).multiplyScalar((1 - t) * (1 - t)).addScaledVector(c, 2 * (1 - t) * t).addScaledVector(b, t * t);
+// u = 0 at the shelf (where it started: in its slot or slid out) … 1 lying on the desk
+function flightPose(m, u, o) {
+  const { home, homeRot, it } = m.userData;
+  const qHome = new THREE.Quaternion().setFromEuler(homeRot);
+  const out = home.clone().add(new THREE.Vector3(0, 0.03, 0.3));     // clear of the shelf
+  const D = deskPose(it);
+  const ctrl = out.clone().lerp(D.pos, 0.5).add(new THREE.Vector3(0, 0.3, 0.35));
+  const S = 0.24;
+  if (u < S) {
+    const k = ease(u / S);
+    m.position.lerpVectors(o.p0, out, k); m.quaternion.slerpQuaternions(o.q0, qHome, k);
+  } else {
+    const k = ease((u - S) / (1 - S));
+    m.position.copy(bez(out, ctrl, D.pos, k)); m.quaternion.slerpQuaternions(qHome, D.q, k);
+  }
+}
+function openOnDesk(id) {
+  if (!world) return;
+  if (outBook) { if (outBook.phase === 'back') outBook.pending = id; return; }
+  closeCard(); cam.vx = 0;
+  const m = world.books.byId.get(id) || null;
+  if (pulled && pulled !== m) pulled.userData.anim = -1;
+  pulled = null;
+  if (m) {
+    m.userData.fly = true; delete m.userData.anim; m.userData.p = 0;
+    if (m.userData.glow) m.userData.glow.material.opacity = 0;
+    browseIdx = Math.max(0, indexOfMesh(m));
+  }
+  outBook = { id, m, from: station, phase: 'out', t: 0, dur: calm.matches ? 0.5 : 1.9, camGo: false, p0: m ? m.position.clone() : null, q0: m ? m.quaternion.clone() : null, hidden: false, pending: null };
+  world.desk.openBook.visible = false;      // the desk's own open book makes room
+  if (world.tome) world.tome.rest();
+  shelfTools();
+  kick(2500);
+}
+function stepDesk(dt) {
+  const o = outBook;
+  if (!o || o.phase === 'desk') return;
+  o.t += dt / o.dur;
+  const u = Math.min(1, o.t);
+  if (o.phase === 'out') {
+    if (!o.camGo && u >= 0.18) { o.camGo = true; glide('desk', 1.6, false); }
+    if (o.m) flightPose(o.m, u, o);
+    if (u >= 1 && o.camGo && !tween) landed();
+  } else {
+    if (o.m) flightPose(o.m, 1 - u, o);
+    if (u >= 1) homeAgain();
+  }
+  renderer.shadowMap.needsUpdate = true;
+  kick(300);
+}
+// where the book lies on the screen, so the app's open book can take its place
+function deskRect(it) {
+  const D = deskPose(it);
+  camera.updateMatrixWorld();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const [x, y] = toScreen(new THREE.Vector3(sx * it.t / 2, sy * it.h / 2, sz * it.d / 2).applyQuaternion(D.q).add(D.pos));
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
+}
+function landed() {
+  const o = outBook;
+  o.phase = 'desk';
+  if (o.m) { const D = deskPose(o.m.userData.it); o.m.position.copy(D.pos); o.m.quaternion.copy(D.q); }
+  renderer.shadowMap.needsUpdate = true;
+  const rect = deskRect(o.m ? o.m.userData.it : NOMINAL);
+  if (HOST && HOST.openOnDesk) {
+    const ok = HOST.openOnDesk(o.id, rect, {
+      // the app's book appears over this one, then opens; when you close it, this one is here again
+      onShown: () => { if (outBook !== o) return; o.hidden = true; if (o.m) o.m.visible = false; kick(); },
+      reveal: () => { if (outBook !== o) return; o.hidden = false; if (o.m) o.m.visible = true; kick(); },
+      onClosed: () => { if (outBook === o) flyBack(); },
+    });
+    if (ok === false) flyBack();
+    return;
+  }
+  const b = lib.books.find((x) => x.id === o.id);
+  if (b) bookCard(b); else flyBack();
+}
+function flyBack() {
+  const o = outBook;
+  if (!o || o.phase !== 'desk') return;
+  if (cardKind === 'book') closeCard();
+  o.phase = 'back'; o.t = 0; o.dur = calm.matches ? 0.5 : 1.7;
+  if (o.m) {
+    o.m.visible = true; o.hidden = false;
+    // back to its slot: slid out a little if you came from the shelf, so you can see where it went
+    const P = o.from === 'shelf' ? pulledPose(o.m) : { pos: o.m.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(o.m.userData.homeRot) };
+    o.p0 = P.pos; o.q0 = P.q;
+    browseIdx = Math.max(0, indexOfMesh(o.m));
+  }
+  const to = o.from || 'room';
+  glide(to, 1.5, !o.pending && (to === 'desk' || to === 'hearth' || to === 'tome'));
+  kick(2000);
+}
+function homeAgain() {
+  const o = outBook;
+  outBook = null;
+  world.desk.openBook.visible = true;
+  const m = o.m;
+  if (m) {
+    delete m.userData.fly; m.visible = true;
+    if (o.from === 'shelf' && station === 'shelf') { pulled = m; m.userData.anim = 0; m.userData.p = 1; glowFor(m).material.opacity = 0.22; pullPose(m, 1); }
+    else { m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot); }
+  }
+  renderer.shadowMap.needsUpdate = true;
+  shelfTools();
+  kick();
+  if (o.pending) setTimeout(() => openOnDesk(o.pending), 60);
+}
+// the shelf was re-made while the book was out (an edit, a sync): carry on with the new copy of it
+function reacquireOutBook() {
+  const o = outBook; if (!o) return;
+  const nm = world.books.byId.get(o.id) || null;
+  o.m = nm;
+  if (!nm) return;
+  nm.userData.fly = true;
+  if (o.phase === 'desk') { const D = deskPose(nm.userData.it); nm.position.copy(D.pos); nm.quaternion.copy(D.q); nm.visible = !o.hidden; return; }
+  const P = o.phase === 'out' ? pulledPose(nm) : (o.from === 'shelf' ? pulledPose(nm) : { pos: nm.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(nm.userData.homeRot) });
+  o.p0 = P.pos; o.q0 = P.q;
+}
+function dropOutBook() {
+  const o = outBook; if (!o) return;
+  outBook = null;
+  if (world) world.desk.openBook.visible = true;
+  if (o.m) { delete o.m.userData.fly; o.m.visible = true; o.m.position.copy(o.m.userData.home); o.m.rotation.copy(o.m.userData.homeRot); }
+}
+
+// ---------------------------------------------------------------- the cards
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function fmtDate(d) { try { return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }); } catch { return d; } }
 const STATUS = { read: 'Read', reading: 'Reading now', want: 'To read', dnf: 'Set aside' };
@@ -2078,12 +2199,8 @@ function progressOf(b) {
   if ((b.format === 'ebook' || b.format === 'audio') || !pages) return { pct: Math.min(100, p), text: `${Math.round(p)}%` };
   return { pct: Math.min(100, (p / pages) * 100), text: `Page ${p} of ${pages}` };
 }
-function bookRect(m) {
-  const h = m.userData.it.h / 2, w = m.userData.it.t / 2, c = m.position;
-  const [x0, y0] = toScreen(c.clone().add(new THREE.Vector3(-w, h, 0))), [x1, y1] = toScreen(c.clone().add(new THREE.Vector3(w, -h, 0)));
-  return { left: Math.min(x0, x1), top: Math.min(y0, y1), width: Math.max(8, Math.abs(x1 - x0)), height: Math.max(20, Math.abs(y1 - y0)) };
-}
 function sampleNote() { return lib.sample ? '<div class="note">These are sample books. Open this page on the phone where you use Tomestead to see your own shelf here.</div>' : ''; }
+// (the test page has no app to open the book in: a card stands in for it)
 function bookCard(b) {
   const r = Number(b.rating) || 0;
   const pr = b.status === 'reading' ? progressOf(b) : null;
@@ -2092,7 +2209,14 @@ function bookCard(b) {
     ${r && (b.status || 'read') === 'read' ? `<div class="stars">${starText(r)}</div>` : ''}
     <div class="meta">${esc(meta)}</div>
     ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ''}
-    <div class="note">In the app, this is where the book would be carried to the desk and opened to your review.</div>${sampleNote()}`);
+    <div class="note">In the app, the book opens here on the desk to your review.</div>${sampleNote()}
+    <div class="acts"><button type="button" data-act="putback">Put it back</button></div>`, 'book');
+}
+function trophyCard(y) {
+  const t = (lib.trophies || {})[y] || {};
+  const n = Number(t.goal) || 0;
+  openCard(`<div class="eyebrow">On the mantel</div><h2>${esc(y)} reading goal</h2>
+    <div class="meta">${n ? `You set out to read ${n} ${n === 1 ? 'book' : 'books'} and did it${t.at ? ` (${esc(fmtDate(t.at))})` : ''}.` : 'Goal reached.'}</div>`, 'trophy');
 }
 function deskCard() {
   const reading = lib.books.filter((b) => b.status === 'reading');
@@ -2140,16 +2264,16 @@ function hearthCard() {
     : `<div class="meta">${sk.best ? `Your longest streak is ${sk.best} ${sk.best === 1 ? 'day' : 'days'}. Read today to start a new one.` : 'Read today to start a streak.'}</div>`) : '';
   openCard(`<div class="eyebrow">By the fire</div><h2>Goals, streaks and trophies</h2>
     ${streak}
-    <div class="meta">Your streak, goals and year in books live by the fire. Trophies you earn stand in the arch of your bookcase.</div>
+    <div class="meta">Your streak, goals and year in books live by the fire. Trophies you earn stand on the mantel.</div>
     <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button></div>`, 'hearth');
 }
 let cardKind = '', clockTimer = null;
 function openCard(html, kind = '') {
   cardKind = kind;
   $('card-body').innerHTML = html; $('card').hidden = false;
-  $('card').classList.toggle('shelfbar', kind === 'shelf');
   $('card').classList.toggle('searchcard', kind === 'search');
   if (kind !== 'search') searching = false;
+  shelfTools();
   clearInterval(clockTimer); clockTimer = null;
   // a running reading timer ticks on the card
   if ($('card-body').querySelector('[data-since]')) {
@@ -2157,18 +2281,19 @@ function openCard(html, kind = '') {
     tickClock(); clockTimer = setInterval(tickClock, 1000);
   }
 }
-function closeCard() { $('card').hidden = true; cardKind = ''; searching = false; clearInterval(clockTimer); clockTimer = null; }
+function closeCard() { $('card').hidden = true; cardKind = ''; searching = false; clearInterval(clockTimer); clockTimer = null; shelfTools(); }
 function clockText(ms) {
   const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), p2 = (n) => String(n).padStart(2, '0');
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
 }
-$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); putBack(); closeCard(); });
+$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { flyBack(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go); kick(); }));
 if ($('light')) $('light').addEventListener('click', () => { mode = mode === 'day' ? 'night' : 'day'; world.applyLook(); kick(); });
 addEventListener('keydown', (e) => {
-  if (!active || document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
+  if (!active || outBook || document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
   const order = ['room', 'shelf', 'desk', 'hearth', 'tome'];
   if (station === 'shelf' && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { selectBook(browseIdx + (e.key === 'ArrowRight' ? 1 : -1)); kick(); return; }
+  if (station === 'shelf' && e.key === 'Enter' && pulled) { e.preventDefault(); openOnDesk(pulled.userData.book.id); return; }
   if (station === 'shelf' && (e.key === '/' || (e.key === 'f' && (e.metaKey || e.ctrlKey)))) { e.preventDefault(); openSearch(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(order.indexOf(station) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
   if (e.key === 'Escape') { putBack(); closeCard(); }
@@ -2192,14 +2317,14 @@ let active = true;
 function frame(now) {
   requestAnimationFrame(frame);
   if (!active) return;
-  const busy = !!tween || !!drag || !!fling || !!turning || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
+  const busy = !!tween || !!drag || !!turning || (outBook && outBook.phase !== 'desk') || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
   // when nothing is moving, only the dust and candles drift: 30 frames a second is plenty
   if (!busy && now - lastRender < 32) return;
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   const t = now / 1000;
-  stepFling(dt * 1000);
   if (turning && (turning.t += dt) > 0.34) finishTurn();
   updateCamera(dt);
+  stepDesk(dt);
   const booksMoving = animateBooks(dt);
   if (booksMoving) kick(300);
   world.desk.tick(t); world.tome.tick(t, dt); world.furniture.tick(t);
@@ -2258,8 +2383,9 @@ function frameShelf() {
 }
 // what the room shows from the library; when this changes, the books are shelved again
 const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt, b.upNext]),
-  lib.theme.bookend, lib.theme.bookends, Object.keys(lib.trophies || {}).length]);
-let lastSig = '', lastPaint = '';
+  lib.theme.bookend, lib.theme.bookends]);
+const cupSig = () => JSON.stringify(lib.trophies || {});
+let lastSig = '', lastPaint = '', lastCups = '';
 // the app calls this after anything changes (a book added or edited, settings, a sync)
 function refresh() {
   if (!HOST || !world) return;
@@ -2267,13 +2393,19 @@ function refresh() {
   const sig = libSig();
   if (sig !== lastSig) {
     lastSig = sig;
-    if (pulled) { pulled = null; }
+    const was = pulled && pulled.userData.book.id;
+    pulled = null;
     world.books.refill();
     frameShelf();
+    reacquireOutBook();
     browseIdx = Math.min(browseIdx, Math.max(0, allBooks().length - 1));
     renderer.shadowMap.needsUpdate = true;
-    if (station === 'shelf' && !$('card').hidden && !searching) { if (world.books.meshes.length) selectBook(browseIdx, { focus: false }); else closeCard(); }
+    // the book you'd slid out stays slid out (it may have moved, if its status changed)
+    if (was && station === 'shelf' && !outBook) { const i = allBooks().findIndex((e) => e.b.id === was); if (i >= 0 && allBooks()[i].page === world.books.page) selectBook(i, { focus: false }); }
+    if (station === 'shelf' && !world.books.meshes.length && cardKind !== 'search') closeCard();
+    shelfTools();
   }
+  if (cupSig() !== lastCups) { lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies); }
   if (paintSig() !== lastPaint) { lastPaint = paintSig(); hangPaintings(); }
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
@@ -2287,7 +2419,8 @@ function refresh() {
 function setActive(on) {
   active = !!on;
   if (active) { last = performance.now(); resize(); kick(); }
-  else { putBack(); closeCard(); }
+  else { dropOutBook(); putBack(); closeCard(); }
+  shelfTools();
 }
 
 (async () => {
@@ -2295,6 +2428,7 @@ function setActive(on) {
   world = await build();
   lastSig = libSig();
   lastPaint = paintSig(); hangPaintings();
+  lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies);
   frameShelf();
   const start = params.get('st') && STATIONS[params.get('st')] ? params.get('st') : null;
   const f = framing(start || 'room');
@@ -2304,7 +2438,7 @@ function setActive(on) {
   updateCamera(0);
   renderer.compile(scene, camera);
   requestAnimationFrame(frame);
-  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
+  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // the title screen stays up long enough to read its quote (tap to step in sooner)
   const Q = window.TomesteadQuotes, veil = $('veil');
@@ -2321,7 +2455,7 @@ function setActive(on) {
     veil.classList.add('gone');
     setTimeout(() => veil.remove(), 1400);
     if (!start) go('room', 2.6);
-    else { station = start; document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === start))); if (start === 'shelf' && world.books.meshes.length) selectBook(0, { focus: false }); }
+    else { station = start; document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === start))); shelfTools(); }
     setTimeout(() => { $('hint').classList.add('show'); setTimeout(() => $('hint').classList.remove('show'), 4200); }, start ? 300 : 2600);
     if (params.get('perf') === '1') { $('perf').hidden = false; showPerf(); }
   });

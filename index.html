@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261115224031">
+  <link rel="stylesheet" href="room/room.css?v=20261116072923">
   <script>try { var u = localStorage.getItem('tomestead.uid'), pv = JSON.parse(localStorage.getItem('tomestead.prefs.v1' + (u ? ':' + u : '')) || '{}') || {}, cv = document.createElement('canvas'); if (!(pv.roomV1 && pv.view !== 'room') && cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -128,6 +128,8 @@
       </button>
       <button type="button" class="tc-x" id="tcDiscard" aria-label="Discard this reading session">×</button>
     </div>
+    <!-- reading goals, shown over the 3D room (the bookcase views have their own, below) -->
+    <div id="roomGoals" class="goalbar room-goals" aria-label="Reading goals" hidden></div>
 
     <main>
       <div id="filterBar" class="filterbar" hidden></div>

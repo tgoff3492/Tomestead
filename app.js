@@ -995,14 +995,24 @@
   }
 
   function renderGoalBar() {
+    const rows = goalRows(prefs.year, 3);
     const bar = $('#goalBar');
-    const y = prefs.year;
+    bar.hidden = !rows.length;
+    bar.className = 'goalbar';
+    bar.innerHTML = rows.join('');
+    // the 3D room shows this year's goal and the goals running now, under the toolbar
+    const rg = $('#roomGoals');
+    const rrows = goalRows(thisYear(), 2);
+    rg.hidden = !rrows.length;
+    rg.innerHTML = rrows.join('');
+  }
+  function goalRows(y, maxCustom) {
     const rows = [];
     if (/^\d{4}$/.test(y)) {
       const goal = goalFor(y), done = countInYear(y);
       if (!goal) {
         // only ask for a year goal when there's no goal at all yet (and the year isn't over)
-        if (offerYearGoal(y)) rows.push(`<div class="goal-row"><p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal>Set a goal</button></div>`);
+        if (offerYearGoal(y)) rows.push(`<div class="goal-row"><p class="goal-text">${done} ${done === 1 ? 'book' : 'books'} in ${esc(y)}.</p><button class="linkbtn" data-goal="${esc(y)}">Set a goal</button></div>`);
       } else {
         const counted = countForGoal(y);
         const pct = Math.min(100, Math.round((counted / goal) * 100));
@@ -1011,22 +1021,20 @@
         const since = from > `${y}-01-01` && !met ? ` since ${shortDate(from, false)}` : '';
         rows.push(`<div class="goal-row${met ? ' met' : ''}"><p class="goal-text"><strong>${counted} of ${goal}</strong>${since} ${met ? '· goal reached' : `· ${goal - counted} to go`}</p>
           <div class="goal-meter" role="progressbar" aria-label="${esc(y)} reading goal" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(counted, goal)}"><span style="width:${pct}%"></span></div>
-          <button class="linkbtn" data-goal>Change</button></div>`);
+          <button class="linkbtn" data-goal="${esc(y)}">Change</button></div>`);
       }
     }
     // goals with their own timeline that are running right now
     const live = prefs.customGoals.map(g => ({ g, i: goalInfo(g) })).filter(x => x.i.status === 'active')
       .sort((p, q) => p.g.end.localeCompare(q.g.end));
-    live.slice(0, 3).forEach(({ g, i }) => {
+    live.slice(0, maxCustom).forEach(({ g, i }) => {
       const tail = i.met ? 'goal reached' : (i.daysLeft === 1 ? 'last day' : `${i.daysLeft} days left`);
       rows.push(`<button type="button" class="goal-row custom${i.met ? ' met' : ''}" data-cgoal="${esc(g.id)}" aria-label="${esc(goalName(g))}: ${i.done} of ${g.target}, ${tail}. Edit goal.">
         <span class="goal-text"><span class="goal-name">${esc(goalName(g))}</span> · <strong>${i.done} of ${g.target}</strong>${G.countsFrom(g) > g.start && !i.met ? ` since ${esc(shortDate(G.countsFrom(g), false))}` : ''} · ${tail}</span>
         <span class="goal-meter" aria-hidden="true"><span style="width:${i.pct}%"></span></span></button>`);
     });
-    if (live.length > 3) rows.push(`<div class="goal-row"><button class="linkbtn" data-goals>${live.length - 3} more ${live.length - 3 === 1 ? 'goal' : 'goals'}</button></div>`);
-    bar.hidden = !rows.length;
-    bar.className = 'goalbar';
-    bar.innerHTML = rows.join('');
+    if (live.length > maxCustom) rows.push(`<div class="goal-row"><button class="linkbtn" data-goals>${live.length - maxCustom} more ${live.length - maxCustom === 1 ? 'goal' : 'goals'}</button></div>`);
+    return rows;
   }
 
   // ---------- page routing ----------
@@ -1339,8 +1347,12 @@
 
   let reader = null;
   function openDetail(id, el) {
-    if (reader) reader.open(id, el);
+    if (!reader) return;
+    // in the 3D room, books are carried to the room's desk and open there
+    if (inRoom() && window.TomesteadRoom && window.TomesteadRoom.openBook) return window.TomesteadRoom.openBook(id);
+    reader.open(id, el);
   }
+  const inRoom = () => viewNow() === 'room' && document.documentElement.classList.contains('room-mode') && !onCustomize() && !onYear();
 
   // ---------- editor ----------
   function buildStarPicker() {
@@ -2546,7 +2558,8 @@
       if (unf) { tagFilter = null; caseIndex = 0; return render(); }
       const add = e.target.closest('[data-add]');
       if (add) return openEditor(null, null, null, STATUSES.includes(add.dataset.add) ? { status: add.dataset.add } : {});
-      if (e.target.closest('[data-goal]')) return openGoal();
+      const gl = e.target.closest('[data-goal]');
+      if (gl) return openGoal(gl.dataset.goal || undefined);
       const cg = e.target.closest('[data-cgoal]');
       if (cg) return openGoalEditor({ id: cg.dataset.cgoal });
       if (e.target.closest('[data-goals]')) return openGoals();
@@ -3023,7 +3036,8 @@
   }
   window.TomesteadRoomHost = {
     data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies }),
-    openBook: (id, rect) => openDetail(id, rect ? roomOrigin(rect) : null),
+    openBook: (id, rect) => reader.open(id, rect ? roomOrigin(rect) : null),
+    openOnDesk: (id, rect, hooks) => reader.openOnDesk(id, Object.assign({ rect }, hooks)),
     openProgress: (id) => openProgress(id),
     openRecs: () => recommender.open(),
     openGoals: () => openGoals(),
@@ -3047,7 +3061,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261115224031').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261116072923').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
