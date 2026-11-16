@@ -66,6 +66,12 @@
   let canRoom = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext && c.getContext('webgl2')); } catch { return false; } })();
   const viewNow = () => (prefs.view === 'room' && !canRoom ? 'shelf' : prefs.view);
   prefs.recs = prefs.recs || { dismissed: [] };
+  // days marked as reading days by hand (the reading calendar), and a reading session in progress
+  const cleanMarks = (a) => (Array.isArray(a) ? [...new Set(a.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(String(d))))].sort().slice(-3000) : []);
+  const cleanTimer = (t) => (t && typeof t === 'object' && /^[A-Za-z0-9_-]{1,120}$/.test(String(t.id || '')) && Number(t.start) > 0 ? { id: String(t.id), start: Number(t.start) } : null);
+  prefs.readMarks = cleanMarks(prefs.readMarks);
+  prefs.timer = cleanTimer(prefs.timer);
+  let calendar = null;
   // tags: a starter set you can change, plus any you make yourself
   const TAG_PRESETS = ['Favorite', 'Comfort read', 'Book club', 'Cozy', 'Dark', 'Funny', 'Hopeful', 'Emotional', 'Mysterious', 'Adventurous', 'Thought-provoking', 'Fast-paced'];
   function cleanTags(arr) {
@@ -886,6 +892,11 @@
   }
 
   // ---------- header, years, goal bar ----------
+  function streakNote() {
+    if (!calendar) return '';
+    const s = calendar.streaks();
+    return s.cur >= 2 ? ` <button type="button" class="streak-link" data-cal-open>${s.cur} days in a row</button>` : '';
+  }
   function renderStats() {
     const read = readBooks();
     const n = read.length;
@@ -893,7 +904,7 @@
     const avg = rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : 0;
     const y = thisYear();
     $('#stats').innerHTML = n
-      ? `${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}`
+      ? `${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}${streakNote()}`
       : (books.length ? 'Your first finished book goes on the shelf.' : 'Every book you’ve read, on one shelf.');
     $('#genres').innerHTML = [...new Set(books.map(b => b.genre).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
     $('#seriesList').innerHTML = [...new Set(books.map(b => b.series).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
@@ -1617,6 +1628,61 @@
     save(); render(); lookup(b);
     toast(`“${b.title}” is on your to-read pile.`);
   }
+  // ---------- the reading log: what you did each day (it lights up the reading calendar) ----------
+  function logRead(b, { m = 0, p = null } = {}) {
+    const d = today();
+    if (!Array.isArray(b.log)) b.log = [];
+    let e = b.log.find(x => x.d === d);
+    if (!e) { e = { d }; b.log.push(e); }
+    if (m > 0) e.m = Math.min(1440, (e.m || 0) + Math.round(m));
+    if (p != null) e.p = p;
+    if (b.log.length > 500) b.log = b.log.slice(-500);
+  }
+
+  // ---------- reading timer: start it when you sit down, stop it when you're done ----------
+  let timerTick = null;
+  const timerNow = () => (prefs.timer && books.some(b => b.id === prefs.timer.id) ? prefs.timer : null);
+  const roomRefresh = () => { if (window.TomesteadRoom) window.TomesteadRoom.refresh(); };
+  const pad2 = (n) => String(n).padStart(2, '0');
+  function clockText(ms) {
+    const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+    return h ? `${h}:${pad2(m)}:${pad2(t % 60)}` : `${m}:${pad2(t % 60)}`;
+  }
+  function startTimer(id) {
+    const b = books.find(x => x.id === id);
+    if (!b) return;
+    const cur = timerNow();
+    if (cur && cur.id === id) return;
+    if (cur) stopTimer({ quiet: true });
+    prefs.timer = { id, start: Date.now() };
+    savePrefs(); renderTimer(); roomRefresh();
+    toast(`Timer’s running for “${b.title}”. Tap it at the top when you stop.`);
+  }
+  function stopTimer({ quiet = false, discard = false } = {}) {
+    const t = timerNow();
+    prefs.timer = null; savePrefs(); renderTimer();
+    if (!t) { roomRefresh(); return; }
+    const b = books.find(x => x.id === t.id);
+    const m = Math.min(720, Math.round((Date.now() - t.start) / 60000));
+    if (discard) { toast('Reading session discarded.'); roomRefresh(); return; }
+    if (b && m >= 1) { logRead(b, { m }); b.updatedAt = Date.now(); save(); if (calendar) calendar.refresh(); }
+    roomRefresh();
+    if (!b) return;
+    if (!quiet && statusOf(b) === 'reading') { openProgress(b.id, null, { session: m }); return; }
+    toast(m >= 1 ? `Logged ${m} min of “${b.title}”.` : 'That was under a minute, so nothing was logged.');
+  }
+  function renderTimer() {
+    const t = timerNow(), chip = $('#timerChip');
+    clearInterval(timerTick); timerTick = null;
+    if (!chip) return;
+    if (!t) { chip.hidden = true; return; }
+    const b = books.find(x => x.id === t.id);
+    chip.hidden = false;
+    $('#tcTitle').textContent = b.title;
+    const tick = () => { $('#tcTime').textContent = clockText(Date.now() - t.start); };
+    tick(); timerTick = setInterval(tick, 1000);
+  }
+
   function startReading(b) {
     const again = datesOf(b).length > 0;
     Object.assign(b, { status: 'reading', started: today(), progress: 0, progressAt: Date.now(), stopped: '', updatedAt: Date.now() });
@@ -1639,10 +1705,15 @@
 
   // ---------- where you are in a book ----------
   let progressId = null, progressFrom = null;
-  function openProgress(id, fromEl) {
+  function openProgress(id, fromEl, opts = {}) {
     const b = books.find(x => x.id === id);
     if (!b) return;
     progressId = id; progressFrom = fromEl || null;
+    const t = timerNow();
+    $('#prSession').hidden = opts.session == null;
+    $('#prSession').textContent = opts.session >= 1 ? `You read for ${opts.session >= 60 ? `${Math.floor(opts.session / 60)} h ${opts.session % 60} min` : `${opts.session} min`}. Where did you get to?` : 'Where did you get to?';
+    $('#prTimer').textContent = t && t.id === id ? `Stop the timer (${clockText(Date.now() - t.start)} so far)` : 'Start a reading timer';
+    $('#prTimer').hidden = opts.session != null;
     const print = formatOf(b) === 'print';
     $('#prTitle').textContent = b.title;
     $('#prBy').textContent = b.author ? `by ${b.author}` : '';
@@ -1697,8 +1768,10 @@
     let v = Math.max(0, Number($('#prValue').value) || 0);
     v = print ? Math.round(b.pages ? Math.min(v, b.pages) : v) : Math.min(100, v);
     b.progress = v; b.progressAt = Date.now(); b.updatedAt = Date.now();
+    logRead(b, { p: v });
     save();
     $('#progressDialog').close();
+    if (calendar) calendar.refresh();
     render();
     if (reader && reader.currentId() === b.id) reader.refresh();
     const done = print ? (b.pages && v >= b.pages) : v >= 100;
@@ -2049,7 +2122,7 @@
       for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
     } catch {}
     const clean = books;
-    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList }, uploads };
+    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList, readMarks: prefs.readMarks }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2086,6 +2159,15 @@
     if (day(b.stopped)) out.stopped = day(b.stopped);
     if (num(b.progress, 5000) != null && (out.status === 'reading' || out.status === 'dnf')) out.progress = num(b.progress, 5000);
     if (Number(b.progressAt) > 0) out.progressAt = Number(b.progressAt);
+    if (Array.isArray(b.log)) {
+      const lg = b.log.filter(l => l && /^\d{4}-\d{2}-\d{2}$/.test(String(l.d))).map(l => {
+        const o = { d: String(l.d) };
+        if (num(l.m, 1440) > 0) o.m = Math.round(num(l.m, 1440));
+        if (l.p != null && l.p !== '' && num(l.p, 5000) != null) o.p = num(l.p, 5000);
+        return o;
+      }).slice(-500);
+      if (lg.length) out.log = lg;
+    }
     const isbn = Covers.isbnOf(b.isbn);
     if (isbn) out.isbn = isbn;
     if (/^\/works\/OL\d+W$/.test(String(b.olKey || ''))) out.olKey = String(b.olKey);
@@ -2127,6 +2209,7 @@
             for (const yr of Object.keys(st.goals)) { if (since[yr]) prefs.goalSince[yr] = since[yr]; else delete prefs.goalSince[yr]; }
           }
           if (Array.isArray(st.tagList)) prefs.tagList = cleanTags([...prefs.tagList, ...st.tagList]);
+          if (Array.isArray(st.readMarks)) prefs.readMarks = cleanMarks([...prefs.readMarks, ...st.readMarks]);
           if (Array.isArray(st.customGoals)) {
             for (const g of cleanGoals(st.customGoals)) {
               const i = prefs.customGoals.findIndex(x => x.id === g.id);
@@ -2353,6 +2436,7 @@
       if (a.dataset.pr === 'finish') openEditor(b.id, null, null, { finish: true });
       else if (a.dataset.pr === 'quote') openQuote(b.id);
       else if (a.dataset.pr === 'dnf') setAside(b);
+      else if (a.dataset.pr === 'timer') { const t = timerNow(); if (t && t.id === b.id) stopTimer(); else startTimer(b.id); }
       else if (a.dataset.pr === 'open') openDetail(b.id, progressFrom && progressFrom.isConnected ? progressFrom : null);
     });
     // quotes
@@ -2419,6 +2503,9 @@
     document.addEventListener('click', e => { if (more.open && !more.contains(e.target)) more.open = false; });
     $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoals(); });
+    $('#calBtn').addEventListener('click', () => { more.open = false; calendar.open(); });
+    $('#tcStop').addEventListener('click', () => stopTimer());
+    $('#tcDiscard').addEventListener('click', () => stopTimer({ discard: true }));
     $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
     $('#yearBtn').addEventListener('click', () => { more.open = false; location.hash = 'year'; });
     $('#tagsBtn').addEventListener('click', () => { more.open = false; openTags(); });
@@ -2556,7 +2643,7 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList };
+    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
@@ -2571,7 +2658,12 @@
     if (s.goalSince && typeof s.goalSince === 'object') prefs.goalSince = cleanSince(s.goalSince);
     if (Array.isArray(s.tagList)) prefs.tagList = cleanTags(s.tagList);
     prefs.recs = s.recs && typeof s.recs === 'object' ? Object.assign({ dismissed: [] }, s.recs) : { dismissed: [] };
+    // (older devices don't send these; keep what's here)
+    if (Array.isArray(s.readMarks)) prefs.readMarks = cleanMarks(s.readMarks);
+    if ('timer' in s) prefs.timer = cleanTimer(s.timer);
     savePrefsHere();
+    renderTimer();
+    if (calendar) calendar.refresh();
     D.applyTheme(prefs.theme);
     renderSoon();
   }
@@ -2705,6 +2797,11 @@
     openGoals: () => openGoals(),
     openYear: () => { location.hash = 'year'; },
     addBook: () => openEditor(),
+    openCalendar: () => calendar.open(),
+    streak: () => calendar.streaks(),
+    timer: () => { const t = timerNow(); return t ? { id: t.id, start: t.start } : null; },
+    startTimer: (id) => startTimer(id),
+    stopTimer: () => stopTimer(),
     unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
     ready: (room) => { if (viewNow() === 'room' && !onCustomize() && !onYear()) room.setActive(true); else room.setActive(false); },
   };
@@ -2715,7 +2812,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261115180523').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261115184854').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
@@ -2767,9 +2864,21 @@
     drawTrophy: (y, n, sc) => Art.drawTrophy(y, n, sc),
     openBook: (id, el) => openDetail(id, el),
   });
+  calendar = window.TomesteadCalendar({
+    esc, books: () => books, datesOf, statusOf, formatOf, today,
+    marked: () => prefs.readMarks,
+    toggleMark: (d) => {
+      const set = new Set(prefs.readMarks);
+      if (set.has(d)) set.delete(d); else set.add(d);
+      prefs.readMarks = cleanMarks([...set]); savePrefs(); renderStats(); roomRefresh();
+    },
+    openBook: (id) => openDetail(id, null),
+  });
   // props on the reading table
   wire();
   render();
+  renderTimer();
+  document.addEventListener('click', e => { if (e.target.closest('[data-cal-open]')) calendar.open(); });
   setupIosTip();
   setTimeout(runLookupQueue, 1500);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => render());

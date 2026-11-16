@@ -711,9 +711,13 @@ function buildBookcase(M, { cloth, leather }) {
 
   // ---- everything that depends on the library lives in its own group, shelved again when books change
   const shelfGroup = new THREE.Group(); shelfGroup.userData.dyn = true; g.add(shelfGroup);
-  const api = { meshes: [], hidden: 0, count: 0, order: null, paint() {}, refill() { fill(); api.paint(); } };
+  const api = {
+    meshes: [], hidden: 0, count: 0, order: null, page: 0, pages: 1, all: [], paint() {},
+    refill() { fill(api.page); api.paint(); },
+    showPage(p) { fill(p); api.paint(); },
+  };
   const outer = g;
-  function fill() {
+  function fill(want = 0) {
   shelfGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (o.material && o.material.map && o.material !== api.mat) o.material.map.dispose(); } });
   shelfGroup.clear();
   if (api.mat) { api.mat.map.dispose(); api.mat.dispose(); api.mat = null; }
@@ -766,31 +770,49 @@ function buildBookcase(M, { cloth, leather }) {
   // a small library is spread over the shelves, with room for trinkets
   const total = seq.reduce((s2, e) => s2 + e.w, 0);
   const needed = Math.ceil(total / rowW);
-  // balance the books over the shelves they need (a little extra, so each shelf has room for a trinket)
-  const rowsUsed = Math.min(ROWS, Math.max(needed, Math.ceil(total / (rowW * 0.72))));
-  const cap = Math.min(rowW, total / rowsUsed + 0.06);
-  let row = ROWS - 1, x = innerL, hidden = 0;
-  const items = [];
+  // more than one bookcase's worth: every shelf is filled and the books carry on to the next
+  // bookcase (the room shows one at a time). Otherwise the books are balanced over the shelves
+  // they need, with a little extra so each shelf has room for a trinket.
+  const multi = needed > ROWS;
+  const rowsUsed = multi ? ROWS : Math.min(ROWS, Math.max(needed, Math.ceil(total / (rowW * 0.72))));
+  const cap = multi ? rowW : Math.min(rowW, total / rowsUsed + 0.06);
+  let abs = 0, x = innerL;     // abs: the shelf, counting on through every bookcase
+  const placed = [];
   for (const e of seq) {
     if (x + e.w > innerL + cap && x > innerL) {
       // don't start a row with a closing bookend
-      if (e.kind === 'end' && e.flip) { items.push({ ...e, row, x }); x += e.w; continue; }
-      row--; x = innerL;
+      if (e.kind === 'end' && e.flip) { placed.push({ ...e, abs, x }); x += e.w; continue; }
+      abs++; x = innerL;
     }
-    if (row < 0) { if (e.kind === 'book') hidden++; continue; }
-    items.push({ ...e, row, x }); x += e.w;
+    placed.push({ ...e, abs, x }); x += e.w;
   }
+  const caseOf = (i) => Math.floor(i.abs / ROWS);
+  const pages = caseOf(placed[placed.length - 1] || { abs: 0 }) + 1;
+  const page = Math.max(0, Math.min(pages - 1, want || 0));
+  const all = placed.filter((i) => i.kind === 'book').map((i) => ({ b: i.b, page: caseOf(i), st: i.st }));
+  const items = placed.filter((i) => caseOf(i) === page).map((i) => ({ ...i, row: ROWS - 1 - (i.abs % ROWS) }));
+  // a section carried over from the last bookcase gets its label again at the top of this one
+  const firstBook = items.find((i) => i.kind === 'book');
+  if (page > 0 && firstBook && !items.some((i) => i.kind === 'end' && i.start && i.sec === firstBook.st)) items.unshift({ kind: 'label', sec: firstBook.st, row: firstBook.row, x: firstBook.x - 0.004 });
 
   // trinkets in the space that's left over
   const freeRows = [];
   for (let r = ROWS - 1; r >= 0; r--) {
-    const used = items.filter((i) => i.row === r);
+    const used = items.filter((i) => i.row === r && i.kind !== 'label');
     const end = used.length ? Math.max(...used.map((i) => i.x + (i.t || i.w))) : innerL;
     freeRows.push({ r, from: end + 0.04 });
   }
   const bookMeshes = [];
   for (const it of items) {
     const y = rowsY[it.row];
+    if (it.kind === 'label') {
+      if (labelled) {
+        const name = { reading: 'Reading now', want: 'To read', read: 'Read' }[it.sec];
+        const lb = mesh(new THREE.PlaneGeometry(0.15, 0.022), std({ map: canvasTex(plateTex(`${name} · ${counts[it.sec]}`, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
+        lb.position.set(it.x + 0.075, y - PLK / 2, ZF + 0.0006);
+      }
+      continue;
+    }
     if (it.kind === 'end') {
       const kind = endFor(it.sec);
       if (kind !== 'none') { const e = bookendMesh(kind, M, !!it.flip); g.add(e); e.position.set(it.x + (it.flip ? 0.006 : 0), y, ZF - 0.1); }
@@ -918,7 +940,8 @@ function buildBookcase(M, { cloth, leather }) {
     bookMeshes.forEach((m) => { m.material = mat; });
     api.mat = mat;
   }
-  Object.assign(api, { meshes: bookMeshes, paint, hidden, count: list.length, order: null });
+  Object.assign(api, { meshes: bookMeshes, paint, hidden: 0, count: list.length, order: null, page, pages, all,
+    byId: new Map(bookMeshes.map((m) => [m.userData.book.id, m])) });
   }
   fill();
 
@@ -1550,9 +1573,18 @@ function framing(name) {
 // The bookcase view: close enough that spines are readable and easy to tap on a phone, with every
 // shelf of books in the band between the top bar and the book bar at the bottom. When the books are
 // wider than the screen the view starts on the book in hand and slides along as you browse.
+// how far down the screen the controls at the top reach (the app's header, toolbar and timer; or the test page's bar)
+function topInset() {
+  let y = 64;
+  for (const sel of ['.topbar', '.toolbar', '#timerChip']) {
+    const el = HOST ? document.querySelector(sel) : null;
+    if (el && !el.hidden && el.offsetParent !== null) y = Math.max(y, el.getBoundingClientRect().bottom + 6);
+  }
+  return y;
+}
 function shelfFraming(dir) {
   const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), ht = vt * camera.aspect;
-  const H = innerHeight, top = Math.min(0.2, 64 / H), bot = Math.max(top + 0.4, (H - 196) / H);
+  const H = innerHeight, top = Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - 236) / H);
   const band = bot - top, mid = (top + bot) / 2;
   const [x0, x1] = shelfSpan, [y0, y1] = shelfY;
   const dV = (y1 - y0 + 0.08) / band / 2 / vt;
@@ -1562,7 +1594,7 @@ function shelfFraming(dir) {
   let tx;
   if (x1 - x0 <= wv - 0.1) tx = (x0 + x1) / 2;
   else {
-    const m = world && world.books.meshes.length ? shelfOrder()[Math.max(0, browseIdx)] : null;
+    const m = world && world.books.meshes.length ? meshAt(Math.max(0, browseIdx)) : null;
     tx = THREE.MathUtils.clamp(m ? m.userData.home.x : x0, x0 + wv / 2 - 0.05, x1 - wv / 2 + 0.05);
   }
   // aim a little below the books so they sit in the middle of the clear band
@@ -1617,7 +1649,8 @@ function updateCamera(dt) {
 let drag = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 canvas.addEventListener('pointerdown', (e) => {
-  drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: e.timeStamp, moved: 0, swipe: 0 };
+  fling = null;
+  drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: e.timeStamp, moved: 0, swipe: 0, trail: [[e.timeStamp, e.clientX]] };
   canvas.setPointerCapture(e.pointerId); canvas.classList.add('dragging'); kick();
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -1625,12 +1658,14 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
   if (drag.moved < 6) return;
-  if (station === 'shelf' && world && world.books.meshes.length) {
+  if (station === 'shelf' && world && world.books.meshes.length && !searching) {
     // at the bookcase a sideways swipe flips through the books, one spine per step
+    drag.trail.push([e.timeStamp, e.clientX]); if (drag.trail.length > 8) drag.trail.shift();
+    if (turning) return;
     drag.swipe += dx;
-    const step = Math.max(26, Math.min(56, innerWidth / 11));
-    while (drag.swipe <= -step) { selectBook(browseIdx + 1); drag.swipe += step; }
-    while (drag.swipe >= step) { selectBook(browseIdx - 1); drag.swipe -= step; }
+    const step = swipeStep();
+    while (drag.swipe <= -step && !turning) { selectBook(browseIdx + 1); drag.swipe += step; }
+    while (drag.swipe >= step && !turning) { selectBook(browseIdx - 1); drag.swipe -= step; }
     kick(); return;
   }
   const k = 2.2 / Math.max(innerWidth, innerHeight);
@@ -1641,7 +1676,16 @@ canvas.addEventListener('pointermove', (e) => {
 function endDrag(e) {
   if (!drag) return;
   const d = drag; drag = null; canvas.classList.remove('dragging');
-  if (d.moved < 8 && e.timeStamp - d.t < 450) tap(e.clientX, e.clientY);
+  if (d.moved < 8 && e.timeStamp - d.t < 450) { tap(e.clientX, e.clientY); return; }
+  // a quick flick at the bookcase keeps going
+  if (station === 'shelf' && d.trail && d.trail.length > 1 && !turning && !searching) {
+    const now = e.timeStamp, recent = d.trail.filter(([t]) => now - t < 110);
+    if (recent.length > 1) {
+      const [t0, x0] = recent[0], [t1, x1] = recent[recent.length - 1];
+      const v = (x1 - x0) / Math.max(16, t1 - t0);
+      if (Math.abs(v) > 0.55) { fling = { v: v * 1.15, acc: d.swipe }; kick(400); }
+    }
+  }
 }
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.remove('dragging'); });
@@ -1649,9 +1693,11 @@ canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.r
 function tap(px, py) {
   if (!world) return;
   if (station === 'shelf') {
+    if (searching) return closeSearch();
+    if (turning) return;
     const m = nearestBook(px, py);
     if (m && m === pulled && HOST) return HOST.openBook(m.userData.book.id, bookRect(m));
-    if (m) return selectBook(shelfOrder().indexOf(m));
+    if (m) return selectBook(indexOfMesh(m));
   }
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
@@ -1663,7 +1709,7 @@ function tap(px, py) {
     // the invisible tap areas are generous; prefer the exact thing under your finger
     const exact = hits.find((h) => { const u = h.object.userData; return (u.book || u.tome || u.deskBook) && kindOf(u) === st && h.distance < first.distance + 0.8; });
     if (station !== st) return go(st);
-    if (exact && exact.object.userData.book) return selectBook(shelfOrder().indexOf(exact.object));
+    if (exact && exact.object.userData.book) return selectBook(indexOfMesh(exact.object));
     if (hits.some((h) => h.object.userData.dog && h.distance < first.distance + 0.8)) { world.furniture.hearth.dog.userData.wag(); return; }
     if (st === 'tome') return magic();
     if (st === 'desk') return deskCard();
@@ -1675,12 +1721,17 @@ function tap(px, py) {
 
 // ---------------------------------------------------------------- browsing the bookcase
 // Spines are too thin to tap reliably on a phone, so at the bookcase one book is always
-// "in hand": swipe or use ‹ › to move along the shelf, tap near a spine to jump to it.
-let browseIdx = 0, detailsOpen = false;
+// "in hand": swipe (or flick) or use ‹ › to move along the shelf, tap near a spine to jump to it,
+// tap a section to jump there, or search. When the library is bigger than one bookcase, the
+// books carry on to the next case; moving past the end of one turns the bookcase over to the next.
+let browseIdx = 0, detailsOpen = false, searching = false, searchQ = '';
+const allBooks = () => (world ? world.books.all : []);
 function shelfOrder() {
   if (!world.books.order) world.books.order = [...world.books.meshes].sort((a, b) => b.userData.it.row - a.userData.it.row || a.userData.home.x - b.userData.home.x);
   return world.books.order;
 }
+const meshAt = (i) => { const e = allBooks()[i]; return e && e.page === world.books.page ? world.books.byId.get(e.b.id) || null : null; };
+const indexOfMesh = (m) => allBooks().findIndex((e) => e.b.id === m.userData.book.id);
 // a warm halo (a slightly larger copy of the book, drawn from the inside) so the book in hand stands out
 const glowMat = new THREE.MeshBasicMaterial({ color: '#ffcf7a', side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
 function glowFor(m) {
@@ -1692,14 +1743,43 @@ function glowFor(m) {
   }
   return m.userData.glow;
 }
+// pick up book i (counting through every bookcase); turns to its bookcase first if needed
 function selectBook(i, { focus = true } = {}) {
-  const list = shelfOrder(); if (!list.length || i < 0) return;
-  browseIdx = Math.min(list.length - 1, i);
-  const m = list[browseIdx];
+  const list = allBooks(); if (!list.length || i < 0) return false;
+  i = Math.min(list.length - 1, i);
+  if (list[i].page !== world.books.page) { turnCase(list[i].page, i); return true; }
+  browseIdx = i;
+  const m = meshAt(i);
+  if (!m) return false;
   if (pulled !== m) { if (pulled) pulled.userData.anim = -1; pulled = m; m.userData.anim = 0; glowFor(m); }
-  shelfBar();
+  if (!searching) shelfBar();
   if (focus) focusOn(m);
   kick(900);
+  return true;
+}
+// the books slide back into the case, the next bookcase's books slide out
+let turning = null;
+function turnCase(page, then) {
+  if (turning) { turning.page = page; turning.then = then; return; }
+  fling = null;
+  if (pulled) { pulled.userData.anim = -1; pulled = null; }
+  world.books.meshes.forEach((m, k) => { m.userData.leave = -k * 0.004; });
+  turning = { page, then, t: 0 };
+  kick(1500);
+}
+function finishTurn() {
+  const { page, then } = turning; turning = null;
+  world.books.showPage(page);
+  frameShelf();
+  renderer.shadowMap.needsUpdate = true;
+  world.books.meshes.forEach((m, k) => { m.userData.enter = -k * 0.006; });
+  browseIdx = Math.max(0, Math.min(allBooks().length - 1, then));
+  kick(1600);
+  if (station !== 'shelf') return;     // (you walked away mid-turn)
+  const to = framing('shelf');
+  cam.yaw = 0; cam.pitch = 0;
+  tween = { t: 0, dur: 0.7, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
+  selectBook(browseIdx, { focus: false });
 }
 const toScreen = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight, p]; };
 function nearestBook(px, py) {
@@ -1723,35 +1803,130 @@ function focusOn(m) {
   const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
   const delta = right.multiplyScalar(Math.abs(p.x) >= 0.55 ? p.x * wv * d : 0).add(new THREE.Vector3(0, (p.y <= -0.45 || p.y >= 0.8) ? (p.y - 0.25) * hf * d : 0, 0));
   cam.dir.copy(dir); cam.yaw = 0; cam.pitch = 0;
-  tween = { t: 0, dur: 0.45, flat: true, from: { pos: cam.pos.clone(), dir: dir.clone(), dist: cam.dist }, to: { pos: cam.pos.clone().add(delta), dir: dir.clone(), dist: cam.dist } };
+  tween = { t: 0, dur: fling ? 0.25 : 0.45, flat: true, from: { pos: cam.pos.clone(), dir: dir.clone(), dist: cam.dist }, to: { pos: cam.pos.clone().add(delta), dir: dir.clone(), dist: cam.dist } };
 }
-// "To read · 2 of 5": where the book in hand sits within its own section
-function secPos(list) {
-  const st = (b) => b.status || 'read', cur = st(list[browseIdx].userData.book);
-  const same = list.filter((m) => st(m.userData.book) === cur);
-  return `${STATUS[cur]} · ${same.indexOf(list[browseIdx]) + 1} of ${same.length}`;
+const stOf = (b) => b.status || 'read';
+function sections() {
+  const out = [];
+  allBooks().forEach((e, i) => { const st = stOf(e.b); const last = out[out.length - 1]; if (last && last.st === st) last.n++; else out.push({ st, first: i, n: 1 }); });
+  return out;
 }
 function shelfBar() {
-  const list = shelfOrder(), b = list[browseIdx].userData.book, st = b.status || 'read';
-  const r = Math.round(b.rating || 0);
+  const list = allBooks(), e = list[browseIdx]; if (!e) return;
+  const b = e.b, st = stOf(b), r = Math.round(b.rating || 0);
   const sub = [b.author, st === 'read' && r ? '★'.repeat(r) + '☆'.repeat(5 - r) : ''].filter(Boolean).map(esc).join(' · ');   // the section is on the line below
+  const secs = sections(), cur = secs.find((x) => x.st === st);
   const pr = st === 'reading' ? progressOf(b) : null;
-  const meta = [STATUS[st], b.pages ? `${b.pages} pages` : '', b.format === 'audio' && b.hours ? `${b.hours} h audiobook` : '', b.finished ? `Finished ${fmtDate(b.finished)}` : ''].filter(Boolean).join(' · ');
-  openCard(`<div class="sb">
+  const pages = world.books.pages;
+  const where = [`${browseIdx - cur.first + 1} of ${cur.n} in ${STATUS[st]}`, pages > 1 ? `Bookcase ${e.page + 1} of ${pages}` : '', HOST ? 'tap it again to open' : ''].filter(Boolean).join(' · ');
+  openCard(`<div class="sb-top">
+      <button type="button" class="sb-find" data-find aria-label="Find a book">${SEARCH_ICON}</button>
+      ${secs.length > 1 ? `<div class="sb-secs" role="group" aria-label="Jump to a section">${secs.map((x) => `<button type="button" data-sec="${x.first}" aria-pressed="${x.st === st}" aria-label="${STATUS[x.st]}, ${x.n}">${x.st === 'reading' ? 'Reading' : STATUS[x.st]} <i>${x.n}</i></button>`).join('')}</div>` : '<div class="sb-secs"></div>'}
+    </div>
+    <div class="sb">
       <button type="button" class="sb-nav" data-step="-1" aria-label="Previous book" ${browseIdx === 0 ? 'disabled' : ''}>‹</button>
       <button type="button" class="sb-mid" aria-expanded="${detailsOpen}"><span class="sb-title">${esc(b.title)}</span><span class="sb-sub">${sub}</span></button>
       <button type="button" class="sb-nav" data-step="1" aria-label="Next book" ${browseIdx === list.length - 1 ? 'disabled' : ''}>›</button>
     </div>
-    <div class="sb-count">${secPos(list)}${world.books.hidden ? ` · ${world.books.hidden} more in Classic` : ''} · ${HOST ? 'tap it again to open' : 'swipe to browse'}</div>
-    ${detailsOpen ? `<div class="sb-more"><div class="meta">${esc(meta)}</div>
+    <div class="sb-count">${esc(where)}</div>
+    ${detailsOpen ? `<div class="sb-more"><div class="meta">${esc([STATUS[st], b.pages ? `${b.pages} pages` : '', b.finished ? `Finished ${fmtDate(b.finished)}` : ''].filter(Boolean).join(' · '))}</div>
       ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ''}
       <div class="note">In the app, opening a book would carry it to the desk and open it to your review.</div>${sampleNote()}</div>` : ''}`, 'shelf');
 }
+const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+
+// ---- search: find a book anywhere on the shelves and go straight to it
+const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function matches(q) {
+  const words = norm(q).split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const shelved = new Map(allBooks().map((e, i) => [e.b.id, i]));
+  const hits = [];
+  for (const b of lib.books) {
+    const hay = norm([b.title, b.author, b.series, b.genre, ...(Array.isArray(b.tags) ? b.tags : [])].join(' '));
+    if (!words.every((w) => hay.includes(w))) continue;
+    const t = norm(b.title);
+    const score = (t.startsWith(words.join(' ')) ? 0 : t.includes(words[0]) ? 1 : 2) + (shelved.has(b.id) ? 0 : 0.5);
+    hits.push({ b, i: shelved.has(b.id) ? shelved.get(b.id) : -1, score });
+  }
+  return hits.sort((a, b) => a.score - b.score || String(a.b.title).localeCompare(String(b.b.title))).slice(0, 7);
+}
+function openSearch() {
+  searching = true; fling = null;
+  openCard(`<form class="sf" role="search" onsubmit="return false">
+      <span class="sf-icon">${SEARCH_ICON}</span>
+      <input type="search" id="rm-find" placeholder="Title, author, series or tag" autocomplete="off" enterkeyhint="go" aria-label="Find a book" value="${esc(searchQ)}">
+      <button type="button" class="sf-cancel" data-find-cancel>Cancel</button>
+    </form>
+    <ul class="sf-list" id="rm-find-list" role="listbox"></ul>`, 'search');
+  const input = $('find');
+  input.addEventListener('input', () => { searchQ = input.value; listMatches(); });
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { const first = $('find-list').querySelector('[data-hit]'); if (first) first.click(); }
+    if (ev.key === 'Escape') closeSearch();
+  });
+  listMatches();
+  setTimeout(() => input.focus(), 30);
+}
+function listMatches() {
+  const hits = matches(searchQ);
+  $('find-list').innerHTML = !searchQ.trim() ? '<li class="sf-empty">Type to find any book on your shelves.</li>'
+    : hits.length ? hits.map((h) => `<li><button type="button" data-hit="${h.i}" data-id="${esc(h.b.id)}" role="option">
+        <span class="sf-t">${esc(h.b.title)}</span><span class="sf-s">${esc([h.b.author, h.i < 0 ? 'Set aside · opens the book' : STATUS[stOf(h.b)] + (world.books.pages > 1 ? ` · bookcase ${allBooks()[h.i].page + 1}` : '')].filter(Boolean).join(' · '))}</span></button></li>`).join('')
+    : '<li class="sf-empty">No book on your shelves matches that.</li>';
+}
+function closeSearch(goTo) {
+  searching = false;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (goTo != null && goTo >= 0) {
+    const e = allBooks()[goTo];
+    if (e.page !== world.books.page) { turnCase(e.page, goTo); return; }
+    browseIdx = goTo;
+    // fly to it: frame the shelf around the book, then pick it up
+    const to = framing('shelf');
+    tween = { t: 0, dur: 0.8, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
+    selectBook(goTo, { focus: false });
+    return;
+  }
+  if (world.books.meshes.length) selectBook(browseIdx, { focus: false }); else closeCard();
+}
+
+// ---- a flick keeps flipping, slowing down like a wheel (it stops at the end of the bookcase)
+let fling = null;
+function stepFling(dtMs) {
+  if (!fling) return;
+  const step = swipeStep();
+  fling.acc += fling.v * dtMs;
+  while (fling && fling.acc <= -step) { fling.acc += step; if (!flipBy(1)) fling = null; }
+  while (fling && fling.acc >= step) { fling.acc -= step; if (!flipBy(-1)) fling = null; }
+  if (!fling) return;
+  fling.v *= Math.pow(0.93, dtMs / 16.7);
+  if (Math.abs(fling.v) < 0.12) fling = null;
+  kick(300);
+}
+// one book along, but not across into another bookcase (that's a deliberate ‹ › or swipe)
+function flipBy(d) {
+  const i = browseIdx + d, e = allBooks()[i];
+  if (!e || e.page !== world.books.page) return false;
+  return selectBook(i);
+}
+const swipeStep = () => Math.max(22, Math.min(48, innerWidth / 13));
+
 $('card-body').addEventListener('click', (e) => {
+  if (e.target.closest('[data-find]')) { openSearch(); return; }
+  if (e.target.closest('[data-find-cancel]')) { closeSearch(); return; }
+  const hit = e.target.closest('[data-hit]');
+  if (hit) {
+    const i = Number(hit.dataset.hit);
+    if (i < 0) { searching = false; if (HOST) HOST.openBook(hit.dataset.id, null); closeSearch(); return; }
+    closeSearch(i); return;
+  }
+  const sec = e.target.closest('[data-sec]');
+  if (sec) { selectBook(Number(sec.dataset.sec)); return; }
   const step = e.target.closest('[data-step]');
   if (step) { selectBook(browseIdx + Number(step.dataset.step)); return; }
   if (e.target.closest('.sb-mid')) {
-    if (HOST) { const m = shelfOrder()[browseIdx]; if (m) HOST.openBook(m.userData.book.id, bookRect(m)); return; }
+    if (HOST) { const m = meshAt(browseIdx); if (m) HOST.openBook(m.userData.book.id, bookRect(m)); return; }
     detailsOpen = !detailsOpen; shelfBar();
   }
   const act = e.target.closest('[data-act]');
@@ -1762,6 +1937,9 @@ $('card-body').addEventListener('click', (e) => {
     else if (a === 'add') HOST.addBook();
     else if (a === 'goals') HOST.openGoals();
     else if (a === 'year') HOST.openYear();
+    else if (a === 'calendar') HOST.openCalendar();
+    else if (a === 'timer-start') { HOST.startTimer(id); deskCard(); }
+    else if (a === 'timer-stop') { closeCard(); HOST.stopTimer(); }
   }
 });
 
@@ -1777,6 +1955,17 @@ function putBack() { if (pulled) { pulled.userData.anim = -1; pulled = null; } c
 function animateBooks(dt) {
   let moving = false;
   for (const m of world.books.meshes) {
+    if (m.userData.leave !== undefined || m.userData.enter !== undefined) {
+      const out = m.userData.leave !== undefined;
+      const key = out ? 'leave' : 'enter';
+      m.userData[key] += dt * (out ? 5 : 3.2);
+      const k = ease(THREE.MathUtils.clamp(m.userData[key], 0, 1));
+      m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot);
+      m.position.z -= (out ? k : 1 - k) * 0.32;
+      if (!out && m.userData.enter >= 1) { delete m.userData.enter; if (m !== pulled) m.position.copy(m.userData.home); }
+      else if (!out || m.userData.leave < 1) moving = true;
+      continue;
+    }
     const a = m.userData.anim;
     if (a === undefined) continue;
     const out = m === pulled;
@@ -1817,18 +2006,22 @@ function bookCard(b) {
     <div class="note">In the app, this is where the book would be carried to the desk and opened to your review.</div>${sampleNote()}`);
 }
 function deskCard() {
-  if (HOST) {
-    const reading = lib.books.filter((b) => b.status === 'reading');
-    const items = reading.map((b) => { const pr = progressOf(b); return `<li><b>${esc(b.title)}</b>${b.author ? ` · <i>${esc(b.author)}</i>` : ''}${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><span class="meta">${esc(pr.text)}</span>` : ''}
-      <div class="acts"><button type="button" data-act="progress" data-id="${esc(b.id)}">Update progress</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open the book</button></div></li>`; }).join('');
-    return openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
-      ${reading.length ? `<ul>${items}</ul>` : `<div class="meta">Start a book and it will lie open here.</div><div class="acts"><button type="button" data-act="add">Add a book</button></div>`}`);
-  }
   const reading = lib.books.filter((b) => b.status === 'reading');
-  const items = reading.map((b) => { const pr = progressOf(b); return `<li><b>${esc(b.title)}</b>${b.author ? ` · <i>${esc(b.author)}</i>` : ''}${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><span class="meta">${esc(pr.text)}</span>` : ''}</li>`; }).join('');
+  const t = HOST && HOST.timer ? HOST.timer() : null;
+  const row = (b) => {
+    const pr = progressOf(b), on = t && t.id === b.id;
+    const acts = !HOST ? '' : on
+      ? `<div class="acts"><button type="button" class="timer-on" data-act="timer-stop" data-id="${esc(b.id)}"><span class="rec"></span><span data-since="${t.start}">0:00</span> · Stop</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open the book</button></div>`
+      : `<div class="acts"><button type="button" data-act="timer-start" data-id="${esc(b.id)}">${t ? 'Switch timer here' : 'Start reading'}</button><button type="button" class="quiet" data-act="progress" data-id="${esc(b.id)}">Update progress</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open</button></div>`;
+    return `<li${on ? ' class="timing"' : ''}><b>${esc(b.title)}</b>${b.author ? ` · <i>${esc(b.author)}</i>` : ''}${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><span class="meta">${esc(pr.text)}</span>` : ''}${acts}</li>`;
+  };
+  if (HOST) {
+    return openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
+      ${reading.length ? `<ul>${reading.map(row).join('')}</ul><div class="meta desk-tip">${t ? 'When you stop, tap Stop and tell it where you got to.' : 'Start reading runs a timer while you read; stop it to log your time and page.'}</div>` : `<div class="meta">Start a book and it will lie open here.</div><div class="acts"><button type="button" data-act="add">Add a book</button></div>`}`, 'desk');
+  }
   openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
-    ${reading.length ? `<ul>${items}</ul>` : '<div class="meta">Start a book and it will lie open here.</div>'}
-    <div class="note">In the app, the desk would hold your progress, quotes and the open book's review pages.</div>${sampleNote()}`);
+    ${reading.length ? `<ul>${reading.map(row).join('')}</ul>` : '<div class="meta">Start a book and it will lie open here.</div>'}
+    <div class="note">In the app, the desk has a reading timer: start it when you sit down, stop it to log your time and page.</div>${sampleNote()}`, 'desk');
 }
 function magic() {
   world.tome.wake();
@@ -1839,12 +2032,33 @@ function magic() {
     <div class="note">In the app, this is where "What to read next" would open, with picks from Open Library based on the books you rate highest.</div>${sampleNote()}`);
 }
 function hearthCard() {
-  openCard(`<div class="eyebrow">By the fire</div><h2>Goals and trophies</h2>
+  const sk = HOST && HOST.streak ? HOST.streak() : null;
+  const streak = sk ? (sk.cur ? `<div class="streak"><span class="flame" aria-hidden="true"></span><b>${sk.cur}</b> ${sk.cur === 1 ? 'day' : 'days'} in a row${sk.readToday ? '' : ' · read today to keep it going'}</div>`
+    : `<div class="meta">${sk.best ? `Your longest streak is ${sk.best} ${sk.best === 1 ? 'day' : 'days'}. Read today to start a new one.` : 'Read today to start a streak.'}</div>`) : '';
+  openCard(`<div class="eyebrow">By the fire</div><h2>Goals, streaks and trophies</h2>
+    ${streak}
     <div class="meta">The mantel is where your reading goals and the trophies you earn live.</div>
-    <div class="acts"><button type="button" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button></div>`);
+    <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button></div>`, 'hearth');
 }
-function openCard(html, kind = '') { $('card-body').innerHTML = html; $('card').hidden = false; $('card').classList.toggle('shelfbar', kind === 'shelf'); }
-function closeCard() { $('card').hidden = true; }
+let cardKind = '', clockTimer = null;
+function openCard(html, kind = '') {
+  cardKind = kind;
+  $('card-body').innerHTML = html; $('card').hidden = false;
+  $('card').classList.toggle('shelfbar', kind === 'shelf');
+  $('card').classList.toggle('searchcard', kind === 'search');
+  if (kind !== 'search') searching = false;
+  clearInterval(clockTimer); clockTimer = null;
+  // a running reading timer ticks on the card
+  if ($('card-body').querySelector('[data-since]')) {
+    const tickClock = () => $('card-body').querySelectorAll('[data-since]').forEach((el) => { el.textContent = clockText(Date.now() - Number(el.dataset.since)); });
+    tickClock(); clockTimer = setInterval(tickClock, 1000);
+  }
+}
+function closeCard() { $('card').hidden = true; cardKind = ''; searching = false; clearInterval(clockTimer); clockTimer = null; }
+function clockText(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), p2 = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
+}
 $('card').querySelector('.card-x').addEventListener('click', () => { putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go); kick(); }));
 if ($('light')) $('light').addEventListener('click', () => { mode = mode === 'day' ? 'night' : 'day'; world.applyLook(); kick(); });
@@ -1852,6 +2066,7 @@ addEventListener('keydown', (e) => {
   if (!active || document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
   const order = ['room', 'shelf', 'desk', 'hearth', 'tome'];
   if (station === 'shelf' && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { selectBook(browseIdx + (e.key === 'ArrowRight' ? 1 : -1)); kick(); return; }
+  if (station === 'shelf' && (e.key === '/' || (e.key === 'f' && (e.metaKey || e.ctrlKey)))) { e.preventDefault(); openSearch(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(order.indexOf(station) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
   if (e.key === 'Escape') { putBack(); closeCard(); }
   kick();
@@ -1874,11 +2089,13 @@ let active = true;
 function frame(now) {
   requestAnimationFrame(frame);
   if (!active) return;
-  const busy = !!tween || !!drag || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
+  const busy = !!tween || !!drag || !!fling || !!turning || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
   // when nothing is moving, only the dust and candles drift: 30 frames a second is plenty
   if (!busy && now - lastRender < 32) return;
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   const t = now / 1000;
+  stepFling(dt * 1000);
+  if (turning && (turning.t += dt) > 0.34) finishTurn();
   updateCamera(dt);
   const booksMoving = animateBooks(dt);
   if (booksMoving) kick(300);
@@ -1950,10 +2167,13 @@ function refresh() {
     if (pulled) { pulled = null; }
     world.books.refill();
     frameShelf();
-    browseIdx = Math.min(browseIdx, Math.max(0, world.books.meshes.length - 1));
+    browseIdx = Math.min(browseIdx, Math.max(0, allBooks().length - 1));
     renderer.shadowMap.needsUpdate = true;
-    if (station === 'shelf' && !$('card').hidden) { if (world.books.meshes.length) selectBook(browseIdx, { focus: false }); else closeCard(); }
+    if (station === 'shelf' && !$('card').hidden && !searching) { if (world.books.meshes.length) selectBook(browseIdx, { focus: false }); else closeCard(); }
   }
+  // the timer or the calendar may have changed: keep the desk and fireside cards current
+  if (!$('card').hidden && cardKind === 'desk') deskCard();
+  if (!$('card').hidden && cardKind === 'hearth') hearthCard();
   const m = lightNow(lib.theme.light || 'system');
   if (m !== mode) { mode = m; world.applyLook(); }
   kick();

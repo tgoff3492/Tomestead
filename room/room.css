@@ -86,3 +86,42 @@ canvas#rm-scene.dragging { cursor: grabbing; }
   background: linear-gradient(180deg, var(--brass-lt), var(--brass)); color: #2a1a0c; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .rm .card .acts button.quiet { background: rgba(42,30,22,.1); box-shadow: none; color: var(--ink); }
 .rm .card li .acts { margin-top: 6px; }
+
+/* bookcase bar: find, and jump to a section */
+.rm .sb-top { display: flex; align-items: center; gap: 6px; margin: 0 26px 6px 0; min-width: 0; }
+.rm .sb-find { flex: 0 0 auto; width: 36px; height: 32px; border: 0; border-radius: 8px; background: rgba(42,30,22,.08); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.rm .sb-secs { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.rm .sb-secs::-webkit-scrollbar { display: none; }
+.rm .sb-secs button { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 6px 10px; background: rgba(42,30,22,.07); color: var(--ink-soft); font: 500 .84rem var(--sans); cursor: pointer; white-space: nowrap; }
+.rm .sb-secs button i { font-style: normal; opacity: .65; margin-left: 2px; }
+.rm .sb-secs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.rm .sb-secs button[aria-pressed="true"] i { opacity: .8; }
+
+/* finding a book: the card moves up out of the keyboard's way */
+.rm .card.searchcard { top: calc(env(safe-area-inset-top) + 10px); bottom: auto; padding: 10px 10px 6px; max-height: 70vh; z-index: 14; }
+.rm .card.searchcard .card-x { display: none; }
+.rm .sf { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.55); border-radius: 10px; padding: 2px 4px 2px 10px; box-shadow: inset 0 0 0 1px rgba(42,30,22,.2); }
+.rm .sf-icon { color: var(--ink-soft); display: grid; }
+.rm .sf input { flex: 1; min-width: 0; border: 0; background: none; font: 400 16px var(--sans); color: var(--ink); padding: 10px 2px; outline: none; }
+.rm .sf-cancel { border: 0; background: none; color: #7a4a1a; font: 600 .9rem var(--sans); padding: 8px; cursor: pointer; }
+.rm .sf-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.rm .sf-list li { margin: 0; }
+.rm .sf-list button { width: 100%; text-align: left; border: 0; background: none; padding: 9px 8px; border-radius: 8px; display: flex; flex-direction: column; gap: 1px; cursor: pointer; color: var(--ink); }
+.rm .sf-list button:hover, .rm .sf-list button:focus-visible { background: rgba(42,30,22,.08); }
+.rm .sf-t { font-family: var(--serif); font-size: 1.08rem; line-height: 1.2; }
+.rm .sf-s { font-size: .82rem; color: var(--ink-soft); }
+.rm .sf-empty { padding: 10px 8px; font-size: .9rem; color: var(--ink-soft); font-style: italic; }
+
+/* desk: the reading timer */
+.rm .card li.timing { background: rgba(201,161,91,.16); border-radius: 8px; padding: 6px 8px; }
+.rm .card .acts button.timer-on { background: #3a1d12; color: #ffe6b8; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 7px; }
+.rm .card .rec { width: 8px; height: 8px; border-radius: 50%; background: #e0574a; box-shadow: 0 0 6px #e0574a; animation: rm-pulse 1.6s ease-in-out infinite; }
+@keyframes rm-pulse { 50% { opacity: .35; } }
+.rm .card .desk-tip { margin-top: 10px; font-size: .84rem; }
+.rm .card ul + .meta.desk-tip { border-top: 1px solid rgba(42,30,22,.12); padding-top: 8px; }
+
+/* fireside: the current streak */
+.rm .card .streak { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; font-size: 1rem; color: var(--ink); }
+.rm .card .streak b { font-family: var(--serif); font-weight: 400; font-size: 1.9rem; line-height: 1; color: #a4621b; }
+.rm .card .flame { width: 16px; height: 22px; border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%; background: radial-gradient(circle at 50% 70%, #ffe08a 0 22%, #ff9a3c 45%, #d2461d 75%); box-shadow: 0 0 10px rgba(255,140,50,.6); animation: rm-flick 1.2s ease-in-out infinite alternate; }
+@keyframes rm-flick { to { transform: scaleY(1.12) rotate(-3deg); } }

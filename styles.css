@@ -1666,3 +1666,70 @@ html.room-mode {
   --chrome-on: #efe3c8; --chrome-on-ink: #2a1e16; --chrome-accent: #e6c886; --chrome-text-shadow: 0 1px 6px rgba(0,0,0,.7);
 }
 html.room-mode .stats { text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+
+/* =========================================================
+   Reading timer (a session in progress)
+   ========================================================= */
+.timer-chip { position: relative; z-index: 6; display: flex; align-items: stretch; width: max-content; max-width: calc(100vw - 24px); margin: 2px auto 10px;
+  border-radius: 999px; background: rgba(20,13,8,.82); color: var(--paper); box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 0 0 0 1px rgba(201,161,91,.45);
+  backdrop-filter: blur(4px); animation: open .25s ease-out; }
+.timer-chip[hidden] { display: none; }
+html.room-mode .timer-chip { pointer-events: auto; }
+.tc-main { display: flex; align-items: center; gap: 8px; min-width: 0; border: 0; background: none; color: inherit; font: 500 .95rem var(--sans); padding: 8px 6px 8px 14px; cursor: pointer; }
+.tc-dot { width: 8px; height: 8px; border-radius: 50%; background: #e0574a; box-shadow: 0 0 8px #e0574a; animation: tc-pulse 1.6s ease-in-out infinite; flex: 0 0 auto; }
+@keyframes tc-pulse { 50% { opacity: .35; } }
+.tc-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--brass-lt); }
+.tc-title { font-family: var(--serif); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+.tc-stop { border-radius: 999px; padding: 3px 10px; background: var(--paper); color: var(--ink); font-weight: 700; font-size: .82rem; flex: 0 0 auto; }
+.tc-x { border: 0; background: none; color: rgba(239,227,200,.6); font-size: 1.2rem; padding: 0 12px 0 4px; cursor: pointer; }
+.pr-session { margin: 12px 0 0; padding: 8px 12px; border-radius: 6px; background: rgba(201,161,91,.18); font-family: var(--serif); font-size: 1.05rem; }
+.streak-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; text-decoration-color: currentColor; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; }
+.streak-link::before { content: "· "; color: inherit; }
+
+/* =========================================================
+   Reading calendar
+   ========================================================= */
+dialog.paper.cal-dialog { width: min(480px, calc(100vw - 16px)); }
+.cal-dialog article { padding: 18px 18px 16px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; }
+.cal-x { border: 0; background: none; font-size: 1.8rem; line-height: 1; cursor: pointer; color: var(--ink-soft); padding: 0 4px; }
+.cal-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 6px; }
+.cal-stat { background: rgba(42,30,22,.06); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.cal-stat b { font-family: var(--serif); font-weight: 400; font-size: 1.7rem; line-height: 1; color: #8a5a1c; }
+.cal-stat span { font-size: .78rem; color: var(--ink-soft); line-height: 1.25; }
+.cal-nav { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; }
+.cal-nav h3 { margin: 0; flex: 1; text-align: center; font-family: var(--serif); font-weight: 400; font-size: 1.35rem; }
+.cal-step { width: 40px; height: 36px; border: 0; border-radius: 8px; background: rgba(42,30,22,.07); color: var(--ink); font: 400 1.6rem/1 var(--serif); cursor: pointer; }
+.cal-step:active { background: rgba(42,30,22,.16); }
+.cal-today { margin-left: 2px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; touch-action: pan-y; }
+.cal-dow { text-align: center; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); padding-bottom: 2px; }
+.cal-cell { position: relative; aspect-ratio: 1; min-height: 38px; border: 0; border-radius: 7px; background: rgba(42,30,22,.05); color: var(--ink); cursor: pointer; padding: 0; font: 500 .95rem var(--sans); }
+.cal-cell .cal-n { position: absolute; left: 6px; top: 4px; }
+.cal-cell.future { opacity: .35; cursor: default; }
+.cal-cell.l1 { background: #ecd29a; }
+.cal-cell.l2 { background: #e2b866; }
+.cal-cell.l3 { background: #cf9339; color: #2a1606; }
+.cal-cell.l4 { background: #b0711e; color: #fff4dc; box-shadow: 0 0 10px rgba(207,147,57,.55); }
+.cal-cell.today { box-shadow: inset 0 0 0 2px var(--ink); }
+.cal-cell.picked { outline: 2px solid #7a4a1a; outline-offset: 2px; }
+.cal-star { position: absolute; right: 4px; top: 3px; font-size: .62rem; letter-spacing: -1px; color: #6b3b00; }
+.cal-cell.l4 .cal-star { color: #fff0c8; }
+.cal-min { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center; font-size: .62rem; opacity: .85; }
+.cal-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; flex-wrap: wrap; font-size: .74rem; color: var(--ink-soft); margin: 8px 0 0; }
+.cal-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.cal-legend i.l1 { background: #ecd29a; } .cal-legend i.l2 { background: #e2b866; } .cal-legend i.l3 { background: #cf9339; } .cal-legend i.l4 { background: #b0711e; }
+.cal-key-star { margin-left: 10px; }
+.cal-day { margin-top: 12px; border-top: 1px solid rgba(42,30,22,.15); padding-top: 10px; }
+.cal-day[hidden] { display: none; }
+.cal-day h4 { margin: 0 0 6px; font-family: var(--serif); font-weight: 400; font-size: 1.2rem; }
+.cal-events { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.cal-events li { display: flex; gap: 8px; align-items: baseline; font-size: .95rem; }
+.ev-i { width: 1.2em; text-align: center; color: #8a5a1c; flex: 0 0 auto; }
+.ev-fin .ev-i { color: #b0711e; }
+.cal-book { font-family: var(--serif); font-size: 1rem; text-align: left; }
+.cal-acts { margin-top: 10px; }
+.cal-marked { margin: 6px 0 0; font-size: .85rem; }
+.cal-note { margin: 12px 0 0; font-size: .8rem; color: var(--ink-soft); }
+@media (max-width: 380px) { .cal-cell { font-size: .85rem; } .cal-min { display: none; } }
+.cal-keep { grid-column: 1 / -1; margin: 0; font-size: .85rem; color: #8a5a1c; font-style: italic; }
