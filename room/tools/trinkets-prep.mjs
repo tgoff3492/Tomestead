@@ -24,6 +24,14 @@ const PICKS = {
   seashell:      { id: 'lambis_shell', ratio: 0.6, tex: 256 },
   brassvase:  { id: 'brass_vase_03', tex: 256 },
   chinavase:  { id: 'antique_ceramic_vase_01', tex: 256 },
+  // the reading desk (models/desk/)
+  desklamp:   { id: 'industrial_pipe_lamp', ratio: 0.5, tex: 256, dir: 'desk' },
+  teapot:     { id: 'tea_set_01', keep: ['teapot_01', 'teapot_01_lid'], ratio: 0.6, tex: 256, dir: 'desk' },
+  glasses:    { id: 'round_spectacles', glass: true, tex: 256, dir: 'desk' },
+  magnifier:  { id: 'magnifying_glass_01', glass: true, ratio: 0.6, tex: 256, dir: 'desk' },
+  watch:      { id: 'vintage_pocket_watch', glass: true, ratio: 0.6, tex: 256, dir: 'desk' },
+  journal:    { id: 'binder_notebook', keep: ['binder_notebook'], tex: 512, dir: 'desk' },
+  apple:      { id: 'food_apple_01', ratio: 0.5, tex: 256, dir: 'desk' },
 };
 const only = process.argv.slice(4);
 await MeshoptSimplifier.ready; await MeshoptEncoder.ready;
@@ -33,6 +41,8 @@ for (const [key, o] of Object.entries(PICKS)) {
   if (only.length && !only.includes(key)) continue;
   const doc = await io.read(`/tmp/ph/${o.id}/${o.id}.gltf`);
   const root = doc.getRoot(), scene = root.getDefaultScene() || root.listScenes()[0];
+  if (o.keep) scene.listChildren().filter((n) => !o.keep.some((k) => n.getName().endsWith(k))).forEach((n) => n.dispose());
+  if (o.glass) for (const m of root.listMaterials()) if (/glass|lense/.test(m.getName())) m.setBaseColorTexture(null).setBaseColorFactor([0.94, 0.96, 1, 0.14]).setAlphaMode('BLEND').setMetallicFactor(0).setRoughnessFactor(0.05);
   if (o.books) {
     // three volumes from the set, laid flat in a slightly uneven stack
     const keep = scene.listChildren().filter((n) => o.books.some((b) => n.getName().endsWith(b)));
@@ -64,6 +74,7 @@ for (const [key, o] of Object.entries(PICKS)) {
   const before = tris(doc);
   await doc.transform(flatten(), dedup(), weld(), ...(o.ratio ? [simplify({ simplifier: MeshoptSimplifier, ratio: o.ratio, error: o.err || 0.003 })] : []), prune(),
     textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [o.tex, o.tex], quality: 82 }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
-  await io.write(`${OUT}/${key}.glb`, doc);
-  console.log(key, Math.round(before), '→', Math.round(tris(doc)), 'tris', Math.round(fs.statSync(`${OUT}/${key}.glb`).size / 1024), 'KB');
+  const out = o.dir ? `${OUT}/../${o.dir}` : OUT; fs.mkdirSync(out, { recursive: true });
+  await io.write(`${out}/${key}.glb`, doc);
+  console.log(key, Math.round(before), '→', Math.round(tris(doc)), 'tris', Math.round(fs.statSync(`${out}/${key}.glb`).size / 1024), 'KB');
 }

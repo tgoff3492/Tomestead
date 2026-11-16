@@ -241,13 +241,21 @@ function trinketPicks() {
   const t = lib.theme && Array.isArray(lib.theme.trinkets) ? lib.theme.trinkets : TRINKET_DEFAULT;
   return [...new Set(t.map((k) => (TRINKET3D[k] ? k : OLD_TRINKETS[k])).filter((k) => k && TRINKET3D[k]))];
 }
-const trinketCache = new Map();
-// loads one trinket, scaled, turned to face the room, standing on y = 0 and centred; returns its size too
-function trinketModel(k) {
-  if (!trinketCache.has(k)) trinketCache.set(k, gltfLoader.loadAsync(asset(`models/trinkets/${k}.glb`)).then((g) => {
-    const spec = TRINKET3D[k], m = g.scene;
+// small pieces (shelf trinkets, desk things): scaled to spec.h, laid flat if spec.lie, turned by spec.ry,
+// standing on y = 0 and centred; resolves to the piece and its size
+const pieceCache = new Map();
+function loadPiece(path, spec = {}) {
+  const key = path + '|' + (spec.h || '') + '|' + (spec.ry || '') + '|' + (spec.lie ? 1 : '');
+  if (!pieceCache.has(key)) pieceCache.set(key, gltfLoader.loadAsync(asset(`models/${path}.glb`)).then((g) => {
+    const m = g.scene;
+    if (spec.parts) {   // (cup and saucer sit apart in the source file: stack them)
+      m.updateMatrixWorld(true);
+      for (const o of [...m.children]) { const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()); o.position.x -= c.x; o.position.z -= c.z; }
+    }
+    if (spec.lie) m.rotation.x = -Math.PI / 2;
     m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.userData.dyn = true; } });
-    const inner = new THREE.Group(); inner.add(m); m.rotation.y = spec.ry || 0;
+    const turnG = new THREE.Group(); turnG.add(m); turnG.rotation.y = spec.ry || 0;
+    const inner = new THREE.Group(); inner.add(turnG);
     let b = new THREE.Box3().setFromObject(inner);
     if (spec.h) inner.scale.setScalar(spec.h / (b.max.y - b.min.y));
     b = new THREE.Box3().setFromObject(inner);
@@ -257,7 +265,28 @@ function trinketModel(k) {
     const sz = b.getSize(new THREE.Vector3());
     return { obj, w: sz.x, h: sz.y, d: sz.z };
   }));
-  return trinketCache.get(k);
+  return pieceCache.get(key);
+}
+const trinketModel = (k) => loadPiece(`trinkets/${k}`, TRINKET3D[k]);
+// the things on the desk, picked in Customize → Reading table (the same Poly Haven pieces as the
+// Classic reading table). slots: where a person would keep it, in order of preference (see buildDesk)
+const DESK3D = {
+  lamp: { file: 'desk/desklamp', slots: ['backR', 'backL'], light: true },
+  candle: { file: 'candlestick', slots: ['backL', 'backR'] },
+  tea: { file: 'teacup', parts: true, h: 0.06, slots: ['frontR', 'frontL', 'backM'] },
+  teapot: { file: 'desk/teapot', slots: ['backL', 'backM', 'backR'] },
+  glasses: { file: 'desk/glasses', slots: ['frontL', 'frontR', 'backM'] },
+  magnifier: { file: 'desk/magnifier', lie: true, slots: ['frontL', 'frontR', 'backM'] },
+  plant: { file: 'trinkets/aloe', h: 0.16, slots: ['backL', 'backM', 'backR'] },
+  books: { file: 'trinkets/bookstack', slots: ['backM', 'backL', 'backR'] },
+  watch: { file: 'desk/watch', lie: true, slots: ['frontL', 'frontR', 'backM'] },
+  journal: { file: 'desk/journal', slots: ['frontL', 'frontR'] },
+  apple: { file: 'desk/apple', slots: ['frontR', 'backM', 'frontL'] },
+};
+const OLD_DESK = { mug: 'teapot', inkwell: 'magnifier' };
+function deskPicks() {
+  const t = lib.theme && Array.isArray(lib.theme.tableItems) ? lib.theme.tableItems : ['lamp', 'tea', 'glasses'];
+  return [...new Set(t.map((k) => (DESK3D[k] ? k : OLD_DESK[k])).filter((k) => k && DESK3D[k]))].slice(0, 5);
 }
 function placeModel(obj, x, y, z, ry = 0, s2 = 1, { cast = true } = {}) {
   if (!obj) return null;
@@ -1270,10 +1299,6 @@ function coalTex() {
   }
   return c;
 }
-function flameSprite() {
-  const m = new THREE.SpriteMaterial({ map: canvasTex(flameTex(), { repeat: false }), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-  const s = new THREE.Sprite(m); s.scale.set(0.03, 0.06, 1); return s;
-}
 
 function buildPedestalDesk(M, g, topY) {
   const D = 0.66, L = 1.32, PH = topY - 0.04;
@@ -1313,16 +1338,9 @@ function buildDesk(M, woodH, MOD) {
   g.position.set(-2.655, 0, -0.6);
   const TOP = 0.736;
   buildPedestalDesk(M, g, TOP + 0.022);
-  // banker's lamp
-  const lamp = new THREE.Group(); g.add(lamp); lamp.position.set(-0.17, TOP + 0.022, -0.46);
-  mesh(lathe([[0, 0], [0.085, 0], [0.085, 0.015], [0.06, 0.03], [0.012, 0.035], [0, 0.035]]), M.brass, lamp);
-  const stem = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 10), M.brass, lamp); stem.position.y = 0.17;
-  const shadeMat = std({ color: '#1f5a3a', roughness: 0.15, metalness: 0.1, emissive: '#2a7a4a', emissiveIntensity: 0, side: THREE.DoubleSide });
-  const shade = mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.3, 24, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), shadeMat, lamp);
-  shade.rotation.y = Math.PI / 2; shade.position.set(0.05, 0.33, 0);
-  const bulbMat = new THREE.MeshBasicMaterial({ color: '#ffd28a' });
-  const bulb = mesh(new THREE.SphereGeometry(0.02, 12, 8), bulbMat, lamp, { cast: false }); bulb.position.set(0.05, 0.31, 0);
-  const lampLight = new THREE.PointLight('#ffb35c', 1, 3.2, 2); lampLight.position.set(0.06, 0.27, 0); lamp.add(lampLight);
+  // the lamp's light (lit only when there's a desk lamp among the things on the desk)
+  const lampLight = new THREE.PointLight('#ffb35c', 0, 3.2, 2); g.add(lampLight);
+  let lampBase = 0, hasLamp = false;
   // the book you're reading, open
   const reading = lib.books.find((b) => b.status === 'reading') || null;
   const open = new THREE.Group(); g.add(open); open.userData.dyn = true; open.position.set(0.06, TOP + 0.024, 0.0); open.rotation.y = -Math.PI / 2;   // (set aside while a book from the shelf lies here)
@@ -1334,19 +1352,38 @@ function buildDesk(M, woodH, MOD) {
   for (let i = 0; i < pp.count; i++) { const px = pp.getX(i); pp.setY(i, 0.012 + 0.02 * Math.sin(Math.min(1, Math.abs(px) / 0.17) * Math.PI * 0.5) * (1 - Math.abs(px) / 0.34) - (Math.abs(px) < 0.01 ? 0.006 : 0)); }
   pg.computeVertexNormals();
   const pages = mesh(pg, pageMat, open, { cast: false }); pages.userData.deskBook = true;
-  // tea, glasses, a candle, a little stack
-  const gls = new THREE.Group(); g.add(gls); gls.position.set(0.17, TOP + 0.028, 0.18); gls.rotation.y = 0.5;
-  for (const sx of [-1, 1]) { const r = mesh(new THREE.TorusGeometry(0.022, 0.0025, 8, 24).rotateX(Math.PI / 2), M.gold, gls); r.position.x = sx * 0.028; }
-  const br = mesh(new THREE.TorusGeometry(0.008, 0.002, 6, 10, Math.PI), M.gold, gls); br.rotation.x = -Math.PI / 2;
-  const candle = new THREE.Group(); g.add(candle); candle.position.set(-0.2, TOP + 0.022, 0.5);
-  mesh(lathe([[0, 0], [0.05, 0], [0.05, 0.008], [0.015, 0.02], [0.015, 0.04], [0.025, 0.05], [0, 0.05]]), M.brass, candle);
-  const wax = mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.14, 14), M.candle, candle); wax.position.y = 0.12;
-  const flameMat = new THREE.SpriteMaterial({ map: canvasTex(flameTex(), { repeat: false }), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-  const flame = new THREE.Sprite(flameMat); flame.scale.set(0.035, 0.07, 1); flame.position.y = 0.215; candle.add(flame); flame.userData.dyn = true;
-  const candleLight = new THREE.PointLight('#ff9d47', 0, 2.2, 2); candleLight.position.y = 0.25; candle.add(candleLight);
-  [[0.26, 0.04, '#2E5E5E'], [0.24, 0.032, '#C2902F'], [0.22, 0.045, '#5B2F4A']].reduce((yy, [w, th, col], i) => {
-    const b = box(w * 0.7, th, w, std({ color: col, roughness: 0.65 }), 0, yy + th / 2, 0, g); b.position.set(-0.16, TOP + 0.022, 0.12); b.rotation.y = i * 0.12; return yy + th;
-  }, 0);
+  // the things on the desk (Customize → Reading table), set out as you'd keep them sitting here:
+  // the lamp at a back corner, tall things at the back, books behind the open book, the cup by your
+  // right hand, small flat things by your left. (+x is toward the chair; your right is −z.)
+  const SLOTS = { backR: [-0.17, -0.46], backL: [-0.19, 0.47], backM: [-0.17, 0.24], frontR: [0.17, -0.45], frontL: [0.18, 0.35] };
+  const deco = new THREE.Group(); deco.userData.dyn = true; g.add(deco);
+  let deskToken = 0;
+  async function dressDesk() {
+    const token = ++deskToken;
+    const picks = deskPicks();
+    const pieces = await Promise.all(picks.map((k) => loadPiece(DESK3D[k].file, DESK3D[k]).catch(() => null)));
+    if (token !== deskToken) return;
+    deco.clear(); hasLamp = false;
+    const rnd = rng(hash('desk|' + picks.join('|')));
+    const free = new Set(Object.keys(SLOTS));
+    picks.forEach((k, i) => {
+      const p = pieces[i]; if (!p) return;
+      const slot = DESK3D[k].slots.find((sl) => free.has(sl)) || [...free][0];
+      if (!slot) return;
+      free.delete(slot);
+      // facing the chair, turned a little; the lamp leans its shade over the book
+      const yaw = Math.PI / 2 + (k === 'lamp' ? (slot === 'backR' ? Math.PI + 1.3 : Math.PI - 1.3) : (rnd() - 0.5) * 0.5);
+      const fx = Math.abs(p.w * Math.cos(yaw)) + Math.abs(p.d * Math.sin(yaw)), fz = Math.abs(p.w * Math.sin(yaw)) + Math.abs(p.d * Math.cos(yaw));
+      // keep it on the desk top
+      const x = THREE.MathUtils.clamp(SLOTS[slot][0], -0.31 + fx / 2, 0.31 - fx / 2), z = THREE.MathUtils.clamp(SLOTS[slot][1], -0.64 + fz / 2, 0.64 - fz / 2);
+      const o = p.obj.clone(true); o.position.set(x, TOP + 0.022, z); o.rotation.y = yaw; deco.add(o);
+      if (DESK3D[k].light) { hasLamp = true; lampLight.position.set(x + 0.06, TOP + 0.022 + p.h * 0.8, z + (slot === 'backR' ? 0.08 : -0.08)); }
+    });
+    lampLight.intensity = hasLamp ? lampBase : 0;
+    renderer.shadowMap.needsUpdate = true;
+    kick();
+  }
+  dressDesk();
   // a green upholstered desk chair (Poly Haven) tucked up to the desk, or a simple Windsor chair
   if (MOD.deskchair) placeModel(MOD.deskchair, -1.98, 0, -0.6, -Math.PI / 2, 1);
   const chair = new THREE.Group(); if (!MOD.deskchair) g.add(chair); chair.position.set(0.68, 0, 0); chair.rotation.y = Math.PI / 2;
@@ -1361,18 +1398,9 @@ function buildDesk(M, woodH, MOD) {
   const hit = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.4, 1.6), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set(0, 0.7, 0); hit.userData.station = 'desk'; g.add(hit);
   return {
-    reading, openBook: open,
-    setLight(l, c) {
-      lampLight.intensity = l; shadeMat.emissiveIntensity = mode === 'night' ? 0.35 : 0.05;
-      bulbMat.color.set(mode === 'night' ? '#ffe2a8' : '#c9b48a');
-      candleLight.intensity = c; flame.visible = c > 0; M.candle.emissiveIntensity = c > 0 ? 0.25 : 0;
-      this.candleBase = c;
-    },
-    tick(t) {
-      if (!flame.visible) return;
-      const f = 0.85 + 0.15 * Math.sin(t * 11.3) * Math.sin(t * 6.7 + 1);
-      candleLight.intensity = this.candleBase * f; flame.scale.set(0.035, 0.07 * (0.92 + 0.12 * f), 1);
-    },
+    reading, openBook: open, dress: dressDesk,
+    setLight(l) { lampBase = l; lampLight.intensity = hasLamp ? l : 0; },
+    tick() {},
   };
 }
 function pageTex(b) {
@@ -1401,13 +1429,6 @@ function glowTex() {
   const g = x.createRadialGradient(64, 64, 2, 64, 64, 64);
   g.addColorStop(0, 'rgba(255,240,210,.9)'); g.addColorStop(0.25, 'rgba(255,200,120,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-  return c;
-}
-function flameTex() {
-  const [c, x] = mkCanvas(64, 128);
-  const g = x.createRadialGradient(32, 84, 2, 32, 74, 50);
-  g.addColorStop(0, 'rgba(255,250,220,1)'); g.addColorStop(0.25, 'rgba(255,190,90,.9)'); g.addColorStop(0.6, 'rgba(255,120,30,.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = g; x.beginPath(); x.ellipse(32, 72, 22, 52, 0, 0, Math.PI * 2); x.fill();
   return c;
 }
 
@@ -2731,7 +2752,8 @@ function frameShelf() {
 const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt, b.upNext]),
   lib.theme.bookend, lib.theme.bookends, lib.theme.trinkets]);
 const cupSig = () => JSON.stringify(lib.trophies || {});
-let lastSig = '', lastPaint = '', lastCups = '';
+const deskSig = () => JSON.stringify(lib.theme.tableItems || null);
+let lastSig = '', lastPaint = '', lastCups = '', lastDesk = '';
 // the app calls this after anything changes (a book added or edited, settings, a sync)
 function refresh() {
   if (!HOST || !world) return;
@@ -2752,6 +2774,7 @@ function refresh() {
     shelfTools();
   }
   if (cupSig() !== lastCups) { lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies); }
+  if (deskSig() !== lastDesk) { lastDesk = deskSig(); world.desk.dress(); }
   if (paintSig() !== lastPaint) { lastPaint = paintSig(); hangPaintings(); }
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
@@ -2775,6 +2798,7 @@ function setActive(on) {
   lastSig = libSig();
   lastPaint = paintSig(); hangPaintings();
   lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies);
+  lastDesk = deskSig();
   frameShelf();
   const start = params.get('st') && STATIONS[params.get('st')] ? params.get('st') : null;
   const f = framing(start || 'room');

@@ -1,0 +1,13 @@
+{
+  "lamp":      { "file": "desk/desklamp", "name": "Desk lamp", "tall": true, "yaw": 0.5 },
+  "candle":    { "file": "candlestick", "name": "Candlestick (unlit)", "tall": true },
+  "tea":       { "file": "teacup", "name": "Cup of tea", "parts": true, "yaw": -0.6 },
+  "teapot":    { "file": "desk/teapot", "name": "Teapot", "yaw": -0.5 },
+  "glasses":   { "file": "desk/glasses", "name": "Reading glasses", "flat": true, "yaw": 0.25 },
+  "magnifier": { "file": "desk/magnifier", "name": "Magnifying glass", "flat": true, "lie": true, "yaw": 0.6 },
+  "plant":     { "file": "trinkets/aloe", "name": "Little aloe", "cm": 16 },
+  "books":     { "file": "trinkets/bookstack", "name": "Stack of books", "yaw": -0.2 },
+  "watch":     { "file": "desk/watch", "name": "Pocket watch", "flat": true, "lie": true, "yaw": 0.3 },
+  "journal":   { "file": "desk/journal", "name": "Leather notebook", "flat": true, "yaw": -0.25 },
+  "apple":     { "file": "desk/apple", "name": "An apple" }
+}

@@ -638,6 +638,21 @@
     chinavase: {"w": 165.5, "h": 209.5, "base": 209.5, "img": "tex/trinkets/chinavase.webp"},
   });
 
+  // ---------- reading-table pieces: Poly Haven models (CC0), seen from above as on a table ----------
+  Object.assign(A, {
+    tb_lamp: {"w": 240.0, "h": 284.0, "base": 284.0, "img": "tex/table/lamp.webp", "glow": {"x": 144.0, "y": 85.2}},
+    tb_candle: {"w": 108.5, "h": 176.0, "base": 175.2, "img": "tex/table/candle.webp"},
+    tb_tea: {"w": 130.5, "h": 103.0, "base": 103.0, "img": "tex/table/tea.webp"},
+    tb_teapot: {"w": 157.5, "h": 167.0, "base": 167.0, "img": "tex/table/teapot.webp"},
+    tb_glasses: {"w": 145.5, "h": 87.0, "base": 87.0, "img": "tex/table/glasses.webp"},
+    tb_magnifier: {"w": 165.5, "h": 124.5, "base": 124.5, "img": "tex/table/magnifier.webp"},
+    tb_plant: {"w": 121.5, "h": 129.5, "base": 129.5, "img": "tex/table/plant.webp"},
+    tb_books: {"w": 246.5, "h": 137.0, "base": 137.0, "img": "tex/table/books.webp"},
+    tb_watch: {"w": 57.5, "h": 41.5, "base": 41.5, "img": "tex/table/watch.webp"},
+    tb_journal: {"w": 318.0, "h": 120.5, "base": 120.5, "img": "tex/table/journal.webp"},
+    tb_apple: {"w": 96.5, "h": 85.0, "base": 85.0, "img": "tex/table/apple.webp"},
+  });
+
   // ---------- rendering ----------
   let seq = 0;
   // draw one art piece at a scale; ids become unique so repeated copies never clash

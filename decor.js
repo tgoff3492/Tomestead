@@ -134,19 +134,24 @@
     round:   { name: 'Round cherry table' },
     marble:  { name: 'Marble and brass' },
   };
-  // cm = real-world height, so everything sits at the right size next to the book
+  // Poly Haven models (CC0), rendered as they look on a table (tex/table) and placed on the room's desk
+  // (room/models/desk). cm = how tall the picture stands at that view, so everything is true to scale.
+  // Nothing lit: the candlestick stays unlit.
   const TABLE_ITEMS = {
-    lamp:    { name: "Banker's lamp", art: 'lamp', cm: 32, tall: true },
-    candle:  { name: 'Candlestick', art: 'candle', cm: 24, tall: true },
-    tea:     { name: 'Cup of tea', art: 'teacup', cm: 9 },
-    mug:     { name: 'Coffee mug', art: 'mug', cm: 10 },
-    glasses: { name: 'Reading glasses', art: 'glasses', cm: 6, flat: true },
-    inkwell: { name: 'Ink and quill', art: 'inkwell', cm: 26, tall: true },
-    plant:   { name: 'Succulent', art: 'succulent', cm: 11 },
-    books:   { name: 'Stack of books', art: 'stack', cm: 9 },
-    watch:   { name: 'Pocket watch', art: 'watch', cm: 5, flat: true },
-    journal: { name: 'Journal and pencil', art: 'journal', cm: 8, flat: true },
+    lamp:      { name: "Desk lamp", art: 'tb_lamp', cm: 34.6, tall: true },
+    candle:    { name: "Candlestick (unlit)", art: 'tb_candle', cm: 21.5, tall: true },
+    tea:       { name: "Cup of tea", art: 'tb_tea', cm: 10.8 },
+    teapot:    { name: "Teapot", art: 'tb_teapot', cm: 20.4 },
+    glasses:   { name: "Reading glasses", art: 'tb_glasses', cm: 10.6, flat: true },
+    magnifier: { name: "Magnifying glass", art: 'tb_magnifier', cm: 15.2, flat: true },
+    plant:     { name: "Little aloe", art: 'tb_plant', cm: 15.8 },
+    books:     { name: "Stack of books", art: 'tb_books', cm: 16.7 },
+    watch:     { name: "Pocket watch", art: 'tb_watch', cm: 5.1, flat: true },
+    journal:   { name: "Leather notebook", art: 'tb_journal', cm: 14.7, flat: true },
+    apple:     { name: "An apple", art: 'tb_apple', cm: 10.4 },
   };
+  // picks saved before Nov 16, 2026 that have no Poly Haven twin carry over to the nearest one
+  const OLD_TABLE_ITEMS = { mug: 'teapot', inkwell: 'magnifier' };
   const MAX_TABLE_ITEMS = 5;
 
   const DEFAULTS = {
@@ -204,5 +209,5 @@
     return light;
   }
 
-  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, OLD_TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, VINES, LIGHTS, lightNow, sized, svgURL, applyTheme };
+  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, OLD_TRINKETS, TABLES, TABLE_ITEMS, OLD_TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, VINES, LIGHTS, lightNow, sized, svgURL, applyTheme };
 })();

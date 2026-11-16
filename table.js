@@ -147,7 +147,8 @@ window.TomesteadTable = (() => {
     surface += m.round ? '' : `<path d="${quad(g, 0, 0, 1, .05)}" fill="#fff" opacity="${m.marble ? .12 : .06}"/>`;
 
     const props = placeItems(g, o.items || [], o.maxItems);
-    const shadows = props.map(p => `<ellipse cx="${f(p.x + p.w * .08)}" cy="${f(p.y - p.h * .01)}" rx="${f(p.w * (p.flat ? .5 : .42))}" ry="${f(p.w * .09 * g.k(p.v))}" fill="url(#tb-shd)" opacity="${p.flat ? .6 : 1}"/>`).join('');
+    // (the Poly Haven pieces are pictures with their own shadows)
+    const shadows = props.filter(p => !(Art.A[p.art] && Art.A[p.art].img)).map(p => `<ellipse cx="${f(p.x + p.w * .08)}" cy="${f(p.y - p.h * .01)}" rx="${f(p.w * (p.flat ? .5 : .42))}" ry="${f(p.w * .09 * g.k(p.v))}" fill="url(#tb-shd)" opacity="${p.flat ? .6 : 1}"/>`).join('');
     const glows = props.filter(p => p.glow).map(p => `<ellipse cx="${f(p.glowX)}" cy="${f(p.y)}" rx="${f(g.frontW * (p.key === 'lamp' ? .34 : .2))}" ry="${f((y0 - y1) * (p.key === 'lamp' ? .5 : .3))}" fill="url(#tb-glow)"/>`).join('');
     const glowDef = `<radialGradient id="tb-shd"><stop offset="0" stop-color="#000" stop-opacity=".6"/><stop offset=".55" stop-color="#000" stop-opacity=".28"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient><radialGradient id="tb-glow"><stop offset="0" stop-color="#ffd38a" stop-opacity=".3"/><stop offset="1" stop-color="#ffd38a" stop-opacity="0"/></radialGradient>`;
     const bookArt = o.book ? previewBook(g) : '';

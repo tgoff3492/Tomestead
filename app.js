@@ -80,6 +80,7 @@
     }
     if (t.light && !D.LIGHTS[t.light]) delete t.light;
     // the drawn trinkets became Poly Haven pieces (Nov 16, 2026): carry each pick over, drop the rest
+    if (Array.isArray(t.tableItems)) t.tableItems = [...new Set(t.tableItems.map(k => D.TABLE_ITEMS[k] ? k : D.OLD_TABLE_ITEMS[k]).filter(k => k && D.TABLE_ITEMS[k]))];
     if (Array.isArray(t.trinkets)) t.trinkets = [...new Set(t.trinkets.map(k => D.TRINKETS[k] ? k : D.OLD_TRINKETS[k]).filter(k => k && D.TRINKETS[k]))];
     return t;
   }
@@ -3049,7 +3050,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261116102618').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261116104421').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

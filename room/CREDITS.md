@@ -43,6 +43,19 @@ Each is also rendered to a cut-out picture with its shadow for the Classic bookc
 | brassvase.glb | Brass Vase 03 |
 | chinavase.glb | Antique Ceramic Vase 01 (shown at 24 cm) |
 
+### On the desk (`models/desk/`, picked in Customize → Reading table; also rendered for the Classic reading table in `../tex/table/`)
+| File | Poly Haven asset |
+|---|---|
+| desklamp.glb | Industrial Pipe Lamp |
+| teapot.glb | Tea Set 01 (the teapot and its lid) |
+| glasses.glb | Round Spectacles (clear lenses) |
+| magnifier.glb | Magnifying Glass 01 (laid flat) |
+| watch.glb | Vintage Pocket Watch (laid flat) |
+| journal.glb | Binder Notebook (the open one) |
+| apple.glb | Food Apple 01 |
+
+The candlestick (unlit), cup of tea, aloe and stack of books reuse `candlestick.glb`, `teacup.glb` and `trinkets/aloe.glb` / `trinkets/bookstack.glb`.
+
 ## Textures
 Floral Jacquard (the rug: its damask recolored claret, with a woven border, medallion and fringe added in code, `tex/rug_claret.webp`), Herringbone Parquet (floor), Plastered Wall (walls), Wooden Panels (wainscot), Dark Wooden Planks (ceiling and beams), Oak Veneer 01 / Walnut Veneer / Lacquered Cherry Wood (bookcase, by your wood choice), Wool Boucle (rug weave), Brown Leather (tome cover and desk top), Bark Willow 02 (tome pedestal and firewood), Marble 01 (fireplace surround), Castle Brick 07 (firebox), Slate Floor 03 (hearth).
 

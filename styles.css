@@ -688,7 +688,8 @@ html.reading, html.reading body { overflow: hidden; }
 /* the table rises into view as the camera pans down */
 .rd-table { position: absolute; inset: 0; z-index: 2; transform: translateY(100%); pointer-events: none; overflow: hidden; }
 .rd-table .tprop, .tb-preview .tprop { position: absolute; }
-.rd-table .tprop svg, .tb-preview .tprop svg { display: block; }
+.rd-table .tprop svg, .tb-preview .tprop svg, .rd-table .tprop img, .tb-preview .tprop img { display: block; user-select: none; -webkit-user-drag: none; }
+html[data-light="night"] .tprop img { filter: brightness(.72) saturate(.9); }
 .tprop .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flame 2.6s ease-in-out infinite; }
 .tprop .steam path { animation: steam 4s ease-in-out infinite; }
 .tprop .steam path + path { animation-delay: -2s; }

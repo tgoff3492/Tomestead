@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-const CAT = await (await fetch('./trinkets.json')).json();
+const DESK = new URLSearchParams(location.search).get('set') === 'desk';
+const CAT = await (await fetch(DESK ? './desk.json' : './trinkets.json')).json();
 const PPC = 16.4;               // pixels per centimetre (2 × the classic art's 8.2 units per cm)
 const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
@@ -22,12 +23,14 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(4, 4).rotateX(-Math.PI / 2
 ground.receiveShadow = true; scene.add(ground);
 const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const out = {};
-const EL = THREE.MathUtils.degToRad(9);     // looking very slightly down, as you look at a shelf
+const EL = THREE.MathUtils.degToRad(DESK ? 32 : 9);   // a table is seen from above, a shelf nearly straight on     // looking very slightly down, as you look at a shelf
 for (const [k, c] of Object.entries(CAT)) {
-  const g = await L.loadAsync(`./tr/${k}.glb`);
+  const g = await L.loadAsync(DESK ? `./m/${c.file}.glb` : `./tr/${k}.glb`);
   const m = g.scene;
+  if (c.parts) { m.updateMatrixWorld(true); for (const o of [...m.children]) { const cc = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()); o.position.x -= cc.x; o.position.z -= cc.z; } }
+  if (c.lie) m.rotation.x = -Math.PI / 2;
   m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  const inner = new THREE.Group(); inner.add(m); m.rotation.y = c.ry || 0;
+  const inner = new THREE.Group(); const turn = new THREE.Group(); turn.add(m); inner.add(turn); turn.rotation.y = c.ry || 0;
   let b = new THREE.Box3().setFromObject(inner);
   const s = c.cm ? c.cm / 100 / (b.max.y - b.min.y) : 1;
   inner.scale.setScalar(s);

@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v29';
+const VERSION = 'tomestead-v30';
 const SHELL = [
   './',
   'index.html',
@@ -34,6 +34,9 @@ const SHELL = [
   'tex/trinkets/bust.webp',
   'tex/trinkets/chinavase.webp',
   'tex/trinkets/stonecat.webp',
+  'tex/table/lamp.webp',
+  'tex/table/tea.webp',
+  'tex/table/glasses.webp',
   'sync.js',
   'firebase-config.js',
   'manifest.webmanifest',
