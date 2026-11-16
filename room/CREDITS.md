@@ -23,7 +23,7 @@ Models were shrunk for phones with gltf-transform (textures resized and converte
 | grandfather.glb | Vintage Grandfather Clock 01 |
 
 ## Textures
-Herringbone Parquet (floor), Plastered Wall (walls), Wooden Panels (wainscot), Dark Wooden Planks (ceiling and beams), Oak Veneer 01 / Walnut Veneer / Lacquered Cherry Wood (bookcase, by your wood choice), Wool Boucle (rug weave), Brown Leather (tome cover and desk top), Bark Willow 02 (tome pedestal and firewood), Marble 01 (fireplace surround), Castle Brick 07 (firebox), Slate Floor 03 (hearth), Faux Fur Geometric (the dog's coat).
+Floral Jacquard (the rug: its damask recolored claret, with a woven border, medallion and fringe added in code, `tex/rug_claret.webp`), Herringbone Parquet (floor), Plastered Wall (walls), Wooden Panels (wainscot), Dark Wooden Planks (ceiling and beams), Oak Veneer 01 / Walnut Veneer / Lacquered Cherry Wood (bookcase, by your wood choice), Wool Boucle (rug weave), Brown Leather (tome cover and desk top), Bark Willow 02 (tome pedestal and firewood), Marble 01 (fireplace surround), Castle Brick 07 (firebox), Slate Floor 03 (hearth), Faux Fur Geometric (the dog's coat).
 
 ## Paintings (`tex/paintings/`, chosen in Customize → Paintings)
 Both frames are Fancy Picture Frame 01. The landscapes are Poly Haven HDRIs (CC0), turned into flat views and then painted in oils in code (OpenCV's oil-painting filter, a varnish tone, canvas weave and brush relief):

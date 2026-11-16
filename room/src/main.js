@@ -321,7 +321,7 @@ async function build() {
     Promise.all(['floor', 'wood-v', 'wood-h', 'plaster', 'cloth', 'leather'].map((n) => loadImg(TEX + n + '.webp'))),
     Promise.all(SETS.map(loadSet)).then((a) => Object.fromEntries(SETS.map((k, i) => [k, a[i]]))),
     Promise.all(MODELS.map(loadModel)).then((a) => Object.fromEntries(MODELS.map((k, i) => [k, a[i]]))),
-    Promise.all([loadTex('wool_boucle_nor'), loadTex('brown_leather_nor'), loadTex('faux_fur_geometric_nor')]).then(([w, l, f]) => { extra.wool = w; extra.leather = l; extra.fur = f; }),
+    Promise.all([loadTex('wool_boucle_nor'), loadTex('brown_leather_nor'), loadTex('faux_fur_geometric_nor'), loadTex('rug_claret', true)]).then(([w, l, f, r]) => { extra.wool = w; extra.leather = l; extra.fur = f; extra.rug = r; }),
   ]);
   const [floorImg, woodV, woodH, plaster, cloth, leather] = imgs;
   $('veil-sub').textContent = 'Shelving the books…';
@@ -430,7 +430,10 @@ async function build() {
   // ----- the magic tome
   const tome = buildTome(M);
   // ----- a rug, a plant, a star map
-  const rug = mesh(new THREE.PlaneGeometry(2.8, 1.9).rotateX(-Math.PI / 2), std({ map: canvasTex(rugTex(), { repeat: false }), roughness: 0.96, normalMap: extra.wool ? tile(extra.wool, 0.18, 0.18) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), scene, { cast: false });
+  // a claret damask rug (Poly Haven's Floral Jacquard, recolored, with a woven border and fringe);
+  // the plain painted one if it can't load
+  const rugMap = extra.rug ? Object.assign(extra.rug, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping }) : canvasTex(rugTex(), { repeat: false });
+  const rug = mesh(new THREE.PlaneGeometry(extra.rug ? 2.8 * 1580 / 1520 : 2.8, 1.9).rotateX(-Math.PI / 2), std({ map: rugMap, roughness: 0.96, alphaTest: extra.rug ? 0.5 : 0, normalMap: extra.wool ? tile(extra.wool, 0.18, 0.18) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), scene, { cast: false });
   rug.position.set(0, 0.004, -0.35);
   const map = mesh(new THREE.PlaneGeometry(1.0, 1.25).rotateY(-Math.PI / 2), std({ map: canvasTex(starChart(true), { repeat: false }), roughness: 0.8 }), scene, { cast: false });
   map.position.set(2.985, 1.75, 0.1);
