@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261115184854">
+  <link rel="stylesheet" href="room/room.css?v=20261115222929">
   <script>try { var u = localStorage.getItem('tomestead.uid'), pv = JSON.parse(localStorage.getItem('tomestead.prefs.v1' + (u ? ':' + u : '')) || '{}') || {}, cv = document.createElement('canvas'); if (!(pv.roomV1 && pv.view !== 'room') && cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -37,7 +37,7 @@
     <canvas id="rm-scene" aria-label="Your reading room: a bookcase, a desk, a fireplace and a magic tome"></canvas>
     <div id="rm-veil" class="veil"><div class="veil-title">Tomestead</div><div class="veil-sub" id="rm-veil-sub">Lighting the lamps…</div></div>
     <nav class="stations" aria-label="Go to">
-      <button type="button" data-go="room" aria-pressed="true">Room</button>
+      <button type="button" data-go="room" aria-pressed="true">Overview</button>
       <button type="button" data-go="shelf">Shelf</button>
       <button type="button" data-go="desk">Desk</button>
       <button type="button" data-go="hearth">Fireside</button>
@@ -73,11 +73,15 @@
           <button id="calBtn">Reading calendar</button>
           <button id="tagsBtn">Tags</button>
           <button id="customizeBtn">Customize library</button>
+          <button id="tourBtn" hidden>Show me around</button>
           <hr>
           <button id="installBtn" hidden>Install app</button>
           <button id="csvBtn">Import from Goodreads or StoryGraph</button>
           <button id="exportBtn">Back up my library</button>
           <button id="importBtn">Restore from backup</button>
+          <button id="csvExportBtn">Download as a spreadsheet (CSV)</button>
+          <hr>
+          <button id="feedbackBtn">Send feedback</button>
           <input id="importFile" type="file" accept="application/json,.json" hidden>
           <hr class="signed-in-only" hidden>
           <p id="whoAmI" class="menu-who" hidden></p>
@@ -91,7 +95,7 @@
     <div class="toolbar">
       <div class="viewtoggle pills" role="tablist" aria-label="View">
         <button role="tab" id="tab-room" aria-selected="false" data-view="room">Room</button>
-        <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">Shelf</button>
+        <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">Classic</button>
         <button role="tab" id="tab-list" aria-selected="false" data-view="list">List</button>
       </div>
       <div id="years" class="years pills" role="tablist" aria-label="Year read"></div>
@@ -160,7 +164,7 @@
     <div class="cz-panel paper-panel">
       <section class="cz-section" id="czHomeSec">
         <h3>Home</h3>
-        <p class="cz-hint">Where the app opens: the 3D reading room, or the classic flat bookcase. (Room · Shelf · List at the top switches any time.)</p>
+        <p class="cz-hint">Where the app opens: the 3D reading room, or the classic flat bookcase. (Room · Classic · List at the top switches any time.)</p>
         <div id="czHome" class="spans" role="radiogroup" aria-label="Home">
           <button type="button" role="radio" data-home="room">3D reading room</button>
           <button type="button" role="radio" data-home="shelf">Classic bookcase</button>
@@ -192,6 +196,16 @@
         <h3>Climbing vine</h3>
         <p class="cz-hint">Grows up the right side of your bookcase and over the arch.</p>
         <div id="czVine" class="tiles" role="radiogroup" aria-label="Climbing vine"></div>
+      </section>
+      <section class="cz-section" id="czPaintSec">
+        <h3>Paintings</h3>
+        <p class="cz-hint">For the 3D reading room: landscapes painted from Poly Haven’s free photographs, two old oil paintings, or a picture of your own.</p>
+        <div id="czPaintFor" class="spans cz-befor" role="radiogroup" aria-label="Choose the painting for">
+          <button type="button" role="radio" data-paintfor="mantel">Over the fireplace</button>
+          <button type="button" role="radio" data-paintfor="nook">Reading corner</button>
+        </div>
+        <div id="czPaint" class="tiles paint-tiles" role="radiogroup" aria-label="Paintings"></div>
+        <input id="czPaintFile" type="file" accept="image/*" hidden>
       </section>
       <section class="cz-section">
         <h3>Bookends</h3>
@@ -312,10 +326,15 @@
           <label for="fStopped">Put it down on</label>
           <input id="fStopped" type="date">
         </div>
-        <div class="field" data-for="reading">
+        <div class="field" data-for="reading dnf">
           <label for="fProgress" id="fProgressLabel">I’m on page</label>
           <input id="fProgress" type="number" min="0" max="5000" inputmode="numeric">
         </div>
+      </div>
+      <div class="field" data-for="dnf">
+        <label for="fWhy">Why did you set it aside? <span class="opt">(optional)</span></label>
+        <input id="fWhy" maxlength="120" autocomplete="off" placeholder="In your own words, or pick one">
+        <div class="why-chips" data-why-for="fWhy"></div>
       </div>
       <div class="field" data-for="read">
         <div id="fRereads" class="rereads"></div>
@@ -347,6 +366,10 @@
           <div class="field" id="fHoursField" hidden>
             <label for="fHours">Length in hours</label>
             <input id="fHours" type="number" min="0.1" max="300" step="0.1" inputmode="decimal">
+          </div>
+          <div class="field" id="fNarratorField" hidden>
+            <label for="fNarrator">Narrated by</label>
+            <input id="fNarrator" maxlength="120" autocomplete="off">
           </div>
           <div class="field">
             <label for="fGenre">Genre</label>
@@ -412,6 +435,29 @@
     </form>
   </dialog>
 
+  <!-- Setting a book aside: where and why (both optional) -->
+  <dialog id="asideDialog" class="paper narrow">
+    <form id="asideForm" method="dialog" novalidate>
+      <h2>Set it aside</h2>
+      <p id="asBook" class="byline"></p>
+      <div class="field">
+        <label for="asAt" id="asAtLabel">I stopped at page <span class="opt">(optional)</span></label>
+        <input id="asAt" type="number" min="0" max="5000" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="asWhy">Why? <span class="opt">(optional)</span></label>
+        <input id="asWhy" maxlength="120" autocomplete="off" placeholder="In your own words, or pick one">
+        <div class="why-chips" data-why-for="asWhy"></div>
+      </div>
+      <p class="goal-sub">It moves to your Set aside pile, with a slip of paper where you stopped. You can pick it back up any time.</p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-ink">Set it aside</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- A favorite line -->
   <dialog id="quoteDialog" class="paper narrow">
     <form id="quoteForm" method="dialog" novalidate>
@@ -431,6 +477,38 @@
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Cancel</button>
         <button type="submit" class="btn btn-ink">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Feedback for whoever runs Tomestead -->
+  <dialog id="feedbackDialog" class="paper narrow">
+    <form id="feedbackForm" method="dialog" novalidate>
+      <h2>Send feedback</h2>
+      <p class="goal-sub">Anything goes: something broke, something was confusing, an idea, or a part you love. It goes straight to the person who runs Tomestead.</p>
+      <fieldset class="field">
+        <legend>This is about</legend>
+        <div id="fbKind" class="spans" role="radiogroup" aria-label="Kind of feedback">
+          <button type="button" role="radio" data-kind="broke" aria-checked="false">Something broke</button>
+          <button type="button" role="radio" data-kind="confusing" aria-checked="false">It was confusing</button>
+          <button type="button" role="radio" data-kind="idea" aria-checked="false">An idea</button>
+          <button type="button" role="radio" data-kind="love" aria-checked="false">I love this</button>
+        </div>
+      </fieldset>
+      <div class="field">
+        <label for="fbText">Tell us</label>
+        <textarea id="fbText" rows="5" maxlength="5000" placeholder="What happened, or what would make it better?"></textarea>
+      </div>
+      <div class="field">
+        <label for="fbDoing">What were you trying to do? <span class="opt">(optional)</span></label>
+        <input id="fbDoing" maxlength="300" autocomplete="off" placeholder="e.g. adding a book I’m reading">
+      </div>
+      <p class="goal-sub fb-small">Your email, which screen you were on, your device and browser, and how many books you have are sent with it, to help track things down. Nothing from your books or reviews.</p>
+      <p id="fbError" class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-ink">Send</button>
       </div>
     </form>
   </dialog>
@@ -574,6 +652,7 @@
       <h2 id="celebrateTitle">You did it!</h2>
       <p id="celebrateText"></p>
       <div class="actions center">
+        <button id="celebrateShare" class="btn btn-ghost">Share it</button>
         <button id="celebrateRaise" class="btn btn-ghost">Raise my goal</button>
         <button id="celebrateClose" class="btn btn-ink">Back to my shelf</button>
       </div>
@@ -594,6 +673,7 @@
   <script src="recommend.js"></script>
   <script src="importer.js"></script>
   <script src="scan.js"></script>
+  <script src="share.js"></script>
   <script src="yearreview.js"></script>
   <script src="calendar.js"></script>
   <script src="goals.js"></script>

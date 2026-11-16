@@ -28,6 +28,22 @@ service cloud.firestore {
       }
     }
 
+    // Feedback from inside the app (••• → Send feedback) and automatic error reports.
+    // Readers can add them but never read them back; you read them in the Firebase console.
+    match /feedback/{id} {
+      allow create: if invited()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'at', 'kind', 'text', 'doing', 'where', 'device', 'build', 'books'])
+        && request.resource.data.text is string && request.resource.data.text.size() <= 5000;
+    }
+    match /errors/{id} {
+      allow create: if invited()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'at', 'msg', 'src', 'stack', 'where', 'device', 'build', 'when'])
+        && request.resource.data.msg is string && request.resource.data.msg.size() <= 1000
+        && (!('stack' in request.resource.data) || request.resource.data.stack.size() <= 3000);
+    }
+
     // Everything else is closed.
   }
 }

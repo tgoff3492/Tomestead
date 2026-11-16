@@ -28,7 +28,15 @@ A cozy digital library for every book you've read. Each book you log lands on th
 - **Customize library**: choose the wallpaper, shelf wood, bookends (a different pair for each section) and which trinkets sit on your shelves (a trailing pothos, a candlestick, a sleeping cat, a globe, a lantern and more). Each trinket appears once, in an open spot, and a stack of books holds one small piece on top. You can also pick the reading table (walnut, leather-top desk, farmhouse oak, round cherry, or marble and brass) and up to five things to keep on it (a banker's lamp, tea, reading glasses, ink and quill and more), with live previews.
 - **Home screen app**: installable on iPhone, iPad and Android, and works offline.
 - **Accounts and sync** (once switched on, see [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md)): each reader signs in with Google or email, and their library, goals, trophies, look and cover photos are saved to the cloud and follow them to any device. Only people on the guest list can use it. Sign out from the ••• menu to hand the device to someone else.
-- **Backups**: download your library as a JSON file and restore it on any device.
+- **Backups**: download your library as a JSON file and restore it on any device, or as a spreadsheet (••• → Download as a spreadsheet). The spreadsheet uses Goodreads' column names, so Excel, Numbers, Google Sheets, Goodreads, StoryGraph and Tomestead itself can all read it.
+- **Half stars**: tap the left half of a star (or tap a star twice) for a half; arrow keys step by halves. StoryGraph's quarter stars import to the nearest half.
+- **Up next**: on a to-read book, "Make it up next" moves it to the front of the pile (and onto the desk in the room), in the order you mark them.
+- **Next in the series**: a finished book in a series links to the next one on your shelves, or offers to add the next number to your to-read pile.
+- **Setting a book aside**: asks where you stopped and why (both optional, with quick picks like "Lost interest"); the open book shows both.
+- **Audiobook narrators**: More details has a "Narrated by" field for audiobooks.
+- **Share a picture**: Year in review has "Share my year" (your count, pages, average stars and a shelf of covers), and reaching a goal has "Share it". Phones open the share sheet; computers download a PNG.
+- **First visit and tour**: a new, empty library opens to a welcome card (Add your first book, Import from Goodreads or StoryGraph, Show me around). Everyone gets a short four-step tour of the room once; ••• → Show me around replays it.
+- **Send feedback** (••• menu): kind (something broke / confusing / an idea / I love this), the details, and what you were trying to do. It's saved to the `feedback` collection in Firestore with the screen, device and book count; errors anyone hits are saved quietly to `errors`. Read both in the Firebase console. Feedback that can't be sent yet waits on the device and goes with the next sign-in.
 
 ## Where your data lives
 
@@ -57,6 +65,7 @@ importer.js           Goodreads / StoryGraph .csv import
 scan.js               barcode scanning (the camera reads the ISBN)
 vendor/               bundled barcode reader for phones without one (barcode-detector + zxing-wasm, MIT)
 yearreview.js         year in review
+share.js              share pictures (Year in review, goals reached)
 covers.js             cover art and summaries (Open Library) and your own cover photos
 sync.js               sign-in, the guest list, and syncing with Firebase
 firebase-config.js    your Firebase project settings (null = accounts off)

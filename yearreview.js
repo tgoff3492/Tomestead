@@ -39,7 +39,7 @@ window.TomesteadYear = function (api) {
     finishes.forEach(f => { const m = parseInt(f.date.slice(5, 7), 10); if (m >= 1 && m <= 12) months[m - 1]++; });
     const byYear = new Map();
     finishes.forEach(f => byYear.set(f.date.slice(0, 4), (byYear.get(f.date.slice(0, 4)) || 0) + 1));
-    const stars = [5, 4, 3, 2, 1].map(n => ({ n, c: rated.filter(b => b.rating === n).length }));
+    const stars = [5, 4, 3, 2, 1].map(n => ({ n, c: rated.filter(b => Math.ceil(b.rating) === n).length }));   // a half star counts with the star it's on
     const count = (arr) => { const m = new Map(); arr.forEach(k => { if (k) m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])); };
     const genres = count(uniq.map(b => b.genre && b.genre.trim()));
     const tags = count(uniq.flatMap(b => api.tagsOf(b)));
@@ -178,6 +178,7 @@ window.TomesteadYear = function (api) {
         <div class="yr-tiles">${tiles}</div>
         ${goal}
         ${extras.length ? `<p class="yr-extras">${extras.join(' · ')}</p>` : ''}
+        ${window.TomesteadShare ? `<button type="button" class="btn btn-brass yr-share" data-share>${all ? 'Share my reading life' : `Share my ${esc(sel)}`}</button>` : ''}
       </section>
       ${timeline}
       ${ratings || highlights ? `<section class="yr-sec yr-grid">${ratings}${highlights}</section>` : ''}
@@ -187,6 +188,26 @@ window.TomesteadYear = function (api) {
         <div class="yr-mosaic">${g.uniq.slice().reverse().map(b => `<button type="button" class="yr-cov" data-open="${esc(b.id)}" aria-label="${esc(b.title)}" title="${esc(b.title)}">${api.thumbHTML(b, 'M')}</button>`).join('')}</div>
       </section>`;
     api.wireThumbs(body);
+    last = g;
+  }
+  let last = null;
+  // a picture of the year: the count, a line of numbers, and a shelf of covers (five-star reads first)
+  function shareYear() {
+    const g = last; if (!g) return;
+    const all = sel === 'all', n = g.finishes.length;
+    const fav = new Set(g.favorites);
+    const order = [...g.favorites, ...g.uniq.slice().reverse().filter(b => !fav.has(b))];
+    const covers = order.slice(0, 12).map(b => {
+      const el = $(`#yrBody .yr-mosaic [data-open="${CSS.escape(b.id)}"] img`);
+      return { src: el && el.currentSrc ? el.currentSrc : el ? el.src : '', bg: api.colorOf(b).bg, title: b.title };
+    });
+    const lines = [
+      [g.pages ? `${fmtNum(g.pages)} pages` : '', g.hours ? `${fmtNum(g.hours)} hours listened` : ''].filter(Boolean).join(' · '),
+      [g.rated.length ? `${g.avg.toFixed(1)}★ average` : '', g.favorites.length ? api.plural(g.favorites.length, 'five-star read') : ''].filter(Boolean).join(' · '),
+      g.genres.length ? `Most read: ${g.genres[0][0]}` : '',
+    ];
+    window.TomesteadShare.share({ kicker: all ? 'My reading life, so far' : `My ${sel} in books`, big: fmtNum(n), bigLabel: n === 1 ? 'book finished' : 'books finished', lines, covers },
+      `tomestead-${all ? 'reading-life' : sel}`, api.toast);
   }
 
   $('#yrYears').addEventListener('click', (e) => {
@@ -194,6 +215,7 @@ window.TomesteadYear = function (api) {
     sel = b.dataset.yr; render();
   });
   $('#yrBody').addEventListener('click', (e) => {
+    if (e.target.closest('[data-share]')) { shareYear(); return; }
     const b = e.target.closest('[data-open]'); if (!b) return;
     api.openBook(b.dataset.open, b.querySelector('.thumb, .chip') || b);
   });

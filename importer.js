@@ -38,6 +38,8 @@
   }
   const stamp = (s) => { const d = isoDate(s); if (!d) return 0; const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd, 12).getTime(); };
   const cleanISBN = (s) => { const d = String(s || '').replace(/[="\s-]/g, '').toUpperCase(); return /^(97[89]\d{10}|\d{9}[\dX])$/.test(d) ? d : ''; };
+  // ratings to the nearest half star (StoryGraph keeps quarters: 3.75 → 4)
+  const half = (v) => { const n = parseFloat(v); return n > 0 ? Math.max(0.5, Math.min(5, Math.round(n * 2) / 2)) : 0; };
   const int = (s) => { const n = parseInt(String(s || '').replace(/[^\d]/g, ''), 10); return n > 0 ? n : null; };
   function plainText(html) {
     return String(html || '')
@@ -77,11 +79,18 @@
     const tags = (r['Bookshelves'] || '').split(',').map(x => x.trim()).filter(x => x && !skip.has(x.toLowerCase())).map(tagName);
     return {
       title: s.title, author: r['Author'] || '', series: s.series || '', seriesNo: s.seriesNo || null,
-      status, rating: Math.max(0, Math.min(5, parseInt(r['My Rating'], 10) || 0)),
+      status, rating: half(r['My Rating']),
       finished: status === 'read' ? finished : '',
       pages: int(r['Number of Pages']), isbn: cleanISBN(r['ISBN13']) || cleanISBN(r['ISBN']),
       format: formatFrom(r['Binding']), review: plainText(r['My Review']), tags,
       addedAt: stamp(r['Date Added']),
+      // the extra columns in Tomestead's own spreadsheet
+      ...(isoDate(r['Date Started']) ? { started: isoDate(r['Date Started']) } : {}),
+      ...(r['Genre'] ? { genre: r['Genre'] } : {}),
+      ...(r['Narrator'] ? { narrator: r['Narrator'] } : {}),
+      ...(parseFloat(r['Hours']) > 0 ? { hours: parseFloat(r['Hours']) } : {}),
+      ...(r['Earlier Reads'] ? { rereads: r['Earlier Reads'].split(/[;,]\s*/).map(isoDate).filter(Boolean) } : {}),
+      ...(r['Set Aside Why'] ? { stopWhy: r['Set Aside Why'] } : {}),
     };
   }
 
@@ -103,7 +112,7 @@
     const isbn = cleanISBN(r['ISBN/UID']);
     const b = {
       title: String(r['Title'] || '').trim(), author: (r['Authors'] || '').split(',').slice(0, 2).map(x => x.trim()).filter(Boolean).join(' & '),
-      status, rating: rating > 0 ? Math.max(1, Math.min(5, Math.round(rating))) : 0,
+      status, rating: half(rating),
       finished: status === 'read' ? (ends[0] || '') : '', rereads: status === 'read' ? ends.slice(1) : [],
       isbn, format: formatFrom(r['Format']), review: plainText(r['Review']),
       tags: [...new Set([...moods, ...tags])], addedAt: stamp(r['Date Added']),

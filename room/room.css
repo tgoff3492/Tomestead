@@ -9,8 +9,8 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .veil { position: fixed; inset: 0; z-index: 20; background: #140d08; display: grid; place-content: center; text-align: center; transition: opacity 1.2s ease; }
 .rm .veil.gone { opacity: 0; pointer-events: none; }
 .rm .veil-title { font-family: var(--serif); font-size: clamp(2.4rem, 9vw, 4.2rem); color: var(--brass-lt); letter-spacing: .02em; }
-.rm .veil-sub { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); font-style: italic; font-family: var(--serif); font-size: .9rem; color: rgba(239,227,200,.5); transition: color .6s ease; }
-.rm .veil.ready .veil-sub { color: rgba(239,227,200,.8); }
+.rm .veil-sub { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); font-style: italic; font-family: var(--serif); font-size: 1.08rem; letter-spacing: .02em; color: rgba(239,227,200,.6); transition: color .6s ease; }
+.rm .veil.ready .veil-sub { color: rgba(239,227,200,.92); }
 .rm .veil.ready { cursor: pointer; }
 /* a famous line under the title, a new one each time the app opens (quotes.js) */
 .rm .veil { padding: 0 24px; }
@@ -125,3 +125,8 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .card .streak b { font-family: var(--serif); font-weight: 400; font-size: 1.9rem; line-height: 1; color: #a4621b; }
 .rm .card .flame { width: 16px; height: 22px; border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%; background: radial-gradient(circle at 50% 70%, #ffe08a 0 22%, #ff9a3c 45%, #d2461d 75%); box-shadow: 0 0 10px rgba(255,140,50,.6); animation: rm-flick 1.2s ease-in-out infinite alternate; }
 @keyframes rm-flick { to { transform: scaleY(1.12) rotate(-3deg); } }
+
+/* the app's ••• menu opens over the room: its cards step aside meanwhile */
+.menu-open .rm .card, .menu-open .rm .hint { visibility: hidden; }
+.rm .card .upnext { display: inline-block; font: 700 .68rem var(--sans); letter-spacing: .06em; text-transform: uppercase; color: #6d4b16; background: rgba(184,134,44,.18); border-radius: 999px; padding: 2px 7px; vertical-align: 1px; }
+.rm .card ul li .acts { margin-top: 6px; }

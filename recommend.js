@@ -28,8 +28,8 @@ window.TomesteadRecommend = function (api) {
   function weightOf(b) {
     // books on your want-to-read list hint a little; ones you put down count a little against
     if (b.status === 'want') return 0.6;
-    if (b.status === 'dnf') return b.rating ? Math.min(-0.5, { 5: 1, 4: 0.5, 3: -0.5, 2: -1, 1: -2 }[b.rating]) : -1;
-    const w = { 5: 3, 4: 2, 3: 0.5, 2: -1, 1: -2 }[b.rating] ?? 1;
+    if (b.status === 'dnf') return b.rating ? Math.min(-0.5, { 5: 1, 4: 0.5, 3: -0.5, 2: -1, 1: -2 }[Math.round(b.rating)]) : -1;
+    const w = { 5: 3, 4: 2, 3: 0.5, 2: -1, 1: -2 }[Math.round(b.rating)] ?? 1;
     const recent = b.finished && (Date.now() - new Date(b.finished).getTime()) < 400 * 864e5 ? 1.2 : 1;
     return w * recent;
   }

@@ -60,7 +60,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--brass-lt);
   text-shadow: 0 1px 0 rgba(0,0,0,.5), 0 0 24px rgba(242,182,90,.25);
 }
-.stats { margin: 4px 0 0; color: #b9ab8c; font-size: .86rem; }
+.stats { margin: 4px 0 0; color: #b9ab8c; font-size: .92rem; line-height: 1.35; }
 .controls { display: flex; align-items: center; gap: 10px; }
 
 /* small pill toggles */
@@ -100,6 +100,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .more summary::-webkit-details-marker { display: none; }
 .more .menu {
   position: absolute; right: 0; top: 44px; z-index: 20; min-width: 210px;
+  max-height: calc(100vh - 90px); max-height: calc(100dvh - 90px - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain;
   background: var(--paper); color: var(--ink); border-radius: 8px; padding: 6px;
   box-shadow: 0 10px 30px rgba(0,0,0,.45);
 }
@@ -487,6 +488,12 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
   color: rgba(42,30,22,.22); transition: transform .1s ease;
 }
 .star-picker button.on { color: #b8862c; }
+.star-picker button.half { background: linear-gradient(90deg, #b8862c 50%, rgba(42,30,22,.22) 50%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.star-value { font: 700 .95rem var(--sans); color: #8a6420; min-width: 1.6em; }
+/* a half star anywhere else: an empty star with its left half filled */
+.hstar { position: relative; display: inline-block; }
+.hstar > .on { position: absolute; left: 0; top: 0; width: 50%; overflow: hidden; white-space: nowrap; }
+.book .s-stars .hstar > .on { width: auto; height: 50%; }
 .star-picker button:hover { transform: scale(1.12); }
 .star-picker .clear { font-size: .9rem; margin-left: 10px; color: var(--ink-soft); text-decoration: underline; }
 
@@ -633,7 +640,7 @@ dialog h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1
   .brand h1 { font-size: 1.9rem; }
   .add-long { display: none; }
   .controls { flex: 0 0 auto; }
-  .stats { font-size: .8rem; }
+  .stats { font-size: .88rem; }
   .shelves { margin: 0 10px; }
   .cases { gap: 16px; }
   .shelf-row { padding: 0 8px; }
@@ -1011,7 +1018,9 @@ html.gate-on, html.gate-on body { overflow: hidden; }
   margin: 0; font-family: var(--serif); font-weight: 400; font-size: 2.6rem; line-height: 1;
   letter-spacing: .1em; padding-left: .1em; color: var(--ink);
 }
-.gate-sub { margin: 8px 0 18px; font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
+.gate-sub { margin: 8px 0 8px; font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
+.gate-pitch { margin: 0 auto 18px; max-width: 34ch; font-size: .92rem; line-height: 1.45; color: var(--ink-soft); }
+.gate-tip { font-size: .84rem; color: var(--ink-soft); }
 .gate-h { margin: 0 0 6px; font-family: var(--serif); font-weight: 400; font-size: 1.5rem; }
 .gate-msg { margin: 0 0 4px; color: #4a3828; }
 .gate-note { margin: 12px 0 0; color: #3f5a32; font-weight: 700; }
@@ -1661,7 +1670,7 @@ html.room-mode #stage::before { content: ""; position: fixed; left: 0; right: 0;
 html.room-mode .topbar, html.room-mode .toolbar { position: relative; }
 html.room-mode {
   --chrome-title: #e6c886; --chrome-title-shadow: 0 2px 12px rgba(0,0,0,.7);
-  --chrome-dim: rgba(239,227,200,.82); --chrome-ink: #fff4dc; --chrome-soft: rgba(239,227,200,.85);
+  --chrome-dim: rgba(244,234,212,.95); --chrome-ink: #fff4dc; --chrome-soft: rgba(239,227,200,.85);
   --chrome-pill: rgba(20,12,6,.6); --chrome-pill-shadow: 0 0 0 1px rgba(230,200,134,.28);
   --chrome-on: #efe3c8; --chrome-on-ink: #2a1e16; --chrome-accent: #e6c886; --chrome-text-shadow: 0 1px 6px rgba(0,0,0,.7);
 }
@@ -1733,3 +1742,18 @@ dialog.paper.cal-dialog { width: min(480px, calc(100vw - 16px)); }
 .cal-note { margin: 12px 0 0; font-size: .8rem; color: var(--ink-soft); }
 @media (max-width: 380px) { .cal-cell { font-size: .85rem; } .cal-min { display: none; } }
 .cal-keep { grid-column: 1 / -1; margin: 0; font-size: .85rem; color: #8a5a1c; font-style: italic; }
+
+/* to-read books marked "Up next" */
+.tag-pill.upnext { background: rgba(184,134,44,.2); color: #6d4b16; font-weight: 700; }
+.pg-sublink { display: block; margin-top: 6px; }
+.why-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.why-chip { border: 1px solid rgba(42,30,22,.2); background: transparent; border-radius: 999px; padding: 5px 11px; font: 500 .85rem var(--sans); color: var(--ink-soft); cursor: pointer; }
+.why-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.fb-small { font-size: .8rem; }
+
+.yr-share { margin-top: 16px; }
+
+/* paintings for the 3D room */
+.tile .tile-art.paint-art { place-items: center; padding: 6px; background: linear-gradient(180deg, #3a2415, #2c1a0f); }
+.paint-art img { width: 100%; height: 100%; object-fit: cover; border-radius: 2px; box-shadow: 0 0 0 3px #b48a3c, 0 0 0 5px #6b4a1c, 0 3px 8px rgba(0,0,0,.5); }
+.paint-art.mine span { color: #e6c886; font: 600 .82rem/1.25 var(--sans); text-align: center; }

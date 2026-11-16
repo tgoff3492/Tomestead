@@ -58,6 +58,7 @@
     gate.innerHTML = `<div class="gate-card paper-panel">
         <h1 id="gateBrand" class="gate-brand">Tomestead</h1>
         <p class="gate-sub">A home for every book you’ve read</p>
+        <p class="gate-pitch">A cozy reading room for the books you’ve read, are reading and want to read. Log reviews and favorite lines, keep a streak, set goals, and see your year in books. No ads, no feed.</p>
         <div class="gate-body"></div>
       </div>`;
     document.body.appendChild(gate);
@@ -89,6 +90,7 @@
             <input id="gEmail" type="email" autocomplete="email" inputmode="email" required value="${esc(opts.email || '')}"></div>
           ${reset ? '' : `<div class="field"><label for="gPass">Password${create ? ' <span class="opt">(at least 6 characters)</span>' : ''}</label>
             <input id="gPass" type="password" autocomplete="${create ? 'new-password' : 'current-password'}" required minlength="6"></div>`}
+          ${create ? '<p class="gate-msg gate-tip">We’ll email you a link to confirm it’s you. If it isn’t there in a minute, check your spam or promotions folder. (Continue with Google skips this step.)</p>' : ''}
           ${err}${note}
           <div class="actions">
             <button type="submit" class="btn btn-ink gate-submit">${create ? 'Create my account' : reset ? 'Send the link' : 'Sign in'}</button>
@@ -103,6 +105,7 @@
       body.innerHTML = `
         <h2 class="gate-h">Check your email</h2>
         <p class="gate-msg">We sent a link to <strong>${esc(opts.email)}</strong>. Open it to confirm it’s you, then come back and tap Continue.</p>
+        <p class="gate-msg gate-tip">Not there? It sometimes lands in spam or promotions, from a firebaseapp.com address.</p>
         ${err}${note}
         <div class="actions center">
           <button type="button" class="btn btn-ink" data-g="verified">Continue</button>
@@ -310,6 +313,7 @@
       if (ready || !(force || (booksSeen && settingsSeen))) return;
       ready = true;
       flush();
+      flushNotes();
       hooks.onReady && hooks.onReady();
     };
     F.onSnapshot(F.collection(fb.db, 'users', user.uid, 'books'), { includeMetadataChanges: true },
@@ -454,7 +458,46 @@
     fb.S.deleteObject(fb.S.ref(fb.storage, path)).catch(() => {});
   }
 
+  // ---------- feedback and error reports (for the person running Tomestead) ----------
+  // Saved to the 'feedback' and 'errors' collections; readable only in the Firebase console.
+  // Anything that can't be sent yet waits on this device and goes with the next sign-in.
+  const NOTES_KEY = 'tomestead.notes.pending';
+  const pendingNotes = () => { try { const a = JSON.parse(ls.get(NOTES_KEY)); return Array.isArray(a) ? a : []; } catch { return []; } };
+  const keepNotes = (a) => (a.length ? ls.set(NOTES_KEY, JSON.stringify(a.slice(-30))) : ls.del(NOTES_KEY));
+  async function sendNote(kind, data) {
+    if (!user || !fb) return false;
+    const { F } = fb;
+    await F.addDoc(F.collection(fb.db, kind), { ...plain({ ...data, uid: user.uid, email: user.email || '' }), at: F.serverTimestamp() });
+    return true;
+  }
+  async function flushNotes() {
+    const left = [];
+    for (const n of pendingNotes()) {
+      try { if (!(await sendNote(n.kind, n.data))) left.push(n); }
+      catch (e) { if (!(e && e.code === 'permission-denied' && n.kind === 'errors')) left.push(n); }
+    }
+    keepNotes(left);
+  }
+  // true when it reached the cloud; false when it's waiting on this device
+  async function feedback(data) {
+    try { if (ready && (await sendNote('feedback', data))) return true; }
+    catch (e) { console.warn('Tomestead: feedback not sent yet', e); }
+    keepNotes([...pendingNotes(), { kind: 'feedback', data }]);
+    return false;
+  }
+  let errorsSent = 0;
+  const errorsSeen = new Set();
+  function reportError(data) {
+    if (!enabled || errorsSent >= 8 || errorsSeen.has(data.msg)) return;
+    errorsSeen.add(data.msg); errorsSent++;
+    if (ready) sendNote('errors', data).catch(() => {});
+    else keepNotes([...pendingNotes(), { kind: 'errors', data }]);
+  }
+
   window.TomesteadSync = {
+    feedback,
+    reportError,
+    pendingFeedback: () => pendingNotes().filter(n => n.kind === 'feedback').length,
     enabled,
     uid,
     suffix: uid ? ':' + uid : '',

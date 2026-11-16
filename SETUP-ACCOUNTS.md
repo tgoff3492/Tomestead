@@ -39,3 +39,7 @@ Once that's live, opening Tomestead shows the sign-in card. On a device that alr
 - **Email accounts** get a confirmation email first. Until it's confirmed they see "Check your email".
 - **Sharing a device:** use ••• ▸ **Sign out**, then the next person signs in. Each library is separate.
 - **Backups** are optional now. Every change is saved to the cloud automatically. **Back up my library** still downloads a copy, which is handy for analysis or as a safety net.
+
+## Updating the rules (Nov 2026: feedback and error reports)
+`firestore.rules` now also lets signed-in guests **add** to two collections, `feedback` and `errors`, that only you can read (in the Firebase console → Firestore → Data). After pulling this change, paste `firestore.rules` into Firestore → Rules again and click **Publish**. Until then, feedback waits on each person's device and is sent once the rules allow it.
+

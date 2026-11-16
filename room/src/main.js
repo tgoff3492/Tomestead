@@ -170,6 +170,41 @@ function tile(tex, w, h) { const t = tex.clone(); t.repeat.set(1 / w, 1 / h); t.
 // ---------------------------------------------------------------- free assets (Poly Haven, CC0; see CREDITS.md)
 const extra = {};
 const texLoader = new THREE.TextureLoader();
+
+// ---------------------------------------------------------------- paintings
+// Two frames (Poly Haven's Fancy Picture Frame 01): over the fireplace and in the reading corner.
+// Each can hold any of these (room/tex/paintings/), or a picture of your own (kept on that device).
+const PAINTINGS = ['golden_hills', 'mountain_path', 'misty_pines', 'winter_wood', 'lake_dawn', 'evening_water', 'forest_cliffs', 'pastoral', 'highland'];
+const PAINT_DEFAULT = { mantel: 'golden_hills', nook: 'pastoral' };
+const canvasMats = {};
+const paintChoice = (slot) => {
+  const q = params.get(slot === 'mantel' ? 'paint' : 'nookpaint');   // test page: ?paint=winter_wood&nookpaint=lake_dawn
+  if (q && PAINTINGS.includes(q)) return q;
+  const p = (lib.theme && lib.theme.paintings) || {}; return p[slot] === 'mine' || PAINTINGS.includes(p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
+const paintSig = () => JSON.stringify((lib.theme && lib.theme.paintings) || {});
+async function hangPainting(slot) {
+  const mat = canvasMats[slot]; if (!mat) return;
+  let id = paintChoice(slot);
+  const key = id === 'mine' ? `mine:${(lib.theme.paintings || {})[slot + 'At'] || ''}` : id;
+  if (mat.userData.key === key) return;
+  mat.userData.key = key;
+  let url = null;
+  if (id === 'mine') url = HOST && HOST.paintingPhoto ? await HOST.paintingPhoto(slot).catch(() => null) : null;
+  if (!url) { if (id === 'mine') id = PAINT_DEFAULT[slot]; url = asset(`tex/paintings/${id}.webp`); }
+  try {
+    const tex = await texLoader.loadAsync(url);
+    if (mat.userData.key !== key) { tex.dispose(); return; }   // changed again while it loaded
+    tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso;
+    // the frame's canvas uses part of its texture: map the whole picture onto that part
+    const [u0, u1, v0, v1] = [0.032, 0.969, 0.125, 0.82];
+    tex.repeat.set(1 / (u1 - u0), 1 / (v1 - v0)); tex.offset.set(-u0 / (u1 - u0), -v0 / (v1 - v0));
+    const old = mat.map; mat.map = tex; mat.color.set('#ffffff'); mat.needsUpdate = true;
+    if (old && old.userData && old.userData.painting) old.dispose();
+    tex.userData.painting = true;
+    kick();
+  } catch (e) { console.warn('painting failed', slot, e && e.message); }
+}
+const hangPaintings = () => { hangPainting('mantel'); hangPainting('nook'); };
 function loadTex(n, srgb) {
   return new Promise((res) => texLoader.load(asset('tex/' + n + '.webp'), (t) => {
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
@@ -212,7 +247,10 @@ function placeFurniture(MOD, M) {
     steam = buildSteam(); steam.position.set(2.47, 0.83, -2.3); scene.add(steam);
   }
   placeModel(MOD.sidetable, 2.55, 0, -2.38, 0, 1);
-  placeModel(MOD.painting, 1.85, 1.78, -2.69, 0, 1.6, { cast: false });
+  if (placeModel(MOD.painting, 1.85, 1.78, -2.69, 0, 1.6, { cast: false })) {
+    // its canvas gets its own material, so a different painting can hang here
+    MOD.painting.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); canvasMats.nook = o.material; o.material.userData.key = 'pastoral'; } });
+  }
   let oilGlow = null, flameMats = [], shadeMat = null;
   if (MOD.oillamp) {
     placeModel(MOD.oillamp, 2.61, 0.761, -2.44, 0.4, 0.9);
@@ -735,8 +773,8 @@ function buildBookcase(M, { cloth, leather }) {
 
   // ---- books, in the app's order: Reading now → To read → Read
   const ORDER = ['reading', 'want', 'read'];
-  const list = lib.books.filter((b) => ORDER.includes(b.status || 'read'))
-    .sort((a, b) => ORDER.indexOf(a.status || 'read') - ORDER.indexOf(b.status || 'read') || (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0));
+  const byAdded = (a, b) => (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0);
+  const list = [...lib.books.filter((b) => (b.status || 'read') === 'reading').sort(byAdded), ...wantOrder(lib.books.filter((b) => b.status === 'want')), ...lib.books.filter((b) => (b.status || 'read') === 'read').sort(byAdded)];
   const counts = {}; list.forEach((b) => { const k2 = b.status || 'read'; counts[k2] = (counts[k2] || 0) + 1; });
   const labelled = Object.keys(counts).length > 1;
   const PICKS = { reading: ['owl', 'stones', 'oak', 'marble', 'brass'], want: ['oak', 'marble', 'stones', 'owl', 'brass'] };
@@ -894,7 +932,7 @@ function buildBookcase(M, { cloth, leather }) {
       if (it.variant !== 2) { x.fillRect(cx, cy + 22 * u, rw, 3 * u); x.fillRect(cx, cy + art - 26 * u, rw, 3 * u); }
       if (it.variant === 1) { x.fillRect(cx, cy + 28 * u, rw, 1.5 * u); x.fillRect(cx, cy + art - 32 * u, rw, 1.5 * u); }
       // stars at the top for rated, finished books
-      const stars = it.st === 'read' ? Math.max(0, Math.min(5, Math.round(b.rating || 0))) : 0;
+      const stars = it.st === 'read' ? Math.max(0, Math.min(5, Math.floor(b.rating || 0))) : 0;
       x.font = `${Math.round(13 * u)}px serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
       for (let k = 0; k < stars; k++) x.fillText('★', cx + rw / 2, cy + 38 * u + k * 13 * u);
       // title down the spine, surname at the foot
@@ -1074,8 +1112,7 @@ function buildFireplace(MOD) {
   // a big painting over the mantel: Highland cattle on the moor, in the ornate gilt frame
   if (MOD.painting) {
     const art = MOD.painting.clone(true);
-    const tex = texLoader.load(asset('tex/painting_highland.webp')); tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso;
-    art.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); o.material.map = tex; o.material.color.set('#ffffff'); o.material.needsUpdate = true; } });
+    art.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); o.material.map = null; o.material.color.set('#3a2a1c'); canvasMats.mantel = o.material; o.material.needsUpdate = true; } });
     placeModel(art, X + 0.005, MT + 0.62, Z, Math.PI / 2, 2.25, { cast: false });
   }
   placeModel(MOD.elephant, X + 0.2, MT, Z + 0.42, Math.PI / 2 + 0.3, 1.7);
@@ -1602,17 +1639,58 @@ function shelfFraming(dir) {
   const pos = t.clone().addScaledVector(dir, -d);
   return { pos, dir: dir.clone(), dist: d };
 }
-function go(name, dur = 1.5) {
+// people who ask their phone for less motion get short, flat moves and no flicks
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+function go(name, dur = 1.5, { arrive = true } = {}) {
+  if (calm.matches) dur = Math.min(dur, 0.35);
   station = name;
   document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === name)));
   const to = framing(name);
-  tween = { t: 0, dur, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
+  tween = { t: 0, dur, flat: calm.matches, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to, arrive: arrive ? name : null };
   cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
   closeCard();
   if (pulled) { pulled.userData.anim = -1; pulled = null; }
   if (name !== 'tome' && world) world.tome.rest();
   if (name === 'shelf' && world && world.books.meshes.length) selectBook(Math.max(0, browseIdx), { focus: false });
-  else if (name === 'shelf' && HOST) openCard(`<h2>Your shelves are empty</h2><div class="meta">Add the first book and it will stand here.</div><div class="acts"><button type="button" data-act="add">Add a book</button></div>`);
+  else if (name === 'shelf' && HOST) openCard(`<h2>Your shelves are empty</h2><div class="meta">Add the first book and it will stand here, or bring your library over from Goodreads or StoryGraph.</div><div class="acts"><button type="button" data-act="add">Add a book</button><button type="button" class="quiet" data-act="import">Import</button></div>`);
+}
+// arriving somewhere opens what's there, so nobody has to guess to tap the desk or the fire
+function arrived(name) {
+  if (name !== station || !HOST || !$('card').hidden || document.querySelector('dialog[open]')) return;
+  if (name === 'desk') deskCard();
+  else if (name === 'hearth') hearthCard();
+  else if (name === 'tome') tomeCard();
+  else if (name === 'room') firstRun();
+}
+const TOUR_KEY = 'tomestead.tour.v1';
+const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch { return true; } };
+const markTour = () => { try { localStorage.setItem(TOUR_KEY, '1'); } catch {} };
+// a brand-new library gets a welcome; everyone gets a short tour once
+function firstRun() {
+  if (!HOST) return;
+  if (!lib.books.length) return welcomeCard();
+  if (!tourSeen()) tourCard(0);
+}
+function welcomeCard() {
+  openCard(`<div class="eyebrow">Welcome</div><h2>This is your reading room</h2>
+    <div class="meta">Every book you’ve read, are reading or want to read gets its own spine on the bookcase. Start with one book, or bring your whole library over.</div>
+    <div class="acts"><button type="button" data-act="add">Add your first book</button><button type="button" class="quiet" data-act="import">Import from Goodreads or StoryGraph</button><button type="button" class="quiet" data-act="tour">Show me around</button></div>`, 'welcome');
+}
+const TOUR = [
+  ['Getting around', 'Tap a place along the bottom (Shelf, Desk, Fireside or Tome) to walk over. Drag anywhere to look around.'],
+  ['Your bookcase', 'One book is always in your hand. Swipe to flip through, use the chips to jump to a section, and tap the book again to open it.'],
+  ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books. Wake the tome for what to read next.'],
+  ['Everything else', '+ Add is up top. The ••• menu has imports, backups, tags, Customize (wallpaper, wood, paintings) and Send feedback.'],
+];
+function tourCard(i) {
+  const [h, t] = TOUR[i], last = i === TOUR.length - 1;
+  openCard(`<div class="eyebrow">A quick tour · ${i + 1} of ${TOUR.length}</div><h2>${h}</h2><div class="meta">${t}</div>
+    <div class="acts">${last ? '<button type="button" data-act="tour-done">Got it</button>' : `<button type="button" data-act="tour-next" data-i="${i + 1}">Next</button><button type="button" class="quiet" data-act="tour-done">Skip</button>`}</div>`, 'tour');
+}
+function tomeCard() {
+  openCard(`<div class="eyebrow">The magic tome</div><h2>What should I read next?</h2>
+    <div class="meta">The tome reads the books you rate highest and suggests a few you haven’t logged.</div>
+    <div class="acts"><button type="button" data-act="wake">Wake the tome</button></div>`, 'tome');
 }
 const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 function lookDir() {
@@ -1631,7 +1709,7 @@ function updateCamera(dt) {
     cam.dir.copy(tween.from.dir).lerp(tween.to.dir, k).normalize();
     cam.dist = THREE.MathUtils.lerp(tween.from.dist, tween.to.dist, k);
     if (tween.flat) cam.pos.y -= Math.sin(k * Math.PI) * 0.08;
-    if (tween.t >= 1) tween = null;
+    if (tween.t >= 1) { const a = tween.arrive; tween = null; if (a) arrived(a); }
   } else if (!drag) {
     cam.yaw += cam.vyaw; cam.pitch += cam.vpitch;
     cam.vyaw *= 0.9; cam.vpitch *= 0.9;
@@ -1683,7 +1761,7 @@ function endDrag(e) {
     if (recent.length > 1) {
       const [t0, x0] = recent[0], [t1, x1] = recent[recent.length - 1];
       const v = (x1 - x0) / Math.max(16, t1 - t0);
-      if (Math.abs(v) > 0.55) { fling = { v: v * 1.15, acc: d.swipe }; kick(400); }
+      if (Math.abs(v) > 0.55 && !calm.matches) { fling = { v: v * 1.15, acc: d.swipe }; kick(400); }
     }
   }
 }
@@ -1813,8 +1891,8 @@ function sections() {
 }
 function shelfBar() {
   const list = allBooks(), e = list[browseIdx]; if (!e) return;
-  const b = e.b, st = stOf(b), r = Math.round(b.rating || 0);
-  const sub = [b.author, st === 'read' && r ? '★'.repeat(r) + '☆'.repeat(5 - r) : ''].filter(Boolean).map(esc).join(' · ');   // the section is on the line below
+  const b = e.b, st = stOf(b), r = Number(b.rating) || 0;
+  const sub = [b.author, st === 'read' && r ? starText(r) : ''].filter(Boolean).map(esc).join(' · ');   // the section is on the line below
   const secs = sections(), cur = secs.find((x) => x.st === st);
   const pr = st === 'reading' ? progressOf(b) : null;
   const pages = world.books.pages;
@@ -1940,6 +2018,12 @@ $('card-body').addEventListener('click', (e) => {
     else if (a === 'calendar') HOST.openCalendar();
     else if (a === 'timer-start') { HOST.startTimer(id); deskCard(); }
     else if (a === 'timer-stop') { closeCard(); HOST.stopTimer(); }
+    else if (a === 'start') { closeCard(); HOST.startBook(id); }
+    else if (a === 'import') { closeCard(); HOST.openImport(); }
+    else if (a === 'tour') tourCard(0);
+    else if (a === 'tour-next') tourCard(Number(act.dataset.i));
+    else if (a === 'tour-done') { markTour(); closeCard(); }
+    else if (a === 'wake') { closeCard(); magic(); }
   }
 });
 
@@ -1983,6 +2067,8 @@ function animateBooks(dt) {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function fmtDate(d) { try { return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }); } catch { return d; } }
 const STATUS = { read: 'Read', reading: 'Reading now', want: 'To read', dnf: 'Set aside' };
+// stars as text, halves included: ★★★½☆
+const starText = (v) => { const r = Math.round((Number(v) || 0) * 2) / 2, f = Math.floor(r), h = r - f ? 1 : 0; return '★'.repeat(f) + (h ? '½' : '') + '☆'.repeat(5 - f - h); };
 function progressOf(b) {
   const pages = Number(b.pages) || 0, p = Number(b.progress) || 0;
   if (!p) return null;
@@ -1996,11 +2082,11 @@ function bookRect(m) {
 }
 function sampleNote() { return lib.sample ? '<div class="note">These are sample books. Open this page on the phone where you use Tomestead to see your own shelf here.</div>' : ''; }
 function bookCard(b) {
-  const r = Math.round(b.rating || 0);
+  const r = Number(b.rating) || 0;
   const pr = b.status === 'reading' ? progressOf(b) : null;
   const meta = [STATUS[b.status || 'read'], b.pages ? `${b.pages} pages` : '', b.format === 'audio' && b.hours ? `${b.hours} h audiobook` : '', b.finished ? `Finished ${fmtDate(b.finished)}` : ''].filter(Boolean).join(' · ');
   openCard(`<h2>${esc(b.title)}</h2>${b.author ? `<div class="by">${esc(b.author)}</div>` : ''}
-    ${r && (b.status || 'read') === 'read' ? `<div class="stars">${'★'.repeat(r)}${'☆'.repeat(5 - r)}</div>` : ''}
+    ${r && (b.status || 'read') === 'read' ? `<div class="stars">${starText(r)}</div>` : ''}
     <div class="meta">${esc(meta)}</div>
     ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ''}
     <div class="note">In the app, this is where the book would be carried to the desk and opened to your review.</div>${sampleNote()}`);
@@ -2017,11 +2103,25 @@ function deskCard() {
   };
   if (HOST) {
     return openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
-      ${reading.length ? `<ul>${reading.map(row).join('')}</ul><div class="meta desk-tip">${t ? 'When you stop, tap Stop and tell it where you got to.' : 'Start reading runs a timer while you read; stop it to log your time and page.'}</div>` : `<div class="meta">Start a book and it will lie open here.</div><div class="acts"><button type="button" data-act="add">Add a book</button></div>`}`, 'desk');
+      ${reading.length ? `<ul>${reading.map(row).join('')}</ul><div class="meta desk-tip">${t ? 'When you stop, tap Stop and tell it where you got to.' : 'Start reading runs a timer while you read; stop it to log your time and page.'}</div>` : deskPile()}`, 'desk');
   }
   openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
     ${reading.length ? `<ul>${reading.map(row).join('')}</ul>` : '<div class="meta">Start a book and it will lie open here.</div>'}
     <div class="note">In the app, the desk has a reading timer: start it when you sit down, stop it to log your time and page.</div>${sampleNote()}`, 'desk');
+}
+// nothing open: the top of the to-read pile, ready to start
+function deskPile() {
+  const want = wantOrder(lib.books.filter((b) => b.status === 'want')).slice(0, 3);
+  if (!want.length) return `<div class="meta">Start a book and it will lie open here.</div><div class="acts"><button type="button" data-act="add">Add a book</button></div>`;
+  const n = lib.books.filter((b) => b.status === 'want').length;
+  return `<div class="meta">Pick one from your to-read pile${n > 3 ? ` (${n} waiting)` : ''} and it will lie open here.</div>
+    <ul>${want.map((b) => `<li><b>${esc(b.title)}</b>${b.author ? ` · <i>${esc(b.author)}</i>` : ''}${b.upNext ? ' <span class="upnext">Up next</span>' : ''}
+      <div class="acts"><button type="button" data-act="start" data-id="${esc(b.id)}">Start reading</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open</button></div></li>`).join('')}</ul>
+    <div class="acts"><button type="button" class="quiet" data-act="add">Add a different book</button></div>`;
+}
+// the to-read pile: books marked "Up next" first (in the order you marked them), then newest first
+function wantOrder(list) {
+  return [...list].sort((a, b) => (!a.upNext - !b.upNext) || ((Number(a.upNext) || 0) - (Number(b.upNext) || 0)) || (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0));
 }
 function magic() {
   world.tome.wake();
@@ -2037,7 +2137,7 @@ function hearthCard() {
     : `<div class="meta">${sk.best ? `Your longest streak is ${sk.best} ${sk.best === 1 ? 'day' : 'days'}. Read today to start a new one.` : 'Read today to start a streak.'}</div>`) : '';
   openCard(`<div class="eyebrow">By the fire</div><h2>Goals, streaks and trophies</h2>
     ${streak}
-    <div class="meta">The mantel is where your reading goals and the trophies you earn live.</div>
+    <div class="meta">Your streak, goals and year in books live by the fire. Trophies you earn stand in the arch of your bookcase.</div>
     <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button></div>`, 'hearth');
 }
 let cardKind = '', clockTimer = null;
@@ -2059,7 +2159,7 @@ function clockText(ms) {
   const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), p2 = (n) => String(n).padStart(2, '0');
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
 }
-$('card').querySelector('.card-x').addEventListener('click', () => { putBack(); closeCard(); });
+$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go); kick(); }));
 if ($('light')) $('light').addEventListener('click', () => { mode = mode === 'day' ? 'night' : 'day'; world.applyLook(); kick(); });
 addEventListener('keydown', (e) => {
@@ -2154,9 +2254,9 @@ function frameShelf() {
   shelfSpan = bxs.length ? [Math.min(...bxs) - 0.07, Math.max(...bxs) + 0.07] : null;   // a little room for the bookends
 }
 // what the room shows from the library; when this changes, the books are shelved again
-const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt]),
+const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt, b.upNext]),
   lib.theme.bookend, lib.theme.bookends, Object.keys(lib.trophies || {}).length]);
-let lastSig = '';
+let lastSig = '', lastPaint = '';
 // the app calls this after anything changes (a book added or edited, settings, a sync)
 function refresh() {
   if (!HOST || !world) return;
@@ -2171,9 +2271,12 @@ function refresh() {
     renderer.shadowMap.needsUpdate = true;
     if (station === 'shelf' && !$('card').hidden && !searching) { if (world.books.meshes.length) selectBook(browseIdx, { focus: false }); else closeCard(); }
   }
+  if (paintSig() !== lastPaint) { lastPaint = paintSig(); hangPaintings(); }
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
   if (!$('card').hidden && cardKind === 'hearth') hearthCard();
+  // the first book is in: the welcome gives way to the tour
+  if (!$('card').hidden && cardKind === 'welcome' && lib.books.length) { closeCard(); if (!tourSeen()) tourCard(0); }
   const m = lightNow(lib.theme.light || 'system');
   if (m !== mode) { mode = m; world.applyLook(); }
   kick();
@@ -2188,6 +2291,7 @@ function setActive(on) {
   resize();
   world = await build();
   lastSig = libSig();
+  lastPaint = paintSig(); hangPaintings();
   frameShelf();
   const start = params.get('st') && STATIONS[params.get('st')] ? params.get('st') : null;
   const f = framing(start || 'room');
@@ -2197,7 +2301,7 @@ function setActive(on) {
   updateCamera(0);
   renderer.compile(scene, camera);
   requestAnimationFrame(frame);
-  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st) };
+  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // the title screen stays up long enough to read its quote (tap to step in sooner)
   const Q = window.TomesteadQuotes, veil = $('veil');

@@ -35,6 +35,29 @@
   ].map(([title, author, rating], i) => ({ id: 'sample' + i, title, author, rating }));
 
   const $ = (s, el = document) => el.querySelector(s);
+
+  // ---------- where you are and what you're on (sent with feedback and error reports) ----------
+  const BUILD = (() => { try { return new URL(document.querySelector('link[href*="room.css"]').href).searchParams.get('v') || ''; } catch { return ''; } })();
+  const device = () => {
+    const ua = navigator.userAgent;
+    const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Other';
+    const br = /CriOS|Chrome\//.test(ua) && !/Edg/.test(ua) ? 'Chrome' : /Edg/.test(ua) ? 'Edge' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Safari/.test(ua) ? 'Safari' : 'Other';
+    const app = matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'installed' : 'browser';
+    return `${os} · ${br} · ${app} · ${innerWidth}×${innerHeight}`;
+  };
+  const whereNow = () => {
+    let w = location.hash ? location.hash.slice(1) : 'home';
+    try { w = location.hash ? w : viewNow(); } catch {}
+    const d = document.querySelector('dialog[open]');
+    return d ? `${w} › ${d.id}` : w;
+  };
+  // errors anyone hits are reported quietly, so they can be fixed without a bug report
+  const reportErr = (msg, src, stack) => {
+    if (!msg || /ResizeObserver loop|Script error\.?$/.test(msg)) return;
+    Sync.reportError({ msg: String(msg).slice(0, 1000), src: String(src || '').slice(0, 300), stack: String(stack || '').slice(0, 3000), where: whereNow(), device: device(), build: BUILD, when: new Date().toISOString() });
+  };
+  window.addEventListener('error', (e) => reportErr(e.message, e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : '', e.error && e.error.stack));
+  window.addEventListener('unhandledrejection', (e) => { const r = e.reason; reportErr(r && r.message ? r.message : String(r), 'promise', r && r.stack); });
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const thisYear = () => String(new Date().getFullYear());
 
@@ -345,6 +368,11 @@
     }
     // sections keep their order; the chosen sort applies within each one
     if (sectioned()) list.sort((a, b) => SECTION_ORDER[statusOf(a)] - SECTION_ORDER[statusOf(b)]);
+    // in the to-read pile, books marked "Up next" come first, in the order you marked them
+    const slots = [], wants = [];
+    list.forEach((b, i) => { if (statusOf(b) === 'want') { slots.push(i); wants.push(b); } });
+    wants.sort((a, b) => (!a.upNext - !b.upNext) || ((a.upNext || 0) - (b.upNext || 0)));
+    slots.forEach((i, k) => { list[i] = wants[k]; });
     return list;
   }
   // spines carry the surname, like a real shelf ("Hunt & Thomas" stays as is)
@@ -358,11 +386,14 @@
   function surname(name = '') { const p = name.trim().split(/\s+/); return (p[p.length - 1] || '').toLowerCase(); }
 
   // ---------- spines ----------
+  // whole and half stars (a half star is an empty star with its left half filled)
   function starsHTML(n) {
     let out = '';
-    for (let i = 1; i <= 5; i++) out += `<span class="${i <= n ? 'on' : 'off'}">★</span>`;
+    for (let i = 1; i <= 5; i++) out += i <= n ? '<span class="on">★</span>' : i - 0.5 === n ? '<span class="hstar"><span class="off">★</span><span class="on">★</span></span>' : '<span class="off">★</span>';
     return out;
   }
+  const starWords = (n) => `${String(n).replace('.5', '½')} of 5 stars`;
+  const halfStar = (v) => { const n = parseFloat(v); return n > 0 ? Math.max(0.5, Math.min(5, Math.round(n * 2) / 2)) : 0; };
 
   const FORMAT_MARK = {
     audio: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 9.5V8a5 5 0 0 1 10 0v1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2" y="9" width="3" height="5" rx="1.2" fill="currentColor"/><rect x="11" y="9" width="3" height="5" rx="1.2" fill="currentColor"/></svg>',
@@ -383,7 +414,7 @@
     el.dataset.id = b.id;
     const r = b.rating || 0;
     const note = st === 'reading' ? ', reading now' : st === 'want' ? ', want to read' : st === 'dnf' ? ', set aside' : '';
-    el.setAttribute('aria-label', `${b.title} by ${b.author || 'unknown author'}${r ? `, ${r} of 5 stars` : ''}${note}`);
+    el.setAttribute('aria-label', `${b.title} by ${b.author || 'unknown author'}${r ? `, ${starWords(r)}` : ''}${note}`);
     const fm = FORMAT_MARK[formatOf(b)];
     el.innerHTML =
       (r ? `<span class="s-stars" aria-hidden="true">${starsHTML(r)}</span>` : '') +
@@ -780,7 +811,7 @@
       } else if (books.length) {
         note.innerHTML = `<p>Every book here is set aside.</p><button class="btn btn-brass" data-add>Add a book</button>`;
       } else {
-        note.innerHTML = `<p>Your shelves are waiting. Add a book you’ve read, are reading, or want to read.</p><button class="btn btn-brass" data-add>Add a book</button>`;
+        note.innerHTML = `<p>Your shelves are waiting. Add a book you’ve read, are reading, or want to read, or bring your library over from Goodreads or StoryGraph.</p><button class="btn btn-brass" data-add>Add a book</button> <button class="btn btn-ghost" data-import>Import</button>`;
       }
       cases[0].querySelector('.shelf-row').appendChild(note);
     }
@@ -846,9 +877,9 @@
   }
   function listRight(b) {
     const st = statusOf(b);
-    const stars = b.rating ? `<span class="stars-sm" aria-label="${b.rating} of 5 stars">${starsHTML(b.rating)}</span>` : '';
+    const stars = b.rating ? `<span class="stars-sm" aria-label="${starWords(b.rating)}">${starsHTML(b.rating)}</span>` : '';
     if (st === 'reading') { const p = pctOf(b); return `<span class="tag-pill reading">Reading</span><br><span class="date">${esc(progressText(b))}${p != null && formatOf(b) === 'print' ? ` · ${p}%` : ''}</span>`; }
-    if (st === 'want') return `<span class="tag-pill">To read</span>`;
+    if (st === 'want') return `<span class="tag-pill${b.upNext ? ' upnext' : ''}">${b.upNext ? 'Up next' : 'To read'}</span>`;
     if (st === 'dnf') return `${stars || '<span class="tag-pill">Set aside</span>'}<br><span class="date">${b.stopped ? `Stopped ${esc(fmtDate(b.stopped))}` : 'Set aside'}</span>`;
     const times = datesOf(b).length;
     return `${stars || '<span class="date">Not rated</span>'}<br><span class="date">${esc(fmtDate(b.finished))}${times > 1 ? ` · read ${times}×` : ''}</span>`;
@@ -989,7 +1020,7 @@
     live.slice(0, 3).forEach(({ g, i }) => {
       const tail = i.met ? 'goal reached' : (i.daysLeft === 1 ? 'last day' : `${i.daysLeft} days left`);
       rows.push(`<button type="button" class="goal-row custom${i.met ? ' met' : ''}" data-cgoal="${esc(g.id)}" aria-label="${esc(goalName(g))}: ${i.done} of ${g.target}, ${tail}. Edit goal.">
-        <span class="goal-text"><span class="goal-name">${esc(goalName(g))}</span> <strong>${i.done} of ${g.target}</strong> · ${tail}</span>
+        <span class="goal-text"><span class="goal-name">${esc(goalName(g))}</span> · <strong>${i.done} of ${g.target}</strong>${G.countsFrom(g) > g.start && !i.met ? ` since ${esc(shortDate(G.countsFrom(g), false))}` : ''} · ${tail}</span>
         <span class="goal-meter" aria-hidden="true"><span style="width:${i.pct}%"></span></span></button>`);
     });
     if (live.length > 3) rows.push(`<div class="goal-row"><button class="linkbtn" data-goals>${live.length - 3} more ${live.length - 3 === 1 ? 'goal' : 'goals'}</button></div>`);
@@ -1023,6 +1054,7 @@
     $('#shelfView').hidden = !shelf;
     $('#listView').hidden = view !== 'list';
     $('#tab-room').hidden = !canRoom;
+    $('#tourBtn').hidden = !canRoom;
     $('#tab-room').setAttribute('aria-selected', String(room));
     $('#tab-shelf').setAttribute('aria-selected', String(shelf));
     $('#tab-list').setAttribute('aria-selected', String(view === 'list'));
@@ -1142,6 +1174,22 @@
         <span class="tile-label">${v.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
 
+    // the two paintings in the 3D room
+    $('#czPaintSec').hidden = !canRoom;
+    const pNow = paintingFor(paintFor), pMine = (t.paintings || {})[paintFor] === 'mine';
+    document.querySelectorAll('#czPaintFor [data-paintfor]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.paintfor === paintFor)));
+    $('#czPaint').setAttribute('aria-label', `Painting ${paintFor === 'mantel' ? 'over the fireplace' : 'in the reading corner'}`);
+    $('#czPaint').innerHTML = PAINTINGS.map(([k, name]) => `
+      <button type="button" class="tile" role="radio" aria-checked="${!pMine && pNow === k}" data-paint="${k}">
+        <span class="tile-art paint-art"><img src="room/tex/paintings/thumbs/${k}.webp" alt="" loading="lazy"></span>
+        <span class="tile-label">${name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('') + `
+      <button type="button" class="tile" role="radio" aria-checked="${pMine}" data-paint="mine">
+        <span class="tile-art paint-art mine" id="czPaintMine"><span>+ Your own<br>picture</span></span>
+        <span class="tile-label">${pMine ? 'Yours (change)' : 'Your own'}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`;
+    if (pMine) Covers.uploadURL('painting-' + paintFor).then(u => { const el = $('#czPaintMine'); if (u && el) el.innerHTML = `<img src="${u}" alt="">`; });
+
     // each section of the bookcase can have its own bookends
     document.querySelectorAll('#czBookendFor [data-befor]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.befor === bookendFor)));
     const beNow = sectionBookend(bookendFor);
@@ -1208,6 +1256,32 @@
     try { localStorage.setItem('tomestead.intro.mode', m); } catch {}
     renderCustomize();
     toast(m === 'day' ? 'The opening scene plays the first time you open Tomestead each day.' : m === 'always' ? 'The opening scene plays every time you open Tomestead.' : 'Tomestead opens straight to your shelves.');
+  }
+
+  // ---------- paintings in the 3D room (room/tex/paintings/; the room draws them) ----------
+  const PAINTINGS = [['golden_hills', 'Golden hills'], ['mountain_path', 'Mountain path'], ['misty_pines', 'Misty pines'], ['winter_wood', 'Winter wood'],
+    ['lake_dawn', 'Lake at dawn'], ['evening_water', 'Evening water'], ['forest_cliffs', 'Forest cliffs'], ['pastoral', 'Pastoral (oil)'], ['highland', 'Highland cattle']];
+  const PAINT_DEFAULT = { mantel: 'golden_hills', nook: 'pastoral' };
+  let paintFor = 'mantel';
+  const paintingFor = (slot) => { const p = prefs.theme.paintings || {}; return p[slot] === 'mine' || PAINTINGS.some(([k]) => k === p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
+  function setPainting(slot, id) {
+    const p = { ...(prefs.theme.paintings || {}), [slot]: id };
+    if (id === 'mine') p[slot + 'At'] = Date.now(); else delete p[slot + 'At'];
+    setTheme({ paintings: p });
+  }
+  // your own picture: cropped to the frame's shape and kept on this device
+  async function paintingFromFile(file) {
+    try {
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
+      const W = 1024, H = 760, c = document.createElement('canvas'); c.width = W; c.height = H;
+      const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+      c.getContext('2d').drawImage(img, (W - img.naturalWidth * s) / 2, (H - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
+      URL.revokeObjectURL(img.src);
+      const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.86));
+      await Covers.putUpload('painting-' + paintFor, blob);
+      setPainting(paintFor, 'mine');
+      toast(`Your picture is hanging ${paintFor === 'mantel' ? 'over the fireplace' : 'in the reading corner'}. It stays on this device.`);
+    } catch { toast('Couldn’t use that picture. Try a JPEG or PNG photo.'); }
   }
 
   function setTheme(patch) {
@@ -1281,27 +1355,39 @@
       b.dataset.v = i;
       sp.appendChild(b);
     }
+    const val = document.createElement('span');
+    val.id = 'starValue'; val.className = 'star-value'; val.setAttribute('aria-hidden', 'true');
+    sp.appendChild(val);
     const clear = document.createElement('button');
     clear.type = 'button'; clear.className = 'clear'; clear.textContent = 'No rating'; clear.dataset.v = 0;
     sp.appendChild(clear);
+    // tap the left half of a star for a half star; tap a full star again to make it a half
     sp.addEventListener('click', e => {
       const t = e.target.closest('button'); if (!t) return;
-      setRating(Number(t.dataset.v));
+      let v = Number(t.dataset.v);
+      if (v && e.detail) {
+        const r = t.getBoundingClientRect();
+        if (e.clientX < r.left + r.width / 2 || pickedRating === v) v -= 0.5;
+      }
+      setRating(v);
     });
     sp.addEventListener('keydown', e => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { setRating(Math.min(5, pickedRating + 1)); e.preventDefault(); focusStar(); }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { setRating(Math.max(1, pickedRating - 1)); e.preventDefault(); focusStar(); }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { setRating(Math.min(5, pickedRating + 0.5)); e.preventDefault(); focusStar(); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { setRating(Math.max(0.5, pickedRating - 0.5)); e.preventDefault(); focusStar(); }
     });
   }
-  function focusStar() { const s = $(`#starPicker button[data-v="${pickedRating}"]`); s && s.focus(); }
+  function focusStar() { const s = $(`#starPicker button[data-v="${Math.ceil(pickedRating)}"]`); s && s.focus(); }
   function setRating(v) {
     pickedRating = v;
     document.querySelectorAll('#starPicker button[role="radio"]').forEach(btn => {
       const n = Number(btn.dataset.v);
       btn.classList.toggle('on', n <= v);
-      btn.setAttribute('aria-checked', String(n === v));
-      btn.tabIndex = (n === (v || 1)) ? 0 : -1;
+      btn.classList.toggle('half', n - 0.5 === v);
+      btn.setAttribute('aria-checked', String(n === Math.ceil(v)));
+      btn.tabIndex = (n === (Math.ceil(v) || 1)) ? 0 : -1;
     });
+    $('#starPicker').setAttribute('aria-valuetext', v ? starWords(v) : 'No rating');
+    const sv = $('#starValue'); if (sv) sv.textContent = v ? String(v).replace('.5', '½') : '';
   }
   function buildSwatches() {
     const sw = $('#swatches');
@@ -1347,12 +1433,13 @@
     document.querySelectorAll('#fFormat [data-format]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.format === editFormat)));
     $('#fPagesField').hidden = editFormat === 'audio';
     $('#fHoursField').hidden = editFormat !== 'audio';
+    $('#fNarratorField').hidden = editFormat !== 'audio';
     setProgressLabel();
     updateDetailsSum();
   }
   function setProgressLabel() {
-    const print = editFormat === 'print';
-    $('#fProgressLabel').textContent = print ? 'I’m on page' : 'How far along (%)';
+    const print = editFormat === 'print', dnf = editStatus === 'dnf';
+    $('#fProgressLabel').textContent = dnf ? (print ? 'I stopped at page' : 'I stopped at (%)') : print ? 'I’m on page' : 'How far along (%)';
     $('#fProgress').max = print ? 5000 : 100;
   }
   // a short line on the closed "More details" so you can see what's set without opening it
@@ -1496,6 +1583,8 @@
     $('#fProgress').value = b && b.progress != null ? b.progress : '';
     $('#fPages').value = b?.pages || prefill?.pages || '';
     $('#fHours').value = b?.hours || '';
+    $('#fNarrator').value = b?.narrator || '';
+    $('#fWhy').value = b?.stopWhy || '';
     $('#fGenre').value = b?.genre || '';
     $('#fSeries').value = b?.series || '';
     $('#fSeriesNo').value = b && b.seriesNo != null ? b.seriesNo : '';
@@ -1518,6 +1607,7 @@
     if (b) $('#saveBtn').textContent = finishing ? 'Put it on the shelf' : 'Save changes';
     renderRereads();
     renderTagPick();
+    renderWhyChips();
     updateDetailsSum();
     $('#fDetails').open = false;
     $('#scanBtn').hidden = !!b || !(window.TomesteadScan && window.TomesteadScan.supported());
@@ -1567,12 +1657,14 @@
       series: $('#fSeries').value.trim().slice(0, 120),
       seriesNo: sn != null && Number.isFinite(sn) ? sn : null,
       tags: cleanTags(editTags),
+      narrator: editFormat === 'audio' ? $('#fNarrator').value.trim().slice(0, 120) : '',
+      stopWhy: st === 'dnf' ? $('#fWhy').value.trim().slice(0, 120) : '',
     };
     if (st === 'reading') {
       const v = prog >= 0 ? (editFormat === 'print' ? Math.round(prog) : Math.min(100, prog)) : 0;
       if (!old || old.progress !== v || statusOf(old) !== 'reading') data.progressAt = Date.now();
       data.progress = v;
-    } else if (st === 'dnf') data.progress = old?.progress ?? null;
+    } else if (st === 'dnf') data.progress = prog >= 0 ? (editFormat === 'print' ? Math.round(prog) : Math.min(100, prog)) : (old?.progress ?? null);
     else data.progress = null;
     if (pick && pick.isbn) data.isbn = pick.isbn;
     const metBefore = goalsMet();
@@ -1690,17 +1782,46 @@
     if (reader && reader.currentId() === b.id) reader.refresh();
     toast(again ? `Back into “${b.title}”. It’s up top under Reading now.` : `Enjoy “${b.title}”! It’s up top under Reading now.`);
   }
+  let asideId = null;
   function setAside(b) {
     if (datesOf(b).length) {
       // stopping a reread: it's still a book you've read
       Object.assign(b, { status: 'read', progress: null, updatedAt: Date.now() });
       toast(`Stopped rereading “${b.title}”.`);
-    } else {
-      Object.assign(b, { status: 'dnf', stopped: today(), updatedAt: Date.now() });
-      toast(`“${b.title}” is set aside. It’s under Set aside if you come back to it.`);
+      save(); render();
+      if (reader && reader.currentId() === b.id) reader.refresh();
+      return;
     }
+    // where you stopped and why (both optional)
+    asideId = b.id;
+    const print = formatOf(b) === 'print';
+    $('#asBook').textContent = `${b.title}${b.author ? ` by ${b.author}` : ''}`;
+    $('#asAtLabel').firstChild.textContent = print ? 'I stopped at page ' : 'I stopped at (%) ';
+    $('#asAt').max = print ? 5000 : 100;
+    $('#asAt').value = b.progress != null && b.progress !== '' ? b.progress : '';
+    $('#asWhy').value = b.stopWhy || '';
+    renderWhyChips();
+    $('#asideDialog').showModal();
+  }
+  function saveAside(e) {
+    e.preventDefault();
+    const b = books.find(x => x.id === asideId);
+    $('#asideDialog').close();
+    if (!b) return;
+    const at = parseFloat($('#asAt').value);
+    Object.assign(b, { status: 'dnf', stopped: today(), stopWhy: $('#asWhy').value.trim().slice(0, 120), updatedAt: Date.now() });
+    if (at >= 0) b.progress = formatOf(b) === 'print' ? Math.round(at) : Math.min(100, at);
+    if (timerNow() && timerNow().id === b.id) stopTimer({ quiet: true });
     save(); render();
     if (reader && reader.currentId() === b.id) reader.refresh();
+    toast(`“${b.title}” is set aside. It’s under Set aside if you come back to it.`);
+  }
+  const WHY = ['Not for me', 'Lost interest', 'Too slow', 'Not the right time', 'Too heavy right now', 'Library loan ran out'];
+  function renderWhyChips() {
+    document.querySelectorAll('.why-chips').forEach(box => {
+      const input = $('#' + box.dataset.whyFor);
+      box.innerHTML = WHY.map(w => `<button type="button" class="why-chip" aria-pressed="${input.value === w}">${w}</button>`).join('');
+    });
   }
 
   // ---------- where you are in a book ----------
@@ -2079,10 +2200,12 @@
     </svg>`;
   }
 
+  let shareMoment = null;
   function celebrate(y) {
     syncTrophies();
     $('#celebrateText').textContent = `You read ${plural(countForGoal(y), 'book')} toward your ${y} goal of ${goalFor(y)}. Your ${y} trophy now stands in the arch of your bookcase.`;
     $('#celebrateTrophy').innerHTML = Art.drawTrophy(y, goalFor(y), 0.9);
+    shareMoment = { kicker: `My ${y} reading goal`, big: countForGoal(y), bigLabel: `of ${goalFor(y)} books: goal reached`, lines: [`Trophy earned ${fmtDate(today())}`], art: Art.drawTrophy(y, goalFor(y), 2.4) };
     $('#celebrateRaise').dataset.year = y;
     delete $('#celebrateRaise').dataset.cgoal;
     confetti();
@@ -2091,6 +2214,7 @@
     const i = goalInfo(g);
     $('#celebrateText').textContent = `You read ${plural(i.done, 'book')} ${g.name ? `for “${g.name}”` : `between ${rangeText(g.start, g.end)}`} and hit your goal of ${g.target}${i.status === 'active' && i.daysLeft > 1 ? `, with ${i.daysLeft} days to spare` : ''}.`;
     $('#celebrateTrophy').innerHTML = drawRibbon(g.target, 0.95);
+    shareMoment = { kicker: g.name || 'My reading goal', big: i.done, bigLabel: `of ${g.target} books: goal reached`, lines: [g.name ? rangeText(g.start, g.end) : '', `Reached ${fmtDate(today())}`], art: drawRibbon(g.target, 3) };
     $('#celebrateRaise').dataset.cgoal = g.id;
     delete $('#celebrateRaise').dataset.year;
     confetti();
@@ -2131,6 +2255,60 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     toast('Backup downloaded.');
   }
+  // ---------- your library as a spreadsheet ----------
+  // Goodreads' column names, so Goodreads, StoryGraph and Tomestead itself can read it back in,
+  // plus a few of Tomestead's own columns at the end.
+  function exportCSV() {
+    const cell = (v) => { const t = String(v ?? ''); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const shelf = { read: 'read', reading: 'currently-reading', want: 'to-read', dnf: 'did-not-finish' };
+    const binding = { print: '', ebook: 'Kindle Edition', audio: 'Audiobook' };
+    const day = (iso) => (ISO.test(iso || '') ? iso.replace(/-/g, '/') : '');
+    const head = ['Title', 'Author', 'ISBN13', 'My Rating', 'Number of Pages', 'Binding', 'Date Read', 'Date Added', 'Bookshelves', 'Exclusive Shelf', 'My Review', 'Read Count',
+      'Date Started', 'Genre', 'Series', 'Series Number', 'Earlier Reads', 'Hours', 'Narrator', 'Progress', 'Set Aside On', 'Set Aside Why', 'Up Next', 'Favorite Lines'];
+    const rows = [...books].sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0)).map(b => {
+      const st = statusOf(b), f = formatOf(b);
+      const title = b.series ? `${b.title} (${b.series}${b.seriesNo != null && b.seriesNo !== '' ? `, #${b.seriesNo}` : ''})` : b.title;
+      return [title, b.author, b.isbn || '', b.rating || 0, b.pages || '', binding[f], day(b.finished), day(localDay(b.addedAt || Date.now())),
+        tagsOf(b).join(', '), shelf[st], b.review || '', datesOf(b).length,
+        day(b.started), b.genre || '', b.series || '', b.seriesNo ?? '', (b.rereads || []).map(day).join('; '), b.hours || '', b.narrator || '',
+        st === 'reading' || st === 'dnf' ? (b.progress ?? '') : '', day(b.stopped), b.stopWhy || '', b.upNext ? 'yes' : '',
+        (b.quotes || []).map(q => q.text + (q.where ? ` (${q.where})` : '')).join(' | ')].map(cell).join(',');
+    });
+    const blob = new Blob(['\ufeff' + [head.join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tomestead-library-${today()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(`Spreadsheet downloaded: ${plural(books.length, 'book')}. It opens in Excel, Numbers or Google Sheets, and Goodreads and StoryGraph can import it.`);
+  }
+
+  // ---------- feedback ----------
+  let fbKind = '';
+  function openFeedback() {
+    fbKind = '';
+    $('#feedbackForm').reset();
+    document.querySelectorAll('#fbKind [data-kind]').forEach(b => b.setAttribute('aria-checked', 'false'));
+    $('#fbError').hidden = true;
+    $('#feedbackDialog').showModal();
+    setTimeout(() => $('#fbText').focus(), 30);
+  }
+  async function sendFeedback(e) {
+    e.preventDefault();
+    const text = $('#fbText').value.trim();
+    if (!text) { $('#fbError').textContent = 'Write a line or two first.'; $('#fbError').hidden = false; $('#fbText').focus(); return; }
+    const data = { kind: fbKind || 'other', text: text.slice(0, 5000), doing: $('#fbDoing').value.trim().slice(0, 300), where: whereNow().replace(' › feedbackDialog', ''), device: device(), build: BUILD, books: books.length };
+    $('#feedbackDialog').close();
+    if (!Sync.enabled) {
+      // no accounts on this copy of the app: hand it over to copy and send
+      try { await navigator.clipboard.writeText(`[${data.kind}] ${data.text}${data.doing ? `\nTrying to: ${data.doing}` : ''}\n(${data.device}, ${data.where})`); toast('Copied. Paste it in a message to whoever shared Tomestead with you.'); }
+      catch { toast('Couldn’t send it from here. Please message whoever shared Tomestead with you.'); }
+      return;
+    }
+    const sent = await Sync.feedback(data);
+    toast(sent ? 'Thank you! Your feedback is on its way.' : 'Thank you! It’s saved and will send the next time you’re online.');
+  }
+
   // a book from a backup or an import, with only the fields Tomestead knows, in the shapes it expects
   function cleanBook(b) {
     const day = (d) => (/^\d{4}(-\d{2}(-\d{2})?)?$/.test(String(d || '')) ? String(d) : '');
@@ -2138,7 +2316,7 @@
     const out = {
       id: validId(String(b.id || '')) ? String(b.id) : uid(), title: String(b.title).slice(0, 500), author: String(b.author || ''),
       status: statusOf(b),
-      rating: Math.max(0, Math.min(5, parseInt(b.rating, 10) || 0)),
+      rating: halfStar(b.rating),
       finished: day(b.finished), pages: parseInt(b.pages, 10) > 0 ? Math.min(5000, parseInt(b.pages, 10)) : null,
       genre: String(b.genre || ''), review: String(b.review || ''),
       color: Number.isInteger(b.color) ? b.color : null, addedAt: Number(b.addedAt) || Date.now(),
@@ -2155,6 +2333,9 @@
       const qs = b.quotes.filter(q => q && String(q.text || '').trim()).map(q => ({ id: validId(String(q.id || '')) ? String(q.id) : uid(), text: String(q.text).slice(0, 4000), where: String(q.where || '').slice(0, 30), at: day(q.at) }));
       if (qs.length) out.quotes = qs;
     }
+    if (b.narrator) out.narrator = String(b.narrator).slice(0, 120);
+    if (b.stopWhy && out.status === 'dnf') out.stopWhy = String(b.stopWhy).slice(0, 120);
+    if (Number(b.upNext) > 0 && out.status === 'want') out.upNext = Number(b.upNext);
     if (day(b.started)) out.started = day(b.started);
     if (day(b.stopped)) out.stopped = day(b.stopped);
     if (num(b.progress, 5000) != null && (out.status === 'reading' || out.status === 'dnf')) out.progress = num(b.progress, 5000);
@@ -2369,6 +2550,7 @@
       const cg = e.target.closest('[data-cgoal]');
       if (cg) return openGoalEditor({ id: cg.dataset.cgoal });
       if (e.target.closest('[data-goals]')) return openGoals();
+      if (e.target.closest('[data-import]')) return openImport();
       if (e.target.closest('[data-all]')) { prefs.year = 'all'; savePrefs(); return render(); }
       if (e.target.closest('[data-clear]')) { query = ''; tagFilter = null; $('#search').value = ''; $('.toolbar').classList.remove('searching'); render(); }
     });
@@ -2496,6 +2678,8 @@
       if (cgoal) openGoalEditor({ id: cgoal }); else openGoal(year);
     });
     $('#celebrate').addEventListener('click', e => { if (e.target.id === 'celebrate') closeCelebrate(); });
+    $('#celebrateShare').hidden = !window.TomesteadShare;
+    $('#celebrateShare').addEventListener('click', () => { if (shareMoment) window.TomesteadShare.share(shareMoment, 'tomestead-goal', toast); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#celebrate').hidden) closeCelebrate(); });
 
     // menu
@@ -2514,9 +2698,35 @@
     $('#czIntro').addEventListener('click', e => { const b = e.target.closest('[data-intro]'); if (b) setIntroMode(b.dataset.intro); });
     $('#czHome').addEventListener('click', e => { const b = e.target.closest('[data-home]'); if (!b) return; prefs.view = b.dataset.home; savePrefs(); renderCustomize(); });
     $('#czBookendFor').addEventListener('click', e => { const b = e.target.closest('[data-befor]'); if (b) { bookendFor = b.dataset.befor; renderCustomize(); } });
+    $('#czPaintFor').addEventListener('click', e => { const b = e.target.closest('[data-paintfor]'); if (b) { paintFor = b.dataset.paintfor; renderCustomize(); } });
+    $('#czPaintFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) paintingFromFile(f); e.target.value = ''; });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
+    $('#csvExportBtn').addEventListener('click', () => { more.open = false; exportCSV(); });
+    $('#feedbackBtn').addEventListener('click', () => { more.open = false; openFeedback(); });
+    $('#tourBtn').addEventListener('click', () => {
+      more.open = false;
+      if (viewNow() !== 'room') { prefs.view = 'room'; savePrefs(); render(); }
+      const go = () => (window.TomesteadRoom ? window.TomesteadRoom.tour() : setTimeout(go, 300));
+      go();
+    });
+    $('#fbKind').addEventListener('click', e => {
+      const b = e.target.closest('[data-kind]'); if (!b) return;
+      fbKind = b.dataset.kind;
+      document.querySelectorAll('#fbKind [data-kind]').forEach(x => x.setAttribute('aria-checked', String(x === b)));
+    });
+    $('#feedbackForm').addEventListener('submit', sendFeedback);
+    $('#asideForm').addEventListener('submit', saveAside);
+    document.addEventListener('click', e => {
+      const c = e.target.closest('.why-chip'); if (!c) return;
+      const input = $('#' + c.closest('.why-chips').dataset.whyFor);
+      input.value = input.value === c.textContent ? '' : c.textContent;
+      renderWhyChips();
+    });
+    ['#fWhy', '#asWhy'].forEach(id => $(id).addEventListener('input', renderWhyChips));
     $('#signOutBtn').addEventListener('click', () => { more.open = false; Sync.signOut(); });
     more.addEventListener('toggle', () => {
+      // the room's cards sit over everything else; tuck them away while the menu is open
+      document.documentElement.classList.toggle('menu-open', more.open);
       if (!more.open || !Sync.enabled) return;
       const who = $('#whoAmI'), em = Sync.email();
       who.hidden = !em; who.textContent = em ? `Signed in as ${em}` : '';
@@ -2546,6 +2756,7 @@
     });
     $('#customizePage').addEventListener('click', e => {
       const t = e.target.closest('.tile'); if (!t) return;
+      if (t.dataset.paint) { if (t.dataset.paint === 'mine') $('#czPaintFile').click(); else setPainting(paintFor, t.dataset.paint); return; }
       if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
       else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
       else if (t.dataset.bookend) {
@@ -2575,7 +2786,7 @@
       const again = $(`#customizePage .tile${sel}`); again && again.focus();
     });
     $('#czReset').addEventListener('click', () => {
-      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems], bookends: {} });
+      setTheme({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems], bookends: {}, paintings: {} });
       toast('Back to the original look.');
     });
 
@@ -2747,6 +2958,22 @@
   D.applyTheme(prefs.theme);
   if (!Sync.gated) savePrefsHere();   // keeps a migrated look for next time (and for the opening scene)
   // what the open book's pages say about where this book stands
+  function nextInSeries(b) {
+    const no = Number(b.seriesNo);
+    if (!b.series || !(no >= 0) || b.seriesNo === '' || b.seriesNo == null) return null;
+    const key = String(b.series).trim().toLowerCase();
+    const later = books.filter(x => x.id !== b.id && String(x.series || '').trim().toLowerCase() === key && Number(x.seriesNo) > no)
+      .sort((p, q) => Number(p.seriesNo) - Number(q.seriesNo));
+    if (later.length) return { book: later[0] };
+    return { no: Math.floor(no) + 1 };
+  }
+  function toggleUpNext(b) {
+    b.upNext = b.upNext ? null : Date.now();
+    b.updatedAt = Date.now();
+    save(); render();
+    if (reader && reader.currentId() === b.id) reader.refresh();
+    toast(b.upNext ? `“${b.title}” is up next.` : `“${b.title}” is back in the pile.`);
+  }
   function describeBook(b) {
     const st = statusOf(b);
     const f = formatOf(b);
@@ -2759,11 +2986,12 @@
       d.pct = p;
       d.action = { rd: 'progress', label: 'Update my progress' };
     } else if (st === 'want') {
-      d.status = `On your to-read pile${b.addedAt ? ` since ${fmtDate(stamp(b.addedAt))}` : ''}`;
+      d.status = `${b.upNext ? 'Up next on' : 'On'} your to-read pile${b.addedAt ? ` since ${fmtDate(stamp(b.addedAt))}` : ''}`;
       d.action = { rd: 'start', label: 'Start reading' };
+      d.links = [{ rd: 'upnext', label: b.upNext ? 'Take it off Up next' : 'Make it up next' }];
     } else if (st === 'dnf') {
       const at = b.progress ? (f === 'print' ? ` at p. ${b.progress}` : ` at ${Math.round(b.progress)}%`) : '';
-      d.status = `Set aside${b.stopped ? ` ${fmtDate(b.stopped)}` : ''}${at}`;
+      d.status = `Set aside${b.stopped ? ` ${fmtDate(b.stopped)}` : ''}${at}${b.stopWhy ? ` · ${b.stopWhy}` : ''}`;
       d.action = { rd: 'start', label: 'Pick it back up', quiet: true };
     } else {
       d.action = { rd: 'again', label: 'Read it again', quiet: true };
@@ -2772,7 +3000,11 @@
     else if (dates.length) d.reads = `Finished ${fmtDate(dates[0])}${b.started && st === 'read' && b.started <= dates[0] ? ` · started ${fmtDate(b.started)}` : ''}`;
     else if (b.started && st !== 'want') d.reads = `Started ${fmtDate(b.started)}`;
     d.series = seriesText(b) ? `Series: ${seriesText(b)}` : '';
-    d.details = [f !== 'print' ? FORMATS[f] : '', f === 'audio' ? (b.hours ? `${b.hours} hours` : '') : (b.pages ? `${b.pages} pages` : ''), b.genre].filter(Boolean).join(', ');
+    d.details = [f !== 'print' ? FORMATS[f] : '', f === 'audio' ? (b.hours ? `${b.hours} hours` : '') : (b.pages ? `${b.pages} pages` : ''), f === 'audio' && b.narrator ? `narrated by ${b.narrator}` : '', b.genre].filter(Boolean).join(', ');
+    // the next book in the series: on your shelves already, or one tap from your to-read pile
+    const nx = nextInSeries(b);
+    if (nx && nx.book) (d.links = d.links || []).push({ rd: 'goto', id: nx.book.id, label: `Next in the series: ${nx.book.title}` });
+    else if (nx && st === 'read') (d.links = d.links || []).push({ rd: 'series-next', label: `Add ${b.series} #${nx.no} to my to-read pile` });
     d.reviewHeading = { read: 'My review', reading: 'Thoughts so far', want: 'Why I want to read it', dnf: 'Why I put it down' }[st];
     d.reviewEmpty = { read: 'You haven’t written a review yet.', reading: 'Nothing noted yet.', want: 'No note yet.', dnf: 'No note yet.' }[st];
     d.reviewCta = { read: 'Write my review', reading: 'Add a note', want: 'Add a note', dnf: 'Add a note' }[st];
@@ -2802,6 +3034,9 @@
     timer: () => { const t = timerNow(); return t ? { id: t.id, start: t.start } : null; },
     startTimer: (id) => startTimer(id),
     stopTimer: () => stopTimer(),
+    startBook: (id) => { const b = books.find(x => x.id === id); if (b) startReading(b); },
+    paintingPhoto: (slot) => Covers.uploadURL('painting-' + slot),
+    openImport: () => openImport(),
     unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
     ready: (room) => { if (viewNow() === 'room' && !onCustomize() && !onYear()) room.setActive(true); else room.setActive(false); },
   };
@@ -2812,7 +3047,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261115184854').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261115222929').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
@@ -2831,6 +3066,19 @@
       else if (act === 'start' || act === 'again') startReading(b);
       else if (act === 'quote-add') openQuote(id);
       else if (act === 'quote') openQuote(id, el.dataset.q);
+      else if (act === 'upnext') toggleUpNext(b);
+      else if (act === 'dnf') setAside(b);
+      else if (act === 'goto' && el.dataset.id) reader.putBack().then(() => openDetail(el.dataset.id, null));
+      else if (act === 'series-next') {
+        const nx = nextInSeries(b);
+        reader.putBack().then(() => {
+          openEditor(null, null, null, { status: 'want' });
+          $('#fSeries').value = b.series; $('#fSeriesNo').value = nx ? nx.no : '';
+          if (b.author) $('#fAuthor').value = b.author;
+          $('#fTitle').value = b.series; $('#fTitle').placeholder = `The title of ${b.series} #${nx ? nx.no : ''}`;
+          onTitleInput(); updateDetailsSum();
+        });
+      }
     },
     theme: () => prefs.theme,
     spineEl: (b) => spine(b),
@@ -2863,6 +3111,7 @@
     trophies: () => prefs.trophies,
     drawTrophy: (y, n, sc) => Art.drawTrophy(y, n, sc),
     openBook: (id, el) => openDetail(id, el),
+    toast,
   });
   calendar = window.TomesteadCalendar({
     esc, books: () => books, datesOf, statusOf, formatOf, today,

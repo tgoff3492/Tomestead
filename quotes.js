@@ -22,7 +22,7 @@
     ['Whatever our souls are made of, his and mine are the same.', 'Emily Brontë', 'Wuthering Heights'],
     ['Beware; for I am fearless, and therefore powerful.', 'Mary Shelley', 'Frankenstein'],
     ['Welcome to my house! Enter freely and of your own will!', 'Bram Stoker', 'Dracula'],
-    ['Quoth the Raven, “Nevermore.”', 'Edgar Allan Poe', 'The Raven'],
+    ['Quoth the Raven, ‘Nevermore.’', 'Edgar Allan Poe', 'The Raven'],
     ['It was a dark and stormy night.', 'Edward Bulwer-Lytton', 'Paul Clifford'],
     ['Last night I dreamt I went to Manderley again.', 'Daphne du Maurier', 'Rebecca'],
     ['In a hole in the ground there lived a hobbit.', 'J.R.R. Tolkien', 'The Hobbit'],

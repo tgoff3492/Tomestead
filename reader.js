@@ -95,12 +95,13 @@ window.TomesteadReader = function (api) {
       return `<header class="pg-head">
           <h2 class="pg-title">${esc(b.title)}</h2>
           ${b.author ? `<p class="pg-author">by ${esc(b.author)}</p>` : ''}
-          ${d.rated ? `<p class="pg-stars" aria-label="${b.rating ? `${b.rating} of 5 stars` : 'Not rated'}">${b.rating ? api.starsHTML(b.rating) : '<span class="pg-muted">Not rated</span>'}</p>` : ''}
+          ${d.rated ? `<p class="pg-stars" aria-label="${b.rating ? `${String(b.rating).replace('.5', '½')} of 5 stars` : 'Not rated'}">${b.rating ? api.starsHTML(b.rating) : '<span class="pg-muted">Not rated</span>'}</p>` : ''}
           ${d.status ? `<p class="pg-status ${esc(d.statusKey)}">${esc(d.status)}</p>` : ''}
           ${d.pct != null ? `<span class="pg-meter" aria-hidden="true"><span style="width:${d.pct}%"></span></span>` : ''}
           ${meta.length ? `<p class="pg-meta">${meta.join('<br>')}</p>` : ''}
           ${d.tags.length ? `<p class="pg-tags">${d.tags.map(t => `<button type="button" class="pg-tag" data-rd="tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</p>` : ''}
           ${act ? `<button type="button" class="${act.quiet ? 'pg-link' : 'pg-btn'}" data-rd="${act.rd}">${esc(act.label)}</button>` : ''}
+          ${(d.links || []).map(l => `<button type="button" class="pg-link pg-sublink" data-rd="${esc(l.rd)}"${l.id ? ` data-id="${esc(l.id)}"` : ''}>${esc(l.label)}</button>`).join('')}
         </header>`;
     };
     const quotes = () => {
