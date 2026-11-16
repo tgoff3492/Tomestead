@@ -419,23 +419,17 @@ window.TomesteadReader = function (api) {
   }
 
   // ---------- the 3D reading room: the book was carried to the room's desk ----------
-  // The room flies its own book from the shelf to the desk; this book takes its place where it lies
-  // (no table, no pan: the room is the table), then opens. Closing it hands the book back to the room.
-  function deskGeo(rect) {
-    const g = geo();
-    if (rect && rect.width > 4) {
-      const s = Math.max(0.12, Math.min(0.6, rect.width * 0.9 / g.Wb));
-      g.rest = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, s, rx: 52, rz: -4 };
-    }
-    return g;
-  }
+  // The room carries its own book to the desk, opens it and leans the camera in until its open pages
+  // sit where this open book is drawn; this one then fades in over it, already open (no table, no
+  // pan: the room is the table). Closing it fades back to the room's book, which closes itself and
+  // goes home to the shelf.
   function openOnDesk(id, room) {
     if (busy || S) return false;
     const b = api.getBook(id);
     if (!b) return false;
     busy = true;
-    const g = deskGeo(room.rect);
-    S = { id, originEl: null, mode: 'cover', originRect: null, g, state: 'flying', room };
+    const g = geo();
+    S = { id, originEl: null, mode: 'cover', originRect: null, g, state: 'opening', room };
     const built = buildBook(b, g, null);
     S.box = built.box; S.Tb = built.Tb;
     scene.appendChild(S.box);
@@ -449,18 +443,18 @@ window.TomesteadReader = function (api) {
     root.hidden = false;
     root.setAttribute('aria-label', b.title);
     setBar(null);
-    S.box.style.transform = restT(g);
-    placeShadow(g, 'rest');
+    S.box.style.transform = openT(g);
+    openLeaves();
+    shadow.style.opacity = '0';
     (async () => {
       await Promise.all([
-        anim(scene, [{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' }),
-        anim(dim, [{ opacity: 0 }, { opacity: 1 }], { duration: 500, easing: 'ease-out' }),
-        anim(shadow, [{ opacity: 0 }, { opacity: 0.4 }], { duration: 260 }),
+        anim(scene, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' }),
+        anim(dim, [{ opacity: 0 }, { opacity: 1 }], { duration: 420, easing: 'ease-out' }),
       ]);
-      if (room.onShown) room.onShown();
-      S.state = 'rest';
+      if (!S) return;
+      S.state = 'open';
+      setBar('open');
       busy = false;
-      await openBook();
     })();
     return true;
   }
@@ -504,6 +498,7 @@ window.TomesteadReader = function (api) {
 
   async function closeBook() {
     if (busy || !S || S.state !== 'open') return;
+    if (S.room) return putBack({ direct: true });      // in the room, the room's own book closes
     busy = true;
     setBar(null);
     const g = S.g;
@@ -536,13 +531,11 @@ window.TomesteadReader = function (api) {
     const g = S.g;
     const removed = opts.removed;
     if (S.room) {
-      // back to the room: its own book is lying right underneath; it carries the book back to the shelf
+      // back to the room: its own open book is lying right underneath; it closes and goes home
       const room = S.room;
-      if (room.reveal) room.reveal();
       await Promise.all([
-        anim(scene, [{ opacity: 1 }, { opacity: 0 }], { duration: removed ? 420 : 240, easing: 'ease-in' }),
+        anim(scene, [{ opacity: 1 }, { opacity: 0 }], { duration: removed ? 420 : 260, easing: 'ease-in' }),
         anim(dim, [{ opacity: 1 }, { opacity: 0 }], { duration: 360 }),
-        anim(shadow, [{ opacity: 0.4 }, { opacity: 0 }], { duration: 200 }),
       ]);
       finish();
       if (room.onClosed) room.onClosed();
@@ -730,7 +723,7 @@ window.TomesteadReader = function (api) {
       if (!S || busy) return;
       // rebuild at the new size, keeping the current state
       const b = api.getBook(S.id);
-      const g = S.room ? deskGeo(S.room.rect) : geo();
+      const g = geo();
       const state = S.state;
       S.box.remove();
       S.g = g;

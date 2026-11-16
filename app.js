@@ -3023,7 +3023,7 @@
   window.TomesteadRoomHost = {
     data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies }),
     openBook: (id, rect) => reader.open(id, rect ? roomOrigin(rect) : null),
-    openOnDesk: (id, rect, hooks) => reader.openOnDesk(id, Object.assign({ rect }, hooks)),
+    openOnDesk: (id, hooks) => reader.openOnDesk(id, hooks || {}),
     openProgress: (id) => openProgress(id),
     openRecs: () => recommender.open(),
     openGoals: () => openGoals(),
@@ -3047,7 +3047,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261116072923').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261116091545').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

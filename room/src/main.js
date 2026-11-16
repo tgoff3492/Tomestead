@@ -1771,7 +1771,7 @@ canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.r
 
 function tap(px, py) {
   if (!world) return;
-  if (outBook) { if (!HOST && outBook.phase === 'desk') flyBack(); return; }
+  if (outBook) { if (outBook.phase === 'out' || outBook.phase === 'open') skipAhead(); else if (!HOST && outBook.phase === 'desk') closeUp(); return; }
   if (station === 'shelf') {
     if (searching) return closeSearch();
     if (turning) return;
@@ -1829,7 +1829,7 @@ function selectBook(i, { focus = true } = {}) {
   browseIdx = i;
   const m = meshAt(i);
   if (!m) return false;
-  if (pulled !== m) { if (pulled) pulled.userData.anim = -1; pulled = m; m.userData.anim = 0; glowFor(m); }
+  if (pulled !== m) { if (pulled) pulled.userData.anim = -1; pulled = m; m.userData.anim = 0; glowFor(m); coverImage(m.userData.book); }   // (fetch its cover now, for the trip to the desk)
   if (focus) focusOn(m);
   kick(900);
   return true;
@@ -1984,7 +1984,7 @@ $('card-body').addEventListener('click', (e) => {
     closeSearch(i); return;
   }
   const act = e.target.closest('[data-act]');
-  if (act && act.dataset.act === 'putback') { flyBack(); return; }
+  if (act && act.dataset.act === 'putback') { closeUp(); return; }
   if (act && HOST) {
     const id = act.dataset.id, a = act.dataset.act;
     if (a === 'progress') HOST.openProgress(id);
@@ -2047,120 +2047,370 @@ function animateBooks(dt) {
 }
 
 // ---------------------------------------------------------------- carrying a book to the desk
-// The second tap takes the book off the shelf: it slides out of its slot and floats across while the
-// view pans to the desk, lands on the leather and opens there (the app's open book, drawn over the
-// room). Closing it carries it back to its place on the shelf, still slid out a little.
-const DESK_AT = new THREE.Vector3(-2.57, 0.758, -0.6);
-let outBook = null;        // { id, m, from, phase: 'out' | 'desk' | 'back', t, dur, p0, q0, hidden, pending }
+// The second tap takes the book off the shelf. A copy of it with a real front cover (its cover art,
+// or a plain cloth cover with the title in gold) slides out of the slot and floats across while the
+// view pans to the desk. It lands on the leather and falls open to its real pages, and the camera
+// leans in until the open book fills the screen; then the app's own open book (review, quotes, Edit)
+// takes over in the same place. Closing it plays all of that backwards and the book goes home to its
+// slot, still slid out a little. A tap while it's on its way skips straight to the open book.
+const DESK_AT = new THREE.Vector3(-2.57, 0.758, -0.66);     // where the open spread lies
+let outBook = null;        // { id, b, m, it, carry, from, phase: 'out' | 'open' | 'desk' | 'close' | 'back', t, dur, p0, q0, pending }
 const NOMINAL = { t: 0.032, h: 0.24, d: 0.16 };
+const DESK_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.16, Math.PI / 2, 'YXZ'));
 // lying on the desk, cover up, its top toward the window and its spine on your left
+// (placed so that the spread, once it falls open to the left, is centred on DESK_AT)
 function deskPose(it) {
-  return { pos: DESK_AT.clone().add(new THREE.Vector3(0, it.t / 2 + 0.001, 0)), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.16, Math.PI / 2, 'YXZ')) };
+  const pos = DESK_AT.clone().add(new THREE.Vector3(0, it.t / 2 + 0.001, 0)).add(new THREE.Vector3(0, 0, -it.d / 2).applyQuaternion(DESK_Q));
+  return { pos, q: DESK_Q.clone() };
 }
 const bez = (a, c, b, t) => new THREE.Vector3().copy(a).multiplyScalar((1 - t) * (1 - t)).addScaledVector(c, 2 * (1 - t) * t).addScaledVector(b, t * t);
 // u = 0 at the shelf (where it started: in its slot or slid out) … 1 lying on the desk
-function flightPose(m, u, o) {
-  const { home, homeRot, it } = m.userData;
+function flightPose(o, u) {
+  const { home, homeRot } = o.m.userData, obj = o.carry.root;
   const qHome = new THREE.Quaternion().setFromEuler(homeRot);
   const out = home.clone().add(new THREE.Vector3(0, 0.03, 0.3));     // clear of the shelf
-  const D = deskPose(it);
+  const D = deskPose(o.it);
   const ctrl = out.clone().lerp(D.pos, 0.5).add(new THREE.Vector3(0, 0.3, 0.35));
   const S = 0.24;
   if (u < S) {
     const k = ease(u / S);
-    m.position.lerpVectors(o.p0, out, k); m.quaternion.slerpQuaternions(o.q0, qHome, k);
+    obj.position.lerpVectors(o.p0, out, k); obj.quaternion.slerpQuaternions(o.q0, qHome, k);
   } else {
     const k = ease((u - S) / (1 - S));
-    m.position.copy(bez(out, ctrl, D.pos, k)); m.quaternion.slerpQuaternions(qHome, D.q, k);
+    obj.position.copy(bez(out, ctrl, D.pos, k)); obj.quaternion.slerpQuaternions(qHome, D.q, k);
   }
 }
+
+// ---- the book you carry: boards, a page block in two halves and a front cover that swings open
+// Built in the shelf book's own frame (x: thickness, y: height, z: depth with the spine at +z), so it
+// starts exactly where the spine on the shelf was. The front half (cover and half the pages) turns
+// about the spine and lands beside the back half: both page faces up, like a real open book.
+function buildCarry(b, m) {
+  const it = m ? m.userData.it : NOMINAL, { t, h, d } = it;
+  const bd = Math.min(0.0035, t * 0.14), ph = h - 0.006, pd = d - 0.005;
+  const [bg, ink] = colorOf(b);
+  const cloth = std({ color: bg, roughness: 0.7 });
+  const edge = std({ color: '#e7dabb', roughness: 0.95 });
+  const coverMat = std({ map: canvasTex(plainCover(b, d / h), { repeat: false }), roughness: 0.55 });
+  const pageMat = (side) => { const tx = canvasTex(pageCanvas(b, side, pd / ph), { repeat: false }); return std({ map: tx, roughness: 0.95, emissive: '#ffffff', emissiveMap: tx, emissiveIntensity: 0.3 }); };
+  const root = new THREE.Group(); root.userData.dyn = true; scene.add(root);
+  const add = (geo, mat, parent, x, y, z) => { const me = new THREE.Mesh(geo, mat); me.castShadow = true; me.receiveShadow = true; me.position.set(x, y, z); parent.add(me); return me; };
+  const zp = d / 2 - pd / 2 - 0.0005;                          // the pages sit flush to the spine, a little in from the fore-edge
+  // back half
+  add(new THREE.BoxGeometry(bd, h, d), cloth, root, -t / 2 + bd / 2, 0, 0);
+  add(new THREE.BoxGeometry(t / 2 - bd, ph, pd), edge, root, (-t / 2 + bd) / 2, 0, zp);
+  add(new THREE.PlaneGeometry(pd - 0.004, ph - 0.004).rotateY(Math.PI / 2), pageMat('right'), root, 0.0004, 0, zp);
+  // the spine, in two halves that fold under as it opens, painted like the spine on the shelf
+  const spineHalf = (upper) => {
+    const g = new THREE.PlaneGeometry(t / 2, h);
+    let mat = cloth;
+    if (m && m.material && m.geometry.attributes.uv) {
+      const uv = m.geometry.attributes.uv, u0 = uv.getX(16), u1 = uv.getX(17), vT = uv.getY(16), vB = uv.getY(18), um = (u0 + u1) / 2;
+      const [a, c] = upper ? [um, u1] : [u0, um];
+      g.attributes.uv.array.set([a, vT, c, vT, a, vB, c, vB]); g.attributes.uv.needsUpdate = true;
+      mat = m.material;
+    }
+    return { g, mat };
+  };
+  const lo = spineHalf(false); add(lo.g, lo.mat, root, -t / 4, 0, d / 2 + 0.0004);
+  // front half, hinged at the spine
+  const pivot = new THREE.Group(); pivot.position.set(0, 0, d / 2); root.add(pivot);
+  add(new THREE.BoxGeometry(bd, h, d), cloth, pivot, t / 2 - bd / 2, 0, -d / 2);
+  add(new THREE.BoxGeometry(t / 2 - bd, ph, pd), edge, pivot, (t / 2 - bd) / 2, 0, zp - d / 2);
+  add(new THREE.PlaneGeometry(d, h).rotateY(Math.PI / 2), coverMat, pivot, t / 2 + 0.0004, 0, -d / 2);
+  add(new THREE.PlaneGeometry(pd - 0.004, ph - 0.004).rotateY(-Math.PI / 2), pageMat('left'), pivot, -0.0004, 0, zp - d / 2);
+  const hi = spineHalf(true); add(hi.g, hi.mat, pivot, t / 4, 0, 0.0004);
+  root.traverse((o) => { o.userData.dyn = true; });
+  // the real cover, as soon as it has loaded
+  let live = true;
+  coverImage(b).then((img) => {
+    if (!live || !img) return;
+    const old = coverMat.map; coverMat.map = canvasTex(artCover(img, d / h), { repeat: false }); coverMat.needsUpdate = true; old.dispose(); kick();
+  });
+  return {
+    root, it,
+    setOpen(k) { pivot.rotation.y = -Math.PI * k; },
+    dispose() {
+      live = false;
+      root.traverse((o) => { if (!o.isMesh) return; o.geometry.dispose(); if (o.material !== (m && m.material)) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+      scene.remove(root);
+    },
+  };
+}
+// cover pictures: the app's (Open Library, or your own photo), fetched once per book
+const coverImgs = new Map();
+function coverImage(b) {
+  const key = b.id + '|' + JSON.stringify(b.art || null);
+  if (!coverImgs.has(key)) coverImgs.set(key, (async () => {
+    const C = window.TomesteadCovers;
+    if (!C || !C.coverSrc) return null;
+    let src = null; try { src = await C.coverSrc(b, 'L'); } catch {}
+    if (!src) return null;
+    return new Promise((res) => {
+      const im = new Image();
+      if (!/^(data|blob):/.test(src)) im.crossOrigin = 'anonymous';      // so it can be drawn into the room
+      const t = setTimeout(() => res(null), 8000);
+      im.onload = () => { clearTimeout(t); res(im.naturalWidth > 2 ? im : null); };
+      im.onerror = () => { clearTimeout(t); res(null); };
+      im.src = src;
+    });
+  })());
+  return coverImgs.get(key);
+}
+const COVER_W = 512;
+function artCover(img, aspect) {
+  const [c, x] = mkCanvas(COVER_W, Math.round(COVER_W / aspect));
+  const s = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
+  const w = img.naturalWidth * s, h = img.naturalHeight * s;
+  x.drawImage(img, (c.width - w) / 2, (c.height - h) / 2, w, h);
+  // the hinge groove near the spine and a little sheen, as on a real board
+  const g = x.createLinearGradient(0, 0, c.width * 0.08, 0); g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, c.width * 0.08, c.height);
+  return c;
+}
+const SERIF = '"IM Fell English", Georgia, serif', SANS = '-apple-system, "Segoe UI", Roboto, sans-serif';
+function wrapLines(x, text, maxW) {
+  const out = [];
+  for (const para of String(text).split(/\n/)) {
+    let line = '';
+    for (const w of para.split(/\s+/).filter(Boolean)) {
+      const tryL = line ? line + ' ' + w : w;
+      if (x.measureText(tryL).width > maxW && line) { out.push(line); line = w; } else line = tryL;
+    }
+    out.push(line);
+  }
+  return out;
+}
+// the plain cloth cover the app uses when there's no picture: a gold frame, the title and author
+function plainCover(b, aspect) {
+  const [c, x] = mkCanvas(COVER_W, Math.round(COVER_W / aspect));
+  const W = c.width, H = c.height, [bg, ink] = colorOf(b);
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  const v = x.createRadialGradient(W / 2, H * 0.4, W * 0.1, W / 2, H / 2, W * 0.9); v.addColorStop(0, 'rgba(255,255,255,.08)'); v.addColorStop(1, 'rgba(0,0,0,.28)');
+  x.fillStyle = v; x.fillRect(0, 0, W, H);
+  const gold = '#d9b46a';
+  x.strokeStyle = gold; x.lineWidth = 6; x.strokeRect(W * 0.09, W * 0.09, W * 0.82, H - W * 0.18);
+  x.lineWidth = 2; x.strokeRect(W * 0.12, W * 0.12, W * 0.76, H - W * 0.24);
+  x.fillStyle = gold; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = `${Math.round(W * 0.07)}px ${SERIF}`; x.fillText('✦', W / 2, H * 0.22);
+  let fs = W * 0.11; x.font = `${fs}px ${SERIF}`;
+  let lines = wrapLines(x, b.title || '', W * 0.66);
+  while (lines.length > 4 && fs > W * 0.07) { fs -= 2; x.font = `${fs}px ${SERIF}`; lines = wrapLines(x, b.title || '', W * 0.66); }
+  lines = lines.slice(0, 5);
+  const y0 = H * 0.44 - (lines.length - 1) * fs * 0.6;
+  lines.forEach((l, i) => x.fillText(l, W / 2, y0 + i * fs * 1.2));
+  const yl = y0 + lines.length * fs * 1.2;
+  x.fillRect(W * 0.4, yl, W * 0.2, 3);
+  if (b.author) { x.font = `italic ${Math.round(W * 0.058)}px ${SERIF}`; x.fillText(b.author, W / 2, yl + W * 0.1); }
+  const g = x.createLinearGradient(0, 0, W * 0.08, 0); g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, W * 0.08, H);
+  return c;
+}
+// the open pages, laid out like the app's open book (so the hand-over to it is seamless):
+// on a wide screen details and the summary on the left, your review and favourite lines on the right;
+// on a phone (one page at a time) the right-hand page carries the details and your review
+const REVIEW_HEAD = { read: 'My review', reading: 'Thoughts so far', want: 'Why I want to read it', dnf: 'Why I put it down' };
+const REVIEW_EMPTY = { read: 'You haven’t written a review yet.', reading: 'Nothing noted yet.', want: 'No note yet.', dnf: 'No note yet.' };
+function pageCanvas(b, side, aspect) {
+  const W = 900, H = Math.round(W / aspect), narrow = innerWidth < 720;
+  const [c, x] = mkCanvas(W, H);
+  x.fillStyle = '#f3e9d2'; x.fillRect(0, 0, W, H);
+  // the gutter darkens toward the spine
+  const gut = side === 'right' ? x.createLinearGradient(0, 0, W * 0.14, 0) : x.createLinearGradient(W, 0, W * 0.86, 0);
+  gut.addColorStop(0, 'rgba(90,60,25,.28)'); gut.addColorStop(1, 'rgba(90,60,25,0)');
+  x.fillStyle = gut; x.fillRect(0, 0, W, H);
+  const pad = W * 0.1, maxW = W - pad * 2, bottom = H - W * 0.12;
+  let y = W * 0.12;
+  x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+  const ink = '#22170f', soft = '#5a4a3a', gold = '#9a6e22';
+  const write = (text, font, color, lh, max = 99) => {
+    x.font = font; x.fillStyle = color;
+    const lines = wrapLines(x, text, maxW);
+    for (const l of lines.slice(0, max)) { if (y + lh > bottom) return false; y += lh; x.fillText(l, pad, y); }
+    return true;
+  };
+  const gap = (n) => { y += n; };
+  const st = stOf(b), r = Number(b.rating) || 0;
+  const info = () => {
+    write(b.title || '', `${W * 0.072}px ${SERIF}`, ink, W * 0.082, 3);
+    if (b.author) { gap(W * 0.01); write('by ' + b.author, `italic ${W * 0.04}px ${SERIF}`, soft, W * 0.05, 2); }
+    if (st === 'read') { gap(W * 0.02); write(r ? starText(r) : 'Not rated', `${W * 0.045}px ${SERIF}`, gold, W * 0.06, 1); }
+    const pr = st === 'reading' ? progressOf(b) : null;
+    gap(W * 0.02);
+    write([STATUS[st], pr ? pr.text : ''].filter(Boolean).join(' · '), `600 ${W * 0.03}px ${SANS}`, st === 'reading' ? '#8b2a1f' : soft, W * 0.045, 1);
+    const meta = [b.finished ? `Finished ${fmtDate(b.finished)}` : '', b.series ? `Series: ${b.series}${b.seriesNo ? ' #' + b.seriesNo : ''}` : '', b.pages ? `${b.pages} pages` : ''].filter(Boolean);
+    for (const l of meta) write(l, `${W * 0.03}px ${SANS}`, soft, W * 0.045, 1);
+  };
+  const rule = () => { gap(W * 0.04); if (y + W * 0.06 > bottom) return; x.font = `${W * 0.04}px ${SERIF}`; x.fillStyle = gold; x.textAlign = 'center'; x.fillText('❦', W / 2, y + W * 0.03); x.textAlign = 'left'; y += W * 0.06; };
+  const heading = (t) => { gap(W * 0.03); write(t, `${W * 0.045}px ${SERIF}`, ink, W * 0.06, 1); gap(W * 0.01); };
+  const review = () => {
+    heading(REVIEW_HEAD[st] || 'My review');
+    if (b.review) write(b.review, `${W * 0.036}px ${SERIF}`, ink, W * 0.052);
+    else write(REVIEW_EMPTY[st] || '', `italic ${W * 0.034}px ${SERIF}`, soft, W * 0.05);
+  };
+  const quotes = () => {
+    heading('Favorite lines');
+    const qs = Array.isArray(b.quotes) ? b.quotes : [];
+    if (!qs.length) write('+ Save a line you loved', `${W * 0.03}px ${SANS}`, '#7a4a1a', W * 0.045, 1);
+    for (const q of qs.slice(0, 3)) { write('“' + q.text + '”', `italic ${W * 0.034}px ${SERIF}`, ink, W * 0.05, 4); gap(W * 0.015); }
+  };
+  const about = () => {
+    heading('About the book');
+    const a = b.about && b.about.text;
+    write(a || 'No summary yet.', `${a ? '' : 'italic '}${W * 0.032}px ${SERIF}`, a ? ink : soft, W * 0.048);
+  };
+  if (side === 'left') { if (narrow) about(); else { info(); rule(); about(); } }
+  else if (narrow) { info(); rule(); review(); rule(); quotes(); }
+  else { review(); rule(); quotes(); }
+  if (!narrow || side === 'left') { x.font = `italic ${W * 0.032}px ${SERIF}`; x.fillStyle = soft; x.textAlign = 'center'; x.fillText(side === 'left' ? 'i' : 'ii', W / 2, H - W * 0.05); }
+  return c;
+}
+
+// ---- the camera, leaning in over the open book until it sits where the app draws its open book
+// (the same sizes as reader.js geo(): one page on a phone, the whole spread on a wider screen)
+function readingView(o) {
+  const vw = innerWidth, vh = innerHeight, narrow = vw < 720;
+  let Wb, Hb;
+  if (narrow) { Wb = Math.min(vw * 0.9, 440); Hb = Math.min(Wb / 0.68, vh * 0.72); Wb = Hb * 0.68; }
+  else { Hb = Math.min(vh * 0.78, 660, (vw * 0.92 / 2) / 0.68); Wb = Hb * 0.68; }
+  const sx = narrow ? vw * 0.05 + Wb / 2 : vw / 2, sy = vh * (narrow ? 0.45 : 0.47);
+  const { h, d } = o.it, pd = d - 0.005, ph = h - 0.006, zp = d / 2 - pd / 2 - 0.0005;
+  const R = o.carry.root; R.updateMatrixWorld(true);
+  const P = new THREE.Vector3(0, 0, narrow ? zp : d / 2).applyMatrix4(R.matrixWorld);
+  const n = new THREE.Vector3(1, 0, 0).transformDirection(R.matrixWorld);       // the pages face this way (up)
+  const top = new THREE.Vector3(0, 1, 0).transformDirection(R.matrixWorld);     // toward the top of the book
+  const a = 0.2;                                                                 // looking down, tilted a touch, as if sitting at the desk
+  const dir = n.clone().multiplyScalar(-Math.cos(a)).addScaledVector(top, Math.sin(a)).normalize();
+  const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const D = Math.max(ph / Hb, pd / (Wb * 1.08)) * vh / (2 * vt);                // as tall as the app's page (unless that makes it much wider)
+  const up = new THREE.Vector3(0, 1, 0).addScaledVector(dir, -dir.y).normalize();
+  const right = new THREE.Vector3().crossVectors(dir, up).normalize();
+  const k = 2 * D * vt / vh;
+  const T = P.clone().addScaledVector(right, -(sx - vw / 2) * k).addScaledVector(up, (sy - vh / 2) * k);
+  return { pos: T.clone().addScaledVector(dir, -D), dir, dist: D };
+}
+function zoomTo(to, dur) {
+  if (calm.matches) dur = Math.min(dur, 0.35);
+  cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
+  tween = { t: 0, dur, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
+}
+const T_OUT = 1.45, T_OPEN = 0.8, T_ZOOM = 1.0, T_CLOSE = 0.65, T_BACK = 1.45;
+const sped = (s) => (calm.matches ? Math.min(s, 0.4) : s);
+
 function openOnDesk(id) {
   if (!world) return;
   if (outBook) { if (outBook.phase === 'back') outBook.pending = id; return; }
+  const b = lib.books.find((x) => x.id === id);
+  if (!b) return;
   closeCard(); cam.vx = 0;
   const m = world.books.byId.get(id) || null;
   if (pulled && pulled !== m) pulled.userData.anim = -1;
   pulled = null;
+  const carry = buildCarry(b, m);
+  const o = { id, b, m, it: carry.it, carry, from: station, phase: 'out', t: 0, dur: sped(T_OUT), camGo: false, zoomGo: false, p0: null, q0: null, pending: null };
   if (m) {
-    m.userData.fly = true; delete m.userData.anim; m.userData.p = 0;
+    // the carried copy takes the shelf book's place, exactly where it is now (in its slot or slid out)
+    delete m.userData.anim; m.userData.p = 0;
     if (m.userData.glow) m.userData.glow.material.opacity = 0;
+    carry.root.position.copy(m.position); carry.root.quaternion.copy(m.quaternion);
+    o.p0 = m.position.clone(); o.q0 = m.quaternion.clone();
+    m.visible = false;
     browseIdx = Math.max(0, indexOfMesh(m));
+  } else {
+    // (not on this bookcase, e.g. set aside: it's simply waiting on the desk)
+    const D = deskPose(o.it); carry.root.position.copy(D.pos); carry.root.quaternion.copy(D.q); carry.root.visible = false;
   }
-  outBook = { id, m, from: station, phase: 'out', t: 0, dur: calm.matches ? 0.5 : 1.9, camGo: false, p0: m ? m.position.clone() : null, q0: m ? m.quaternion.clone() : null, hidden: false, pending: null };
+  outBook = o;
   world.desk.openBook.visible = false;      // the desk's own open book makes room
   if (world.tome) world.tome.rest();
   shelfTools();
-  kick(2500);
+  kick(4000);
 }
 function stepDesk(dt) {
   const o = outBook;
   if (!o || o.phase === 'desk') return;
-  o.t += dt / o.dur;
-  const u = Math.min(1, o.t);
+  o.t += dt;
   if (o.phase === 'out') {
-    if (!o.camGo && u >= 0.18) { o.camGo = true; glide('desk', 1.6, false); }
-    if (o.m) flightPose(o.m, u, o);
-    if (u >= 1 && o.camGo && !tween) landed();
-  } else {
-    if (o.m) flightPose(o.m, 1 - u, o);
+    const u = Math.min(1, o.t / o.dur);
+    if (!o.camGo && u >= 0.12) { o.camGo = true; glide('desk', o.dur * 0.92, false); }
+    if (o.m) flightPose(o, u);
+    if (u >= 1 && o.camGo && !tween) { o.carry.root.visible = true; o.phase = 'open'; o.t = 0; }
+  } else if (o.phase === 'open') {
+    // it falls open, and the camera leans in as it does
+    const k = Math.min(1, o.t / sped(T_OPEN));
+    o.carry.setOpen(ease(k));
+    if (!o.zoomGo && k >= 0.3) { o.zoomGo = true; zoomTo(readingView(o), T_ZOOM); }
+    if (k >= 1 && o.zoomGo && !tween) handOff();
+  } else if (o.phase === 'close') {
+    // the camera pulls back while the cover swings shut
+    const k = Math.min(1, Math.max(0, (o.t - sped(0.3)) / sped(T_CLOSE)));
+    o.carry.setOpen(1 - ease(k));
+    if (k >= 1 && !tween) startBack();
+  } else if (o.phase === 'back') {
+    const u = Math.min(1, o.t / o.dur);
+    if (o.m) flightPose(o, 1 - u);
     if (u >= 1) homeAgain();
   }
   renderer.shadowMap.needsUpdate = true;
   kick(300);
 }
-// where the book lies on the screen, so the app's open book can take its place
-function deskRect(it) {
-  const D = deskPose(it);
-  camera.updateMatrixWorld();
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-    const [x, y] = toScreen(new THREE.Vector3(sx * it.t / 2, sy * it.h / 2, sz * it.d / 2).applyQuaternion(D.q).add(D.pos));
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-  }
-  return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
+// a tap while the book is on its way: straight to the open book
+function skipAhead() {
+  const o = outBook;
+  if (!o || (o.phase !== 'out' && o.phase !== 'open')) return;
+  const D = deskPose(o.it);
+  o.carry.root.position.copy(D.pos); o.carry.root.quaternion.copy(D.q); o.carry.root.visible = true;
+  o.carry.setOpen(1);
+  station = 'desk';
+  document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === 'desk')));
+  const v = readingView(o);
+  tween = null; cam.pos.copy(v.pos); cam.dir.copy(v.dir); cam.dist = v.dist; cam.yaw = 0; cam.pitch = 0;
+  o.camGo = o.zoomGo = true;
+  renderer.shadowMap.needsUpdate = true;
+  handOff();
 }
-function landed() {
+// the app's open book takes over, right where the room's lies
+function handOff() {
   const o = outBook;
   o.phase = 'desk';
-  if (o.m) { const D = deskPose(o.m.userData.it); o.m.position.copy(D.pos); o.m.quaternion.copy(D.q); }
   renderer.shadowMap.needsUpdate = true;
-  const rect = deskRect(o.m ? o.m.userData.it : NOMINAL);
+  kick();
   if (HOST && HOST.openOnDesk) {
-    const ok = HOST.openOnDesk(o.id, rect, {
-      // the app's book appears over this one, then opens; when you close it, this one is here again
-      onShown: () => { if (outBook !== o) return; o.hidden = true; if (o.m) o.m.visible = false; kick(); },
-      reveal: () => { if (outBook !== o) return; o.hidden = false; if (o.m) o.m.visible = true; kick(); },
-      onClosed: () => { if (outBook === o) flyBack(); },
-    });
-    if (ok === false) flyBack();
+    const ok = HOST.openOnDesk(o.id, { onClosed: () => { if (outBook === o) closeUp(); } });
+    if (ok === false) closeUp();
     return;
   }
-  const b = lib.books.find((x) => x.id === o.id);
-  if (b) bookCard(b); else flyBack();
+  bookCard(o.b);
 }
-function flyBack() {
+function closeUp() {
   const o = outBook;
   if (!o || o.phase !== 'desk') return;
   if (cardKind === 'book') closeCard();
-  o.phase = 'back'; o.t = 0; o.dur = calm.matches ? 0.5 : 1.7;
+  o.phase = 'close'; o.t = 0;
+  zoomTo(framing('desk'), 0.9);
+  kick(2500);
+}
+function startBack() {
+  const o = outBook;
+  o.phase = 'back'; o.t = 0; o.dur = sped(T_BACK);
   if (o.m) {
-    o.m.visible = true; o.hidden = false;
     // back to its slot: slid out a little if you came from the shelf, so you can see where it went
     const P = o.from === 'shelf' ? pulledPose(o.m) : { pos: o.m.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(o.m.userData.homeRot) };
     o.p0 = P.pos; o.q0 = P.q;
     browseIdx = Math.max(0, indexOfMesh(o.m));
-  }
+  } else o.carry.root.visible = false;
   const to = o.from || 'room';
-  glide(to, 1.5, !o.pending && (to === 'desk' || to === 'hearth' || to === 'tome'));
+  glide(to, 1.4, !o.pending && (to === 'desk' || to === 'hearth' || to === 'tome'));
   kick(2000);
 }
 function homeAgain() {
   const o = outBook;
   outBook = null;
+  o.carry.dispose();
   world.desk.openBook.visible = true;
   const m = o.m;
   if (m) {
-    delete m.userData.fly; m.visible = true;
+    m.visible = true;
     if (o.from === 'shelf' && station === 'shelf') { pulled = m; m.userData.anim = 0; m.userData.p = 1; glowFor(m).material.opacity = 0.22; pullPose(m, 1); }
     else { m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot); }
   }
@@ -2169,22 +2419,21 @@ function homeAgain() {
   kick();
   if (o.pending) setTimeout(() => openOnDesk(o.pending), 60);
 }
-// the shelf was re-made while the book was out (an edit, a sync): carry on with the new copy of it
+// the shelf was re-made while the book was out (an edit, a sync): keep its new slot empty until it's back
 function reacquireOutBook() {
   const o = outBook; if (!o) return;
   const nm = world.books.byId.get(o.id) || null;
   o.m = nm;
   if (!nm) return;
-  nm.userData.fly = true;
-  if (o.phase === 'desk') { const D = deskPose(nm.userData.it); nm.position.copy(D.pos); nm.quaternion.copy(D.q); nm.visible = !o.hidden; return; }
-  const P = o.phase === 'out' ? pulledPose(nm) : (o.from === 'shelf' ? pulledPose(nm) : { pos: nm.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(nm.userData.homeRot) });
-  o.p0 = P.pos; o.q0 = P.q;
+  nm.visible = false;
+  if (o.phase === 'back') { const P = o.from === 'shelf' ? pulledPose(nm) : { pos: nm.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(nm.userData.homeRot) }; o.p0 = P.pos; o.q0 = P.q; }
 }
 function dropOutBook() {
   const o = outBook; if (!o) return;
   outBook = null;
+  o.carry.dispose();
   if (world) world.desk.openBook.visible = true;
-  if (o.m) { delete o.m.userData.fly; o.m.visible = true; o.m.position.copy(o.m.userData.home); o.m.rotation.copy(o.m.userData.homeRot); }
+  if (o.m) { o.m.visible = true; o.m.position.copy(o.m.userData.home); o.m.rotation.copy(o.m.userData.homeRot); }
 }
 
 // ---------------------------------------------------------------- the cards
@@ -2286,7 +2535,7 @@ function clockText(ms) {
   const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), p2 = (n) => String(n).padStart(2, '0');
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
 }
-$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { flyBack(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
+$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go); kick(); }));
 if ($('light')) $('light').addEventListener('click', () => { mode = mode === 'day' ? 'night' : 'day'; world.applyLook(); kick(); });
 addEventListener('keydown', (e) => {
@@ -2309,7 +2558,7 @@ function resize() {
   camera.fov = portrait() ? 62 : 50;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
-  if (world && !tween) { const f = framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
+  if (world && !tween) { const f = outBook && outBook.phase === 'desk' ? readingView(outBook) : framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
   kick();
 }
 addEventListener('resize', resize);
