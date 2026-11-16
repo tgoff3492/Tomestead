@@ -8,8 +8,8 @@ Models were shrunk for phones with gltf-transform (textures resized and converte
 | File | Poly Haven asset |
 |---|---|
 | deskchair.glb | Green Chair 01 |
-| armchair.glb | Arm Chair 01 |
-| ottoman.glb | Ottoman 01 |
+| armchair.glb | Arm Chair 01 (re-dyed: claret velvet, walnut frame) |
+| ottoman.glb | Ottoman 01 (re-dyed cognac leather) |
 | teacup.glb | Tea Set 01 (one cup and saucer) |
 | clock.glb | Mantel Clock 01 |
 | candlestick.glb | Wooden Candlestick |

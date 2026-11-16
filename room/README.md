@@ -19,7 +19,7 @@ Tomestead's home screen: a 3D reading room with stations you glide between: the 
 - Devices without WebGL 2 keep the classic bookcase (and its 2D opening scene).
 
 ## Furniture and textures
-Free Poly Haven models and textures (all CC0; list in `CREDITS.md`): a pedestal desk (hand-built, leather top) and green chair under the window, a stone fireplace with a roaring fire, mantel trinkets and a sleeping dog to its left, a reading corner (armchair, ottoman, tall side table with a shaded oil lamp and a steaming cup of tea, a painting), a grandfather clock, a big potted plant, a brass chandelier, herringbone parquet, plastered walls, wood-panel wainscot and plank ceiling. The bookcase uses a wood veneer that follows your wood choice (oak, walnut or cherry; other finishes tint the oak). If any of these fail to load, the room falls back to the hand-built pieces.
+Free Poly Haven models and textures (all CC0; list in `CREDITS.md`): a pedestal desk (hand-built, leather top) and green chair under the window, a stone fireplace with a roaring fire, mantel trinkets and a sleeping dog to its left, a reading corner (claret velvet armchair, cognac ottoman, tall side table with a shaded oil lamp and a steaming cup of tea, a painting), a grandfather clock, a big potted plant, a brass chandelier, herringbone parquet, plastered walls, wood-panel wainscot and plank ceiling. The bookcase uses a wood veneer that follows your wood choice (oak, walnut or cherry; other finishes tint the oak). If any of these fail to load, the room falls back to the hand-built pieces.
 
 To add or swap one: download it with `api.polyhaven.com`, shrink it with gltf-transform (WebP textures at 512–1024 px, meshopt compression), drop it in `models/` and place it in `placeFurniture()`.
 
