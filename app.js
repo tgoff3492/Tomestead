@@ -2502,13 +2502,7 @@
     toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
   }
 
-  // ---------- install ----------
-  let deferredPrompt = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    $('#installBtn').hidden = false;
-  });
+  // ---------- install (iPhone: a one-time tip on adding it to the home screen) ----------
   function setupIosTip() {
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
@@ -2750,14 +2744,6 @@
     window.addEventListener('online', syncCovers);
     $('#importBtn').addEventListener('click', () => { more.open = false; $('#importFile').click(); });
     $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importBooks(f); e.target.value = ''; });
-    $('#installBtn').addEventListener('click', async () => {
-      more.open = false;
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      $('#installBtn').hidden = true;
-    });
     $('#iosTipClose').addEventListener('click', () => { $('#iosTip').hidden = true; prefs.iosTipDismissed = true; savePrefs(); });
 
     // customize page
