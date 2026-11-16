@@ -22,6 +22,27 @@ Models were shrunk for phones with gltf-transform (textures resized and converte
 | painting.glb | Fancy Picture Frame 01 |
 | grandfather.glb | Vintage Grandfather Clock 01 |
 
+### Shelf trinkets (`models/trinkets/`, picked in Customize → Trinkets)
+Each is also rendered to a cut-out picture with its shadow for the Classic bookcase (`../tex/trinkets/`).
+
+| File | Poly Haven asset |
+|---|---|
+| pottedplant.glb | Potted Plant 01 (shown at 30 cm) |
+| aloe.glb | Potted Plant 04 |
+| bookstack.glb | Book Encyclopedia Set 01 (three volumes, laid in a stack) |
+| camera.glb | Camera 01 |
+| compass.glb | Seadogs Compass |
+| binoculars.glb | Vintage Binoculars |
+| horse.glb | Horse Statue 01 |
+| bust.glb | Marble Bust 01 (shown at 25 cm) |
+| lion.glb | Lion Head (shown at 24 cm) |
+| photo.glb | Standing Picture Frame 02 (glass removed; holds the Lake at dawn painting) |
+| stonecat.glb | Concrete Cat Statue (shown at 20 cm) |
+| oillantern.glb | Lantern 01 (unlit) |
+| seashell.glb | Lambis Shell |
+| brassvase.glb | Brass Vase 03 |
+| chinavase.glb | Antique Ceramic Vase 01 (shown at 24 cm) |
+
 ## Textures
 Floral Jacquard (the rug: its damask recolored claret, with a woven border, medallion and fringe added in code, `tex/rug_claret.webp`), Herringbone Parquet (floor), Plastered Wall (walls), Wooden Panels (wainscot), Dark Wooden Planks (ceiling and beams), Oak Veneer 01 / Walnut Veneer / Lacquered Cherry Wood (bookcase, by your wood choice), Wool Boucle (rug weave), Brown Leather (tome cover and desk top), Bark Willow 02 (tome pedestal and firewood), Marble 01 (fireplace surround), Castle Brick 07 (firebox), Slate Floor 03 (hearth).
 

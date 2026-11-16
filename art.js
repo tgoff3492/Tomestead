@@ -617,12 +617,34 @@
       <text x="50" y="138.4" text-anchor="middle" font-family="Georgia, serif" font-size="6" letter-spacing=".4" fill="#3a2608">${n} BOOKS</text>`;
   }
 
+  // ---------- shelf trinkets: Poly Haven models (CC0) rendered true to scale ----------
+  // Each is a cut-out picture with its own soft shadow, lit from the upper left like the rest
+  // (rendered from room/models/trinkets; 8.2 units per real centimetre, like the drawn pieces)
+  Object.assign(A, {
+    pottedplant: {"w": 168.5, "h": 256.0, "base": 256.0, "img": "tex/trinkets/pottedplant.webp"},
+    aloe: {"w": 135.0, "h": 149.0, "base": 149.0, "img": "tex/trinkets/aloe.webp"},
+    bookstack: {"w": 243.5, "h": 94.0, "base": 94.0, "img": "tex/trinkets/bookstack.webp", "top": {"y": 25.2, "x0": 6.2, "x1": 222.8}},
+    camera: {"w": 213.5, "h": 90.0, "base": 90.0, "img": "tex/trinkets/camera.webp"},
+    compass: {"w": 94.0, "h": 90.0, "base": 90.0, "img": "tex/trinkets/compass.webp"},
+    binoculars: {"w": 189.5, "h": 80.5, "base": 80.1, "img": "tex/trinkets/binoculars.webp"},
+    horse: {"w": 154.5, "h": 185.5, "base": 184.1, "img": "tex/trinkets/horse.webp"},
+    bust: {"w": 141.0, "h": 211.0, "base": 211.0, "img": "tex/trinkets/bust.webp"},
+    lion: {"w": 189.0, "h": 209.0, "base": 208.5, "img": "tex/trinkets/lion.webp"},
+    photo: {"w": 183.0, "h": 175.0, "base": 174.2, "img": "tex/trinkets/photo.webp"},
+    stonecat: {"w": 108.5, "h": 170.0, "base": 170.0, "img": "tex/trinkets/stonecat.webp"},
+    oillantern: {"w": 137.0, "h": 218.5, "base": 217.3, "img": "tex/trinkets/oillantern.webp"},
+    seashell: {"w": 124.5, "h": 46.5, "base": 46.5, "img": "tex/trinkets/seashell.webp"},
+    brassvase: {"w": 113.5, "h": 172.5, "base": 172.1, "img": "tex/trinkets/brassvase.webp"},
+    chinavase: {"w": 165.5, "h": 209.5, "base": 209.5, "img": "tex/trinkets/chinavase.webp"},
+  });
+
   // ---------- rendering ----------
   let seq = 0;
   // draw one art piece at a scale; ids become unique so repeated copies never clash
   function draw(key, scale = 1, extra = '') {
     const a = A[key];
     if (!a) return '';
+    if (a.img) { const k = (a.k || 1) * scale; return `<img src="${a.img}" width="${f(a.w * k)}" height="${f(a.h * k)}" alt="" aria-hidden="true" draggable="false" decoding="async" ${extra}>`; }
     const p = `t${(++seq).toString(36)}`;
     const body = a._svg || (a._svg = a.svg());
     const k = (a.k || 1) * scale;

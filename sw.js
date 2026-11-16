@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v28';
+const VERSION = 'tomestead-v29';
 const SHELL = [
   './',
   'index.html',
@@ -27,6 +27,13 @@ const SHELL = [
   'tex/cloth.webp',
   'tex/leather.webp',
   'tex/floor.webp',
+  // the default shelf trinkets (Classic bookcase pictures); the rest are cached when first shown
+  'tex/trinkets/pottedplant.webp',
+  'tex/trinkets/bookstack.webp',
+  'tex/trinkets/compass.webp',
+  'tex/trinkets/bust.webp',
+  'tex/trinkets/chinavase.webp',
+  'tex/trinkets/stonecat.webp',
   'sync.js',
   'firebase-config.js',
   'manifest.webmanifest',

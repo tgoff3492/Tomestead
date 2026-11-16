@@ -1,0 +1,17 @@
+{
+  "pottedplant": { "name": "Potted plant",       "cm": 30 },
+  "aloe":        { "name": "Aloe in a pot",       "cm": 18, "topper": true },
+  "bookstack":   { "name": "Stack of books",      "cm": null },
+  "camera":      { "name": "Vintage camera",      "cm": null, "topper": true, "yaw": -0.35 },
+  "compass":     { "name": "Brass compass",       "cm": null, "topper": true, "yaw": -0.3 },
+  "binoculars":  { "name": "Field binoculars",    "cm": null, "topper": true, "yaw": -0.3 },
+  "horse":       { "name": "Porcelain horse",     "cm": null },
+  "bust":        { "name": "Marble bust",         "cm": 25, "yaw": -0.25 },
+  "lion":        { "name": "Bronze lion",         "cm": 24, "yaw": -0.2 },
+  "photo":       { "name": "Framed photo",        "cm": 20, "ry": -1.5708, "yaw": 0.35 },
+  "stonecat":    { "name": "Stone cat",           "cm": 20, "yaw": -0.3 },
+  "oillantern":  { "name": "Oil lantern (unlit)", "cm": 26 },
+  "seashell":    { "name": "Seashell",            "cm": null, "topper": true, "yaw": -0.2 },
+  "brassvase":   { "name": "Brass vase",          "cm": null },
+  "chinavase":   { "name": "Blue and white vase", "cm": 24 }
+}

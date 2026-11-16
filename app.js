@@ -79,6 +79,8 @@
       t.v = 2;
     }
     if (t.light && !D.LIGHTS[t.light]) delete t.light;
+    // the drawn trinkets became Poly Haven pieces (Nov 16, 2026): carry each pick over, drop the rest
+    if (Array.isArray(t.trinkets)) t.trinkets = [...new Set(t.trinkets.map(k => D.TRINKETS[k] ? k : D.OLD_TRINKETS[k]).filter(k => k && D.TRINKETS[k]))];
     return t;
   }
   prefs.goals = prefs.goals || {};
@@ -570,7 +572,7 @@
   // ---------- the arch: a display niche at the top of each bookcase ----------
   // Trophies take the niche as they're earned (newest in the middle); any room left holds a
   // trinket or two, which go back to the shelves once trophies need the space.
-  const NICHE_PREF = ['globe', 'candle', 'hourglass', 'clock', 'lantern', 'crystal', 'frame', 'succulent', 'teacup', 'plant'];
+  const NICHE_PREF = ['bust', 'chinavase', 'lion', 'horse', 'brassvase', 'photo', 'oillantern', 'pottedplant', 'stonecat', 'aloe', 'binoculars', 'compass', 'camera', 'seashell'];
   function planNiches(niche, caseCount, trophies, s) {
     const out = { cases: [], used: new Set() };
     if (!niche.w || !niche.h) return out;
@@ -652,9 +654,9 @@
     const piles = [];
     const used = new Set();
     let stackTop = null;
-    if (picks.includes('stack')) {
-      const st = tsize('stack', s), room = st.top.x1 - st.top.x0;
-      stackTop = picks.filter(o => o !== 'stack' && D.TRINKETS[o].topper && tsize(o, s).w <= room && st.h - st.top.y + tsize(o, s).h < rowH - 20 * s).pop() || null;
+    if (picks.includes('bookstack')) {
+      const st = tsize('bookstack', s), room = st.top.x1 - st.top.x0;
+      stackTop = picks.filter(o => o !== 'bookstack' && D.TRINKETS[o].topper && tsize(o, s).w <= room && st.h - st.top.y + tsize(o, s).h < rowH - 20 * s).pop() || null;
       if (stackTop) used.add(stackTop);
     }
     for (const k of picks) {
@@ -662,7 +664,7 @@
       used.add(k);
       const sz = tsize(k, s);
       const pile = { key: k, w: sz.w, h: sz.h };
-      if (k === 'stack' && stackTop) { pile.topper = stackTop; pile.h = sz.h - sz.top.y + tsize(stackTop, s).h; }
+      if (k === 'bookstack' && stackTop) { pile.topper = stackTop; pile.h = sz.h - sz.top.y + tsize(stackTop, s).h; }
       if (pile.h > rowH - 10 * s) continue;
       piles.push(pile);
     }
@@ -1219,7 +1221,7 @@
     }).join('');
     const n = t.trinkets.length;
     $('#czTrinketHint').textContent = n
-      ? `${n} picked. Each one appears once: a few in the arch at the top of your bookcase (until trophies need the room), the rest in open spots on your shelves. A stack of books will hold one of the small ones on top.`
+      ? `${n} picked. Each one appears once, set out the way you'd arrange them yourself: a centrepiece or two in the arch at the top of the bookcase, the rest in open spots on your shelves (in the reading room too). The stack of books holds one of the small pieces on top.`
       : 'No trinkets on display. Pick a few to fill the empty spots on your shelves.';
 
     renderTablePreview();
@@ -3047,7 +3049,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261116091545').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261116102618').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

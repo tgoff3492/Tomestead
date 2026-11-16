@@ -104,22 +104,27 @@
     none: { name: 'No bookends', w: 0, svg: '' },
   };
 
-  // ---------- trinkets (drawn in art.js) ----------
-  // topper: small enough to sit on top of the book stack. wide: needs an open stretch of shelf.
+  // ---------- trinkets: Poly Haven models (CC0); pictures in tex/trinkets, models in room/models/trinkets ----------
+  // topper: small enough to sit on top of the stack of books. Nothing with a lit flame: they live on bookshelves.
   const TRINKETS = {
-    plant:     { name: 'Trailing pothos' },
-    candle:    { name: 'Candlestick', topper: true },
-    teacup:    { name: 'Cup of tea', topper: true },
-    globe:     { name: 'Desk globe' },
-    stack:     { name: 'Stack of books' },
-    cat:       { name: 'Sleeping cat', wide: true },
-    lantern:   { name: 'Lantern' },
-    frame:     { name: 'Photo frame' },
-    hourglass: { name: 'Hourglass', topper: true },
-    succulent: { name: 'Succulent', topper: true },
-    crystal:   { name: 'Amethyst geode', topper: true },
-    clock:     { name: 'Mantel clock' },
+    pottedplant: { name: "Potted plant" },
+    aloe:        { name: "Aloe in a pot", topper: true },
+    bookstack:   { name: "Stack of books" },
+    camera:      { name: "Vintage camera", topper: true },
+    compass:     { name: "Brass compass", topper: true },
+    binoculars:  { name: "Field binoculars", topper: true },
+    horse:       { name: "Porcelain horse" },
+    bust:        { name: "Marble bust" },
+    lion:        { name: "Bronze lion" },
+    photo:       { name: "Framed photo" },
+    stonecat:    { name: "Stone cat" },
+    oillantern:  { name: "Oil lantern (unlit)" },
+    seashell:    { name: "Seashell", topper: true },
+    brassvase:   { name: "Brass vase" },
+    chinavase:   { name: "Blue and white vase" },
   };
+  // picks saved before Nov 16, 2026 (the drawn trinkets) carry over to the nearest new piece
+  const OLD_TRINKETS = { plant: 'pottedplant', succulent: 'aloe', stack: 'bookstack', cat: 'stonecat', globe: 'compass', teacup: 'chinavase', candle: 'brassvase', lantern: 'oillantern', frame: 'photo', hourglass: 'binoculars', crystal: 'seashell', clock: 'lion' };
 
   // ---------- reading table ----------
   const TABLES = {
@@ -147,7 +152,7 @@
   const DEFAULTS = {
     v: 2, light: 'system',
     wall: 'room', wood: 'oak', vine: 'roses', bookend: 'brass',
-    trinkets: ['plant', 'candle', 'cat', 'globe', 'stack', 'teacup'],
+    trinkets: ['pottedplant', 'bookstack', 'compass', 'bust', 'chinavase', 'stonecat'],
     table: 'walnut', tableItems: ['lamp', 'tea', 'glasses'],
   };
 
@@ -199,5 +204,5 @@
     return light;
   }
 
-  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, VINES, LIGHTS, lightNow, sized, svgURL, applyTheme };
+  window.TomesteadDecor = { WALLPAPERS, WOODS, BOOKENDS, TRINKETS, OLD_TRINKETS, TABLES, TABLE_ITEMS, MAX_TABLE_ITEMS, DEFAULTS, VINES, LIGHTS, lightNow, sized, svgURL, applyTheme };
 })();

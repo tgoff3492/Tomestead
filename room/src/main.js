@@ -225,6 +225,40 @@ const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 function loadModel(n) {
   return gltfLoader.loadAsync(asset('models/' + n + '.glb')).then((g) => g.scene).catch((e) => { console.warn('model failed', n, e && e.message); return null; });
 }
+// the shelf trinkets picked in Customize (Poly Haven models in models/trinkets/), at their real size.
+// h: height to scale to (m; otherwise as modelled); ry: turns the model to face the room; turn: how far a
+// person would angle it (a horse in three-quarter view, a photo toward you); centre: a natural centrepiece;
+// small: can sit on the stack of books. Nothing with a lit flame: they live on bookshelves.
+const TRINKET3D = {
+  pottedplant: { h: 0.30 }, aloe: { h: 0.18, small: true }, bookstack: {}, camera: { small: true, turn: 0.25 },
+  compass: { small: true, turn: 0.3 }, binoculars: { small: true, turn: 0.3 }, horse: { turn: 0.45 }, bust: { h: 0.25, centre: true, turn: 0.2 },
+  lion: { h: 0.24, centre: true, turn: 0.15 }, photo: { h: 0.20, ry: -Math.PI / 2, turn: 0.35 }, stonecat: { h: 0.20, turn: 0.3 },
+  oillantern: { h: 0.26 }, seashell: { small: true, turn: 0.3 }, brassvase: { turn: 0.1 }, chinavase: { h: 0.24, centre: true, turn: 0.1 },
+};
+const OLD_TRINKETS = { plant: 'pottedplant', succulent: 'aloe', stack: 'bookstack', cat: 'stonecat', globe: 'compass', teacup: 'chinavase', candle: 'brassvase', lantern: 'oillantern', frame: 'photo', hourglass: 'binoculars', crystal: 'seashell', clock: 'lion' };
+const TRINKET_DEFAULT = ['pottedplant', 'bookstack', 'compass', 'bust', 'chinavase', 'stonecat'];
+function trinketPicks() {
+  const t = lib.theme && Array.isArray(lib.theme.trinkets) ? lib.theme.trinkets : TRINKET_DEFAULT;
+  return [...new Set(t.map((k) => (TRINKET3D[k] ? k : OLD_TRINKETS[k])).filter((k) => k && TRINKET3D[k]))];
+}
+const trinketCache = new Map();
+// loads one trinket, scaled, turned to face the room, standing on y = 0 and centred; returns its size too
+function trinketModel(k) {
+  if (!trinketCache.has(k)) trinketCache.set(k, gltfLoader.loadAsync(asset(`models/trinkets/${k}.glb`)).then((g) => {
+    const spec = TRINKET3D[k], m = g.scene;
+    m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.userData.dyn = true; } });
+    const inner = new THREE.Group(); inner.add(m); m.rotation.y = spec.ry || 0;
+    let b = new THREE.Box3().setFromObject(inner);
+    if (spec.h) inner.scale.setScalar(spec.h / (b.max.y - b.min.y));
+    b = new THREE.Box3().setFromObject(inner);
+    const c = b.getCenter(new THREE.Vector3());
+    inner.position.set(-c.x, -b.min.y, -c.z);
+    const obj = new THREE.Group(); obj.add(inner); obj.userData.dyn = true;
+    const sz = b.getSize(new THREE.Vector3());
+    return { obj, w: sz.x, h: sz.y, d: sz.z };
+  }));
+  return trinketCache.get(k);
+}
 function placeModel(obj, x, y, z, ry = 0, s2 = 1, { cast = true } = {}) {
   if (!obj) return null;
   obj.position.set(x, y, z); obj.rotation.y = ry; obj.scale.setScalar(s2);
@@ -732,21 +766,7 @@ function buildBookcase(M, { cloth, leather }) {
   // a light bead moulding along the outside of the arch
   const arcPts = []; for (let i = 0; i <= 48; i++) { const a = Math.PI - (i / 48) * Math.PI; arcPts.push(new THREE.Vector3(Math.cos(a) * (rx + 0.004), AY + HS + Math.sin(a) * (RISE + 0.004), ZF + 0.002)); }
   mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arcPts), 64, 0.009, 8, false), M.caseShelf, g);
-  // trinkets under the arch: a candlestick, a globe and a little stack (trophies stand on the mantel)
-  const AT = SILL + 0.045, AZ = ZC + 0.02;
-  const cand = new THREE.Group(); g.add(cand); cand.position.set(-0.32, AT, AZ);
-  mesh(lathe([[0, 0], [0.045, 0], [0.045, 0.01], [0.012, 0.02], [0.012, 0.09], [0.03, 0.1], [0.03, 0.11], [0, 0.11]]), M.brass, cand);
-  const cw = mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.13, 14), M.candle, cand); cw.position.y = 0.175;
-  const cf = flameSprite(); cf.position.set(-0.32, AT + 0.26, AZ); g.add(cf);
-  const globe = new THREE.Group(); g.add(globe);
-  mesh(lathe([[0, 0], [0.045, 0], [0.045, 0.012], [0.008, 0.02], [0.008, 0.06], [0, 0.06]]), M.brass, globe);
-  const gl = mesh(new THREE.SphereGeometry(0.065, 24, 16), std({ map: canvasTex(globeTex(), { repeat: false }), roughness: 0.5 }), globe);
-  gl.position.y = 0.125; gl.rotation.z = 0.4;
-  const ring = mesh(new THREE.TorusGeometry(0.075, 0.004, 6, 32, Math.PI * 1.2), M.brass, globe); ring.position.y = 0.125; ring.rotation.set(0, Math.PI / 2, 0.4 - Math.PI / 2);
-  globe.position.set(-0.04, AT, AZ);
-  [[0.26, 0.032, '#1F3350'], [0.23, 0.028, '#e9dcbc'], [0.25, 0.034, '#6E1F24']].reduce((yy, [w, th, col]) => {
-    box(w, th, 0.17, std({ color: col, roughness: 0.7 }), 0.3, yy + th / 2, AZ, g); return yy + th;
-  }, AT);
+  const AT = SILL + 0.045, AZ = ZC + 0.02;      // the arch's floor (the picked trinkets are set out there; trophies stand on the mantel)
   if (theme.vine !== 'none') buildVine(g, { W, top: AY + HS, RISE, ZF, ivy: theme.vine === 'ivy' });
 
   // ---- everything that depends on the library lives in its own group, shelved again when books change
@@ -757,6 +777,123 @@ function buildBookcase(M, { cloth, leather }) {
     showPage(p) { fill(p); api.paint(); },
   };
   const outer = g;
+  // ---- trinkets: the pieces picked in Customize (Poly Haven models), set out as a person would:
+  // a centrepiece in the arch with a smaller piece either side, the rest in the open spots on the
+  // shelves (standing upright, facing the room with a slight natural turn, set a hand's width
+  // apart from the books, never on top of each other), and something small on the stack of books.
+  const decoGroup = new THREE.Group(); decoGroup.userData.dyn = true; g.add(decoGroup);
+  let dressToken = 0;
+  const RI = W / 2 - P, RIN = RISE - P * 0.8;                       // the arch's inner radius and rise
+  const archRoom = (x) => HS + RIN * Math.sqrt(Math.max(0, 1 - (x / RI) ** 2)) - 0.03;   // headroom at x
+  const plankTop = (row) => rowsY[row];
+  const CLEAR = ROWH - 0.035;                                         // headroom on a shelf
+  async function dress(page, placed, { endW, innerL, innerR }) {
+    const token = ++dressToken;
+    decoGroup.clear();
+    const picks = trinketPicks();
+    if (!picks.length) return;
+    const models = await Promise.all(picks.map((k) => trinketModel(k).catch(() => null)));
+    if (token !== dressToken) return;           // (the shelf was re-made meanwhile)
+    const pieces = picks.map((k, i) => models[i] && { k, ...models[i], spec: TRINKET3D[k] }).filter(Boolean);
+    if (!pieces.length) return;
+    const rnd = rng(hash(picks.join('|')));
+    const turn = (p, side = 0) => (p.spec.turn || 0) * (side || 1) + (rnd() - 0.5) * 0.2;
+    // how wide a piece stands once turned
+    const foot = (p, yaw) => Math.abs(p.w * Math.cos(yaw)) + Math.abs(p.d * Math.sin(yaw));
+    const put = (p, x, y, z, yaw) => {
+      const o = p.obj.clone(true); o.position.set(x, y, z); o.rotation.y = yaw; decoGroup.add(o); return o;
+    };
+    // where it stands front to back: lined up with the books' spines, a little back from the edge
+    const zFor = (p, yaw) => { const dd = Math.abs(p.d * Math.cos(yaw)) + Math.abs(p.w * Math.sin(yaw)); return Math.max(ZB + 0.03 + dd / 2, ZF - 0.05 - dd / 2); };
+    let left = [...pieces];
+    const take = (p) => { left = left.filter((q) => q !== p); return p; };
+    // the stack of books carries one small piece on top
+    const stack = left.find((p) => p.k === 'bookstack');
+    let topper = null;
+    if (stack) { topper = left.filter((p) => p !== stack && p.spec.small).sort((a, b) => a.h - b.h)[0] || null; if (topper) take(topper); }
+    const pileOf = (p) => (p === stack && topper ? { p, top: topper, h: p.h + topper.h, w: Math.max(p.w, topper.w) } : { p, h: p.h, w: p.w });
+
+    // 1. the arch (first bookcase): a centrepiece, then a smaller piece either side, mirrored
+    const arches = [];
+    const centre = left.find((p) => p.spec.centre && p.h <= archRoom(0)) || left.find((p) => p.h >= 0.16 && p.h <= archRoom(0) && p !== stack);
+    if (centre) {
+      take(centre);
+      const a = [{ pile: pileOf(centre), x: 0 }];
+      const sides = left.filter((p) => p.h < centre.h && p.h <= archRoom(0.4)).sort((x, y) => y.h - x.h).slice(0, 2);
+      sides.forEach((p, i) => { take(p); a.push({ pile: pileOf(p), x: (i ? -1 : 1) * Math.min(0.46, Math.max(0.3, centre.w / 2 + p.w / 2 + 0.16)) }); });
+      if (sides.length === 1) a[1].x = -a[1].x;        // a single companion sits to the left, the plate stays centred
+      arches.push(a);
+    }
+
+    // 2. the shelves: every row of every bookcase, with the space after its last book and bookend
+    const nRows = (caseOfAbs(placed) + 1) * ROWS;
+    const rows = [];
+    for (let abs = 0; abs < nRows; abs++) {
+      const used = placed.filter((i) => i.abs === abs);
+      const end = used.length ? Math.max(...used.map((i) => i.x + (i.kind === 'book' ? i.t + i.lean : endW(i.sec)) + (i.kind === 'end' && i.flip ? 0.006 : 0))) : null;
+      const from = end === null ? innerL + 0.03 : end + 0.05;
+      rows.push({ abs, page: Math.floor(abs / ROWS), row: ROWS - 1 - (abs % ROWS), books: end !== null, from, to: innerR - 0.03, piles: [] });
+    }
+    const piles = left.map(pileOf).filter((pl) => pl.p !== topper);
+    // big pieces first, so they get the open shelves
+    piles.sort((a, b) => b.w * b.h - a.w * a.h);
+    for (const pl of piles) {
+      if (pl.h > CLEAR) continue;
+      let best = null, bestScore = Infinity;
+      for (const r of rows) {
+        const cap = r.books ? 2 : 3;
+        if (r.piles.length >= cap) continue;
+        const usedW = r.piles.reduce((t, q) => t + q.w + 0.1, 0);
+        if (r.to - r.from - usedW < pl.w + 0.04) continue;
+        // first bookcase first; spread out rather than crowd; a big piece prefers an empty shelf
+        const score = r.page * 3 + r.piles.length * 1.2 + (r.books && pl.w > 0.2 ? 0.6 : 0) + (r.abs % ROWS) * 0.05;
+        if (score < bestScore) { bestScore = score; best = r; }
+      }
+      if (best) best.piles.push(pl);
+    }
+    // leftovers keep the arch of a later bookcase company, one each
+    for (let pg = 1; pg <= caseOfAbs(placed); pg++) {
+      const pl = piles.find((x) => !rows.some((r) => r.piles.includes(x)) && x.h <= archRoom(0));
+      if (pl) arches[pg] = [{ pile: pl, x: 0 }]; else break;
+    }
+
+    // set out this bookcase's pieces
+    const placePile = (pl, x, y, z0, yawBias) => {
+      const yaw = turn(pl.p, yawBias);
+      const z = z0 ?? zFor(pl.p, yaw);
+      put(pl.p, x, y, z, yaw);
+      if (pl.top) {
+        // something small on the stack: off-centre, turned a little
+        const ty = turn(pl.top, -yawBias);
+        put(pl.top, x + (rnd() - 0.5) * Math.max(0, pl.p.w - pl.top.w) * 0.6, y + pl.p.h, z + (rnd() - 0.5) * 0.03, ty);
+      }
+    };
+    for (const a of arches[page] || []) placePile(a.pile, a.x, AT, AZ, a.x === 0 ? 0 : -Math.sign(a.x));
+    for (const r of rows.filter((x) => x.page === page && x.piles.length)) {
+      const y = plankTop(r.row), span = r.to - r.from, total = r.piles.reduce((t, q) => t + q.w, 0);
+      let xs;
+      if (r.books) {
+        // beside the books with a little air, a second piece further along if there's room
+        const spare = span - total;
+        xs = r.piles.length === 1 ? [r.from + Math.min(0.04 + rnd() * 0.06, spare * 0.4)]
+          : [r.from + 0.03, spare > 0.3 ? r.to - r.piles[1].w - 0.02 - rnd() * 0.05 : r.from + 0.03 + r.piles[0].w + Math.min(0.08, spare * 0.4)];
+      } else {
+        // an open shelf: spaced out along it, a little off the exact thirds
+        const anchors = { 1: [0.5 + (rnd() - 0.5) * 0.2], 2: [0.27, 0.71], 3: [0.14, 0.5, 0.84] }[r.piles.length];
+        let edge = r.from;
+        xs = r.piles.map((p, i) => {
+          let x = r.from + anchors[i] * span - p.w / 2 + (rnd() - 0.5) * 0.04;
+          x = Math.max(x, edge + (i ? 0.08 : 0));
+          x = Math.min(x, r.to - p.w - r.piles.slice(i + 1).reduce((t, q) => t + q.w + 0.08, 0));
+          edge = x + p.w; return x;
+        });
+      }
+      r.piles.forEach((pl, i) => placePile(pl, xs[i] + pl.w / 2, y, null, i ? -1 : 1));
+    }
+    renderer.shadowMap.needsUpdate = true;
+    kick();
+  }
+  const caseOfAbs = (placed) => Math.floor((placed.length ? placed[placed.length - 1].abs : 0) / ROWS);
   function fill(want = 0) {
   shelfGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (o.material && o.material.map && o.material !== api.mat) o.material.map.dispose(); } });
   shelfGroup.clear();
@@ -829,13 +966,6 @@ function buildBookcase(M, { cloth, leather }) {
   const firstBook = items.find((i) => i.kind === 'book');
   if (page > 0 && firstBook && !items.some((i) => i.kind === 'end' && i.start && i.sec === firstBook.st)) items.unshift({ kind: 'label', sec: firstBook.st, row: firstBook.row, x: firstBook.x - 0.004 });
 
-  // trinkets in the space that's left over
-  const freeRows = [];
-  for (let r = ROWS - 1; r >= 0; r--) {
-    const used = items.filter((i) => i.row === r && i.kind !== 'label');
-    const end = used.length ? Math.max(...used.map((i) => i.x + (i.t || i.w))) : innerL;
-    freeRows.push({ r, from: end + 0.04 });
-  }
   const bookMeshes = [];
   for (const it of items) {
     const y = rowsY[it.row];
@@ -869,31 +999,8 @@ function buildBookcase(M, { cloth, leather }) {
     }
     bookMeshes.push(m);
   }
-  // fill empty space: a lying stack, a candle, a little plant
-  let decor = 0;
-  for (const fr of freeRows) {
-    const room = innerR - fr.from;
-    if (room < 0.22) continue;
-    const y = rowsY[fr.r], z = ZF - 0.13;
-    const kind = decor++ % 3;
-    const x0 = fr.from + (room > 0.6 ? room * 0.35 : 0.04);
-    if (kind === 0) {
-      [[0.24, 0.035, '#1F3350'], [0.22, 0.03, '#6E1F24'], [0.2, 0.04, '#4F6B3A']].reduce((yy, [w, th, col]) => {
-        box(w, th, 0.16, std({ color: col, roughness: 0.7 }), x0 + 0.12, yy + th / 2, z, g); return yy + th;
-      }, y);
-    } else if (kind === 1) {
-      mesh(lathe([[0, 0], [0.045, 0], [0.045, 0.01], [0.012, 0.02], [0.012, 0.09], [0.03, 0.1], [0.03, 0.11], [0, 0.11]]), M.brass, g).position.set(x0 + 0.06, y, z);
-      const c = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 14), M.candle, g); c.position.set(x0 + 0.06, y + 0.17, z);
-    } else {
-      mesh(lathe([[0, 0], [0.045, 0], [0.055, 0.09], [0.06, 0.09], [0.06, 0.1], [0, 0.1]]), M.terracotta, g).position.set(x0 + 0.07, y, z);
-      for (let i = 0; i < 9; i++) {
-        const l = mesh(new THREE.SphereGeometry(0.04, 8, 6), M.leaf, g);
-        l.scale.set(0.5, 1.4, 0.25); const a = i * 0.7;
-        l.position.set(x0 + 0.07 + Math.cos(a) * 0.035, y + 0.15 + (i % 3) * 0.03, z + Math.sin(a) * 0.035);
-        l.rotation.set(Math.sin(a) * 0.5, a, Math.cos(a) * 0.6);
-      }
-    }
-  }
+  // the trinkets picked in Customize, set out in the arch and in the open spots on the shelves
+  dress(page, placed, { endW, innerL, innerR });
 
   // spine lettering, all books on one texture (one material for every spine)
   let mat = null;
@@ -984,16 +1091,6 @@ function buildBookcase(M, { cloth, leather }) {
   const hit = new THREE.Mesh(new THREE.BoxGeometry(W + 0.1, HT, D), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set(0, HT / 2, ZC); hit.userData.station = 'shelf'; scene.add(hit);
   return api;
-}
-function globeTex() {
-  const [c, x] = mkCanvas(256, 128);
-  x.fillStyle = '#d9c9a0'; x.fillRect(0, 0, 256, 128);
-  const r = rng(5);
-  x.fillStyle = '#6f8a5a';
-  for (let i = 0; i < 14; i++) { x.beginPath(); x.ellipse(r() * 256, 20 + r() * 88, 10 + r() * 26, 6 + r() * 16, r() * 3, 0, 7); x.fill(); }
-  x.strokeStyle = 'rgba(90,60,30,.4)';
-  for (let i = 1; i < 6; i++) { x.beginPath(); x.moveTo(0, i * 21); x.lineTo(256, i * 21); x.stroke(); }
-  return c;
 }
 
 // ---------------------------------------------------------------- the desk
@@ -1102,7 +1199,7 @@ function buildFireplace(MOD) {
   placeModel(MOD.clock, X + 0.2, MT, Z, Math.PI / 2, 1.05);
   for (const sz of [-1, 1]) {
     const cs = MOD.candlestick && (sz < 0 ? MOD.candlestick : MOD.candlestick.clone());
-    if (cs) { placeModel(cs, X + 0.2, MT, Z + sz * 0.78, 0, 1.15); const fl = flameSprite(); fl.position.set(X + 0.2, MT + 0.275, Z + sz * 0.78); scene.add(fl); }
+    if (cs) placeModel(cs, X + 0.2, MT, Z + sz * 0.78, 0, 1.15);     // (left unlit: nothing burns on a shelf)
   }
   const vase = placeModel(MOD.vase, X + 0.19, MT, Z - 0.42, 0.3, 0.45);
   // a big painting over the mantel: Highland cattle on the moor, in the ornate gilt frame
@@ -2632,7 +2729,7 @@ function frameShelf() {
 }
 // what the room shows from the library; when this changes, the books are shelved again
 const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt, b.upNext]),
-  lib.theme.bookend, lib.theme.bookends]);
+  lib.theme.bookend, lib.theme.bookends, lib.theme.trinkets]);
 const cupSig = () => JSON.stringify(lib.trophies || {});
 let lastSig = '', lastPaint = '', lastCups = '';
 // the app calls this after anything changes (a book added or edited, settings, a sync)
