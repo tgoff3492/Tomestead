@@ -9,5 +9,6 @@
   "books":     { "file": "trinkets/bookstack", "name": "Stack of books", "yaw": -0.2 },
   "watch":     { "file": "desk/watch", "name": "Pocket watch", "flat": true, "lie": true, "yaw": 0.3 },
   "journal":   { "file": "desk/journal", "name": "Leather notebook", "flat": true, "yaw": -0.25 },
-  "apple":     { "file": "desk/apple", "name": "An apple" }
+  "apple":     { "file": "desk/apple", "name": "An apple" },
+  "frog": { "file": "trinkets/frog", "name": "Purple frog", "yaw": -0.35 }
 }

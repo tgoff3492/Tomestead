@@ -161,6 +161,7 @@
   let user = null;
   let hooks = null;
   let ready = false;
+  let family = false;   // on the guest list with family: true (see the family paintings)
 
   async function load() {
     const [App, A, F, S] = await Promise.all(['app', 'auth', 'firestore', 'storage'].map(n => import(`${SDK}firebase-${n}.js`)));
@@ -195,6 +196,7 @@
     if (!email) return false;
     try {
       const snap = await fb.F.getDoc(fb.F.doc(fb.db, 'invites', email));
+      family = snap.exists() && (snap.data() || {}).family === true;   // shares the family paintings
       return snap.exists();
     } catch (e) {
       if (e && e.code === 'permission-denied') return false;
@@ -229,6 +231,7 @@
     pendingUser = null;
     hide();
     listen();
+    loadFamily();
   }
 
   async function onGateSubmit(e) {
@@ -458,6 +461,55 @@
     fb.S.deleteObject(fb.S.ref(fb.storage, path)).catch(() => {});
   }
 
+  // ---------- family paintings ----------
+  // Pictures for the reading room's frames, shared only between readers whose guest-list entry
+  // (invites/<email>) has family: true. Files in Storage under family/, listed in the Firestore
+  // collection familyPaintings; both are closed to everyone else (see the rules). The list is kept
+  // on this device too, so the room can hang them straight away.
+  const FAM_KEY = 'tomestead.family' + (uid ? ':' + uid : '');
+  let famList = (() => { try { const a = JSON.parse(ls.get(FAM_KEY)); return Array.isArray(a) ? a : []; } catch { return []; } })();
+  function keepFamily(list) {
+    famList = list;
+    if (list.length) ls.set(FAM_KEY, JSON.stringify(list)); else ls.del(FAM_KEY);
+    if (hooks && hooks.onFamily) hooks.onFamily(list);
+  }
+  async function loadFamily() {
+    if (!user || !fb) return famList;
+    if (!family) { if (famList.length) keepFamily([]); return famList; }
+    try {
+      const { F } = fb;
+      const snap = await F.getDocs(F.collection(fb.db, 'familyPaintings'));
+      keepFamily(snap.docs.map((d) => {
+        const x = d.data() || {};
+        return { id: d.id, name: String(x.name || 'Family painting').slice(0, 60), url: x.url, by: x.by || '', at: x.at && x.at.toMillis ? x.at.toMillis() : Date.now() };
+      }).filter((x) => typeof x.url === 'string' && x.url.startsWith('https://')).sort((a, b) => a.at - b.at));
+    } catch (e) {
+      if (e && e.code === 'permission-denied') keepFamily([]);   // not (or no longer) family
+      else console.warn('Tomestead: family paintings not loaded', e);
+    }
+    return famList;
+  }
+  async function addFamilyPainting(name, blob) {
+    if (!user || !fb || !family) throw new Error('not-family');
+    const { F, S } = fb;
+    const ref = F.doc(F.collection(fb.db, 'familyPaintings'));
+    const path = `family/${ref.id}.jpg`;
+    const r = S.ref(fb.storage, path);
+    await S.uploadBytes(r, blob, { contentType: 'image/jpeg', cacheControl: 'private, max-age=31536000', customMetadata: { by: user.uid } });
+    const url = await S.getDownloadURL(r);
+    await F.setDoc(ref, { name: String(name).slice(0, 60), url, path, by: user.uid, at: F.serverTimestamp() });
+    keepFamily([...famList, { id: ref.id, name: String(name).slice(0, 60), url, by: user.uid, at: Date.now() }]);
+    return ref.id;
+  }
+  async function removeFamilyPainting(id) {
+    const p = famList.find((x) => x.id === id);
+    if (!user || !fb || !p || p.by !== user.uid) throw new Error('not-yours');
+    const { F, S } = fb;
+    await F.deleteDoc(F.doc(fb.db, 'familyPaintings', id));
+    S.deleteObject(S.ref(fb.storage, `family/${id}.jpg`)).catch(() => {});
+    keepFamily(famList.filter((x) => x.id !== id));
+  }
+
   // ---------- feedback and error reports (for the person running Tomestead) ----------
   // Saved to the 'feedback' and 'errors' collections; readable only in the Firebase console.
   // Anything that can't be sent yet waits on this device and goes with the next sign-in.
@@ -510,5 +562,10 @@
     signOut,
     uploadCover,
     removeCover,
+    isFamily: () => !!user && family,
+    familyPaintings: () => famList,
+    addFamilyPainting,
+    removeFamilyPainting,
+    myUid: () => (user && user.uid) || uid || '',
   };
 })();

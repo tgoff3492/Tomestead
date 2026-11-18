@@ -636,6 +636,7 @@
     seashell: {"w": 124.5, "h": 46.5, "base": 46.5, "img": "tex/trinkets/seashell.webp"},
     brassvase: {"w": 113.5, "h": 172.5, "base": 172.1, "img": "tex/trinkets/brassvase.webp"},
     chinavase: {"w": 165.5, "h": 209.5, "base": 209.5, "img": "tex/trinkets/chinavase.webp"},
+    frog: {"w": 120.5, "h": 85.5, "base": 85.4, "img": "tex/trinkets/frog.webp"},
   });
 
   // ---------- reading-table pieces: Poly Haven models (CC0), seen from above as on a table ----------
@@ -651,6 +652,7 @@
     tb_watch: {"w": 57.5, "h": 41.5, "base": 41.5, "img": "tex/table/watch.webp"},
     tb_journal: {"w": 318.0, "h": 120.5, "base": 120.5, "img": "tex/table/journal.webp"},
     tb_apple: {"w": 96.5, "h": 85.0, "base": 85.0, "img": "tex/table/apple.webp"},
+    tb_frog: {"w": 123.0, "h": 94.0, "base": 94.0, "img": "tex/table/frog.webp"},
   });
 
   // ---------- rendering ----------

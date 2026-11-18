@@ -104,7 +104,7 @@
     none: { name: 'No bookends', w: 0, svg: '' },
   };
 
-  // ---------- trinkets: Poly Haven models (CC0); pictures in tex/trinkets, models in room/models/trinkets ----------
+  // ---------- trinkets: Poly Haven models (CC0; the purple frog is sculpted for Tomestead, room/tools/frog.py); pictures in tex/trinkets, models in room/models/trinkets ----------
   // topper: small enough to sit on top of the stack of books. Nothing with a lit flame: they live on bookshelves.
   const TRINKETS = {
     pottedplant: { name: "Potted plant" },
@@ -122,6 +122,7 @@
     seashell:    { name: "Seashell", topper: true },
     brassvase:   { name: "Brass vase" },
     chinavase:   { name: "Blue and white vase" },
+    frog:        { name: "Purple frog", topper: true },
   };
   // picks saved before Nov 16, 2026 (the drawn trinkets) carry over to the nearest new piece
   const OLD_TRINKETS = { plant: 'pottedplant', succulent: 'aloe', stack: 'bookstack', cat: 'stonecat', globe: 'compass', teacup: 'chinavase', candle: 'brassvase', lantern: 'oillantern', frame: 'photo', hourglass: 'binoculars', crystal: 'seashell', clock: 'lion' };
@@ -149,6 +150,7 @@
     watch:     { name: "Pocket watch", art: 'tb_watch', cm: 5.1, flat: true },
     journal:   { name: "Leather notebook", art: 'tb_journal', cm: 14.7, flat: true },
     apple:     { name: "An apple", art: 'tb_apple', cm: 10.4 },
+    frog:      { name: "Purple frog", art: 'tb_frog', cm: 11.5 },
   };
   // picks saved before Nov 16, 2026 that have no Poly Haven twin carry over to the nearest one
   const OLD_TABLE_ITEMS = { mug: 'teapot', inkwell: 'magnifier' };

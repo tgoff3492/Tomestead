@@ -573,7 +573,7 @@
   // ---------- the arch: a display niche at the top of each bookcase ----------
   // Trophies take the niche as they're earned (newest in the middle); any room left holds a
   // trinket or two, which go back to the shelves once trophies need the space.
-  const NICHE_PREF = ['bust', 'chinavase', 'lion', 'horse', 'brassvase', 'photo', 'oillantern', 'pottedplant', 'stonecat', 'aloe', 'binoculars', 'compass', 'camera', 'seashell'];
+  const NICHE_PREF = ['bust', 'chinavase', 'lion', 'horse', 'brassvase', 'photo', 'oillantern', 'pottedplant', 'stonecat', 'frog', 'aloe', 'binoculars', 'compass', 'camera', 'seashell'];
   function planNiches(niche, caseCount, trophies, s) {
     const out = { cases: [], used: new Set() };
     if (!niche.w || !niche.h) return out;
@@ -1187,19 +1187,33 @@
 
     // the two paintings in the 3D room
     $('#czPaintSec').hidden = !canRoom;
-    const pNow = paintingFor(paintFor), pMine = (t.paintings || {})[paintFor] === 'mine';
+    const pNow = paintingFor(paintFor), pMine = pNow === 'mine';
+    const fam = Sync.familyPaintings ? Sync.familyPaintings() : [], famOn = Sync.isFamily && Sync.isFamily();
     document.querySelectorAll('#czPaintFor [data-paintfor]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.paintfor === paintFor)));
     $('#czPaint').setAttribute('aria-label', `Painting ${paintFor === 'mantel' ? 'over the fireplace' : 'in the reading corner'}`);
     $('#czPaint').innerHTML = PAINTINGS.map(([k, name]) => `
       <button type="button" class="tile" role="radio" aria-checked="${!pMine && pNow === k}" data-paint="${k}">
         <span class="tile-art paint-art"><img src="room/tex/paintings/thumbs/${k}.webp" alt="" loading="lazy"></span>
         <span class="tile-label">${name}</span><span class="check" aria-hidden="true">✓</span>
-      </button>`).join('') + `
+      </button>`).join('') + fam.map(f => `
+      <button type="button" class="tile" role="radio" aria-checked="${pNow === 'fam:' + f.id}" data-paint="fam:${esc(f.id)}">
+        <span class="tile-art paint-art"><img src="${esc(f.url)}" alt="" loading="lazy" crossorigin="anonymous"></span>
+        <span class="tile-label">${esc(f.name)}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('') + (famOn ? `
+      <button type="button" class="tile" data-paint="famadd">
+        <span class="tile-art paint-art mine"><span>+ Family<br>painting</span></span>
+        <span class="tile-label">Add for the family</span>
+      </button>` : '') + `
       <button type="button" class="tile" role="radio" aria-checked="${pMine}" data-paint="mine">
         <span class="tile-art paint-art mine" id="czPaintMine"><span>+ Your own<br>picture</span></span>
         <span class="tile-label">${pMine ? 'Yours (change)' : 'Your own'}</span><span class="check" aria-hidden="true">✓</span>
       </button>`;
     if (pMine) Covers.uploadURL('painting-' + paintFor).then(u => { const el = $('#czPaintMine'); if (u && el) el.innerHTML = `<img src="${u}" alt="">`; });
+    // a family painting you added: say who sees it, and let you take it down
+    const famNow = pNow.startsWith('fam:') && fam.find(f => 'fam:' + f.id === pNow);
+    $('#czFamNote').hidden = !famNow;
+    if (famNow) $('#czFamNote').innerHTML = `“${esc(famNow.name)}” is shared with your family only.` +
+      (famNow.by === Sync.myUid() ? ` <button type="button" class="linkbtn" id="czFamRemove">Remove it for everyone</button>` : '');
 
     // each section of the bookcase can have its own bookends
     document.querySelectorAll('#czBookendFor [data-befor]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.befor === bookendFor)));
@@ -1274,21 +1288,60 @@
     ['lake_dawn', 'Lake at dawn'], ['evening_water', 'Evening water'], ['forest_cliffs', 'Forest cliffs'], ['pastoral', 'Pastoral (oil)'], ['highland', 'Highland cattle']];
   const PAINT_DEFAULT = { mantel: 'golden_hills', nook: 'pastoral' };
   let paintFor = 'mantel';
-  const paintingFor = (slot) => { const p = prefs.theme.paintings || {}; return p[slot] === 'mine' || PAINTINGS.some(([k]) => k === p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
+  const famHas = (id) => typeof id === 'string' && id.startsWith('fam:') && Sync.familyPaintings && Sync.familyPaintings().some(f => 'fam:' + f.id === id);
+  const paintingFor = (slot) => { const p = prefs.theme.paintings || {}; return p[slot] === 'mine' || famHas(p[slot]) || PAINTINGS.some(([k]) => k === p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
   function setPainting(slot, id) {
     const p = { ...(prefs.theme.paintings || {}), [slot]: id };
     if (id === 'mine') p[slot + 'At'] = Date.now(); else delete p[slot + 'At'];
     setTheme({ paintings: p });
   }
+  // a picture cropped to the frame's shape (1024 × 760), as a JPEG
+  async function frameCrop(file) {
+    const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
+    const W = 1024, H = 760, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+    c.getContext('2d').drawImage(img, (W - img.naturalWidth * s) / 2, (H - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
+    URL.revokeObjectURL(img.src);
+    return new Promise(res => c.toBlob(res, 'image/jpeg', 0.86));
+  }
+  // a family painting: shared with the readers marked family on the guest list (Sync.addFamilyPainting)
+  let famBlob = null;
+  async function familyFromFile(file) {
+    try { famBlob = await frameCrop(file); } catch { toast('Couldn’t use that picture. Try a JPEG or PNG photo.'); return; }
+    const u = URL.createObjectURL(famBlob);
+    $('#famPreview').innerHTML = `<img src="${u}" alt="">`;
+    $('#famName').value = ''; $('#famError').hidden = true;
+    $('#famDialog').showModal();
+    setTimeout(() => $('#famName').focus(), 30);
+  }
+  async function saveFamily(e) {
+    e.preventDefault();
+    const name = $('#famName').value.trim();
+    if (!name) { $('#famError').textContent = 'Give it a name your family will recognise.'; $('#famError').hidden = false; $('#famName').focus(); return; }
+    const btn = $('#famSave'); btn.disabled = true; btn.textContent = 'Hanging it…';
+    try {
+      const id = await Sync.addFamilyPainting(name, famBlob);
+      $('#famDialog').close();
+      setPainting(paintFor, 'fam:' + id);
+      toast(`“${name}” is hanging ${paintFor === 'mantel' ? 'over the fireplace' : 'in the reading corner'}. Your family can pick it in Customize → Paintings.`);
+    } catch (err) {
+      $('#famError').textContent = navigator.onLine === false ? 'You’re offline. Connect and try again.' : 'Couldn’t share it just now. Try again in a moment.';
+      $('#famError').hidden = false;
+      console.warn('family painting', err);
+    } finally { btn.disabled = false; btn.textContent = 'Share with the family'; }
+  }
+  async function removeFamily() {
+    const btn = $('#czFamRemove'); if (!btn) return;
+    if (!btn.dataset.confirm) { btn.dataset.confirm = '1'; btn.textContent = 'Remove it for everyone? Tap again'; return; }
+    const id = paintingFor(paintFor).slice(4);
+    try { await Sync.removeFamilyPainting(id); toast('Taken down. The frame has its usual painting back.'); }
+    catch { toast('Couldn’t remove it just now. Try again in a moment.'); }
+    renderCustomize(); roomRefresh();
+  }
   // your own picture: cropped to the frame's shape and kept on this device
   async function paintingFromFile(file) {
     try {
-      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
-      const W = 1024, H = 760, c = document.createElement('canvas'); c.width = W; c.height = H;
-      const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
-      c.getContext('2d').drawImage(img, (W - img.naturalWidth * s) / 2, (H - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
-      URL.revokeObjectURL(img.src);
-      const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.86));
+      const blob = await frameCrop(file);
       await Covers.putUpload('painting-' + paintFor, blob);
       setPainting(paintFor, 'mine');
       toast(`Your picture is hanging ${paintFor === 'mantel' ? 'over the fireplace' : 'in the reading corner'}. It stays on this device.`);
@@ -2710,6 +2763,9 @@
     $('#czBookendFor').addEventListener('click', e => { const b = e.target.closest('[data-befor]'); if (b) { bookendFor = b.dataset.befor; renderCustomize(); } });
     $('#czPaintFor').addEventListener('click', e => { const b = e.target.closest('[data-paintfor]'); if (b) { paintFor = b.dataset.paintfor; renderCustomize(); } });
     $('#czPaintFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) paintingFromFile(f); e.target.value = ''; });
+    $('#czFamFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) familyFromFile(f); e.target.value = ''; });
+    $('#famForm').addEventListener('submit', saveFamily);
+    $('#czFamNote').addEventListener('click', e => { if (e.target.closest('#czFamRemove')) removeFamily(); });
     $('#exportBtn').addEventListener('click', () => { more.open = false; exportBooks(); });
     $('#csvExportBtn').addEventListener('click', () => { more.open = false; exportCSV(); });
     $('#feedbackBtn').addEventListener('click', () => { more.open = false; openFeedback(); });
@@ -2758,7 +2814,7 @@
     });
     $('#customizePage').addEventListener('click', e => {
       const t = e.target.closest('.tile'); if (!t) return;
-      if (t.dataset.paint) { if (t.dataset.paint === 'mine') $('#czPaintFile').click(); else setPainting(paintFor, t.dataset.paint); return; }
+      if (t.dataset.paint) { if (t.dataset.paint === 'mine') $('#czPaintFile').click(); else if (t.dataset.paint === 'famadd') $('#czFamFile').click(); else setPainting(paintFor, t.dataset.paint); return; }
       if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
       else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
       else if (t.dataset.bookend) {
@@ -2954,6 +3010,7 @@
       settings: settingsForSync,
       applySettings,
       onReady: () => { offerLegacy(); syncCovers(); },
+      onFamily: () => { if (onCustomize()) renderCustomize(); roomRefresh(); },
     });
   }
 
@@ -3039,6 +3096,8 @@
     stopTimer: () => stopTimer(),
     startBook: (id) => { const b = books.find(x => x.id === id); if (b) startReading(b); },
     paintingPhoto: (slot) => Covers.uploadURL('painting-' + slot),
+    familyPainting: (id) => ((Sync.familyPaintings ? Sync.familyPaintings() : []).find(f => f.id === id) || {}).url || null,
+    familySig: () => (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id).join(','),
     openImport: () => openImport(),
     unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
     ready: (room) => { if (viewNow() === 'room' && !onCustomize() && !onYear()) room.setActive(true); else room.setActive(false); },
@@ -3050,7 +3109,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261116104421').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261118101353').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

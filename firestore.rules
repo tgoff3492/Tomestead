@@ -11,6 +11,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()));
     }
 
+    // Invited and marked family: true on their guest-list entry (shares the family paintings).
+    function family() {
+      return invited()
+        && get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.get('family', false) == true;
+    }
+
     // The guest list. You edit it in the console; the app may only check its own entry.
     match /invites/{email} {
       allow get: if request.auth != null && request.auth.token.email.lower() == email;
@@ -26,6 +32,19 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.title.size() <= 500;
       }
+    }
+
+    // Family paintings (Customize → Paintings): only family can see them; each person can
+    // add their own and remove only their own. The picture itself is in Storage at family/<id>.jpg.
+    match /familyPaintings/{id} {
+      allow read: if family();
+      allow create: if family()
+        && request.resource.data.keys().hasOnly(['name', 'url', 'path', 'by', 'at'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.url is string && request.resource.data.url.size() <= 1000
+        && request.resource.data.path == 'family/' + id + '.jpg';
+      allow delete: if family() && resource.data.by == request.auth.uid;
     }
 
     // Feedback from inside the app (••• → Send feedback) and automatic error reports.

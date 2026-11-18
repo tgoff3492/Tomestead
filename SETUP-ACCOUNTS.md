@@ -43,3 +43,11 @@ Once that's live, opening Tomestead shows the sign-in card. On a device that alr
 ## Updating the rules (Nov 2026: feedback and error reports)
 `firestore.rules` now also lets signed-in guests **add** to two collections, `feedback` and `errors`, that only you can read (in the Firebase console → Firestore → Data). After pulling this change, paste `firestore.rules` into Firestore → Rules again and click **Publish**. Until then, feedback waits on each person's device and is sent once the rules allow it.
 
+
+## Family paintings (Nov 18, 2026)
+Some readers can share paintings for the reading room's frames with each other, and nobody else can see them.
+1. Paste `firestore.rules` into **Firestore ▸ Rules** and click **Publish**. Paste `storage.rules` into **Storage ▸ Rules** and click **Publish**.
+2. In **Firestore ▸ Data ▸ invites**, open each family member's document (yours too) and add a field: `family` (boolean) = `true`.
+3. Each of them signs out and back in once (••• ▸ Sign out), so the app sees the new field.
+
+Then Customize ▸ Paintings shows a **+ Family painting** tile to family members. A painting added there hangs in that person's room and appears as a choice for the rest of the family. Only whoever added a painting can remove it (select it, then **Remove it for everyone**). The pictures live in Storage under `family/` and are listed in the Firestore collection `familyPaintings`; the rules close both to everyone without `family: true`. Removing someone's `family` field (or their invite) takes the paintings away from them.

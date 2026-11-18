@@ -1771,3 +1771,9 @@ dialog.paper.cal-dialog { width: min(480px, calc(100vw - 16px)); }
 .tile .tile-art.paint-art { place-items: center; padding: 6px; background: linear-gradient(180deg, #3a2415, #2c1a0f); }
 .paint-art img { width: 100%; height: 100%; object-fit: cover; border-radius: 2px; box-shadow: 0 0 0 3px #b48a3c, 0 0 0 5px #6b4a1c, 0 3px 8px rgba(0,0,0,.5); }
 .paint-art.mine span { color: #e6c886; font: 600 .82rem/1.25 var(--sans); text-align: center; }
+
+/* family paintings (Customize → Paintings) */
+.fam-note { margin: 10px 0 0; }
+.fam-preview { margin: 4px 0 14px; display: grid; place-items: center; }
+.fam-preview img { width: 100%; max-width: 360px; aspect-ratio: 1024 / 760; object-fit: cover; border-radius: 2px;
+  box-shadow: 0 0 0 4px #b48a3c, 0 0 0 7px #6b4a1c, 0 4px 12px rgba(0,0,0,.35); }

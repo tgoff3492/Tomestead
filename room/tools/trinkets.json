@@ -13,5 +13,6 @@
   "oillantern":  { "name": "Oil lantern (unlit)", "cm": 26 },
   "seashell":    { "name": "Seashell",            "cm": null, "topper": true, "yaw": -0.2 },
   "brassvase":   { "name": "Brass vase",          "cm": null },
-  "chinavase":   { "name": "Blue and white vase", "cm": 24 }
+  "chinavase":   { "name": "Blue and white vase", "cm": 24 },
+  "frog": { "name": "Purple frog", "cm": null, "topper": true, "yaw": -0.3 }
 }

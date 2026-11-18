@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261116104421">
+  <link rel="stylesheet" href="room/room.css?v=20261118101353">
   <script>try { var u = localStorage.getItem('tomestead.uid'), pv = JSON.parse(localStorage.getItem('tomestead.prefs.v1' + (u ? ':' + u : '')) || '{}') || {}, cv = document.createElement('canvas'); if (!(pv.roomV1 && pv.view !== 'room') && cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -206,7 +206,9 @@
           <button type="button" role="radio" data-paintfor="nook">Reading corner</button>
         </div>
         <div id="czPaint" class="tiles paint-tiles" role="radiogroup" aria-label="Paintings"></div>
+        <p id="czFamNote" class="cz-hint fam-note" hidden></p>
         <input id="czPaintFile" type="file" accept="image/*" hidden>
+        <input id="czFamFile" type="file" accept="image/*" hidden>
       </section>
       <section class="cz-section">
         <h3>Bookends</h3>
@@ -478,6 +480,25 @@
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Cancel</button>
         <button type="submit" class="btn btn-ink">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- A family painting: shared only with the readers marked family on the guest list -->
+  <dialog id="famDialog" class="paper narrow">
+    <form id="famForm" method="dialog" novalidate>
+      <h2>A painting for the family</h2>
+      <p class="goal-sub">Only your family’s accounts can see it. It hangs in your room now, and they can pick it in Customize → Paintings.</p>
+      <div id="famPreview" class="fam-preview"></div>
+      <div class="field">
+        <label for="famName">Call it</label>
+        <input id="famName" maxlength="60" autocomplete="off" placeholder="e.g. The boys at the cabin">
+      </div>
+      <p id="famError" class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" id="famSave" class="btn btn-ink">Share with the family</button>
       </div>
     </form>
   </dialog>

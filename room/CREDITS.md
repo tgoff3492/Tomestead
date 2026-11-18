@@ -74,6 +74,10 @@ Both frames are Fancy Picture Frame 01. The landscapes are Poly Haven HDRIs (CC0
 
 `pastoral.webp` is the oil painting that comes on Fancy Picture Frame 01's own canvas. `highland.webp` (Highland cattle on the moor) is an image TJ supplied; it looks like a watermarked stock preview, so it's no longer the default: swap in a licensed copy if you keep using it. "Your own picture" is cropped to the frame and kept on that device only.
 
+Family paintings (Customize → Paintings, for accounts marked `family: true`) are pictures the family added themselves; they live in Firebase Storage, never in this repo.
+
+Sculpted for Tomestead: the purple frog (`models/trinkets/frog.glb`, a glazed ceramic figurine) — no Poly Haven model had one. It is built from scratch by `tools/frog.py` (Blender's Python module: `pip install bpy`; `python3 tools/frog.py -- out.glb`, then meshopt-compressed with gltf-transform).
+
 Hand-built in code: the bookcase (modelled on the app's arched bookcase, with its bookends, labels and climbing vine), the pedestal desk, the fireplace and its fire, the branch pedestal, the mantel trophies, the rug and the lamp shade.
 
 The spine cloth, leather and other textures in the app's own `tex/` folder are Tomestead's.

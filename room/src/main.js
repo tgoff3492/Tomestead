@@ -172,15 +172,18 @@ const texLoader = new THREE.TextureLoader();
 
 // ---------------------------------------------------------------- paintings
 // Two frames (Poly Haven's Fancy Picture Frame 01): over the fireplace and in the reading corner.
-// Each can hold any of these (room/tex/paintings/), or a picture of your own (kept on that device).
+// Each can hold any of these (room/tex/paintings/), a picture of your own (kept on that device), or a
+// family painting ('fam:<id>': shared only between family accounts, from HOST.familyPainting).
 const PAINTINGS = ['golden_hills', 'mountain_path', 'misty_pines', 'winter_wood', 'lake_dawn', 'evening_water', 'forest_cliffs', 'pastoral', 'highland'];
 const PAINT_DEFAULT = { mantel: 'golden_hills', nook: 'pastoral' };
 const canvasMats = {};
 const paintChoice = (slot) => {
   const q = params.get(slot === 'mantel' ? 'paint' : 'nookpaint');   // test page: ?paint=winter_wood&nookpaint=lake_dawn
   if (q && PAINTINGS.includes(q)) return q;
-  const p = (lib.theme && lib.theme.paintings) || {}; return p[slot] === 'mine' || PAINTINGS.includes(p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
-const paintSig = () => JSON.stringify((lib.theme && lib.theme.paintings) || {});
+  const p = (lib.theme && lib.theme.paintings) || {};
+  const fam = typeof p[slot] === 'string' && p[slot].startsWith('fam:') && HOST && HOST.familyPainting && HOST.familyPainting(p[slot].slice(4));
+  return p[slot] === 'mine' || fam || PAINTINGS.includes(p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
+const paintSig = () => JSON.stringify((lib.theme && lib.theme.paintings) || {}) + (HOST && HOST.familySig ? HOST.familySig() : '');
 async function hangPainting(slot) {
   const mat = canvasMats[slot]; if (!mat) return;
   let id = paintChoice(slot);
@@ -189,9 +192,11 @@ async function hangPainting(slot) {
   mat.userData.key = key;
   let url = null;
   if (id === 'mine') url = HOST && HOST.paintingPhoto ? await HOST.paintingPhoto(slot).catch(() => null) : null;
-  if (!url) { if (id === 'mine') id = PAINT_DEFAULT[slot]; url = asset(`tex/paintings/${id}.webp`); }
+  else if (id.startsWith('fam:')) url = HOST && HOST.familyPainting ? HOST.familyPainting(id.slice(4)) : null;
+  if (!url) { id = PAINT_DEFAULT[slot]; url = asset(`tex/paintings/${id}.webp`); }
   try {
-    const tex = await texLoader.loadAsync(url);
+    // a family painting that can't be fetched (offline, no longer shared) leaves the usual one up
+    const tex = await texLoader.loadAsync(url).catch((e) => (/^(https?:)?\/\//.test(url) && !url.startsWith(location.origin) ? texLoader.loadAsync(asset(`tex/paintings/${PAINT_DEFAULT[slot]}.webp`)) : Promise.reject(e)));
     if (mat.userData.key !== key) { tex.dispose(); return; }   // changed again while it loaded
     tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso;
     // the frame's canvas uses part of its texture: map the whole picture onto that part
@@ -234,6 +239,7 @@ const TRINKET3D = {
   compass: { small: true, turn: 0.3 }, binoculars: { small: true, turn: 0.3 }, horse: { turn: 0.45 }, bust: { h: 0.25, centre: true, turn: 0.2 },
   lion: { h: 0.24, centre: true, turn: 0.15 }, photo: { h: 0.20, ry: -Math.PI / 2, turn: 0.35 }, stonecat: { h: 0.20, turn: 0.3 },
   oillantern: { h: 0.26 }, seashell: { small: true, turn: 0.3 }, brassvase: { turn: 0.1 }, chinavase: { h: 0.24, centre: true, turn: 0.1 },
+  frog: { small: true, turn: 0.35 },   // glazed purple ceramic, sculpted for Tomestead (tools/frog.py)
 };
 const OLD_TRINKETS = { plant: 'pottedplant', succulent: 'aloe', stack: 'bookstack', cat: 'stonecat', globe: 'compass', teacup: 'chinavase', candle: 'brassvase', lantern: 'oillantern', frame: 'photo', hourglass: 'binoculars', crystal: 'seashell', clock: 'lion' };
 const TRINKET_DEFAULT = ['pottedplant', 'bookstack', 'compass', 'bust', 'chinavase', 'stonecat'];
@@ -282,6 +288,7 @@ const DESK3D = {
   watch: { file: 'desk/watch', lie: true, slots: ['frontL', 'frontR', 'backM'] },
   journal: { file: 'desk/journal', slots: ['frontL', 'frontR'] },
   apple: { file: 'desk/apple', slots: ['frontR', 'backM', 'frontL'] },
+  frog: { file: 'trinkets/frog', slots: ['backL', 'frontL', 'backM'] },
 };
 const OLD_DESK = { mug: 'teapot', inkwell: 'magnifier' };
 function deskPicks() {

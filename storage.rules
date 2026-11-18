@@ -6,6 +6,12 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function family() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && firestore.get(/databases/(default)/documents/invites/$(request.auth.token.email.lower())).data.get('family', false) == true;
+    }
+
     // covers/<your account id>/<book id>-<version>.jpg
     match /covers/{uid}/{file} {
       allow read: if request.auth != null && request.auth.uid == uid;
@@ -13,6 +19,17 @@ service firebase.storage {
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.auth.token.email_verified == true
         && firestore.exists(/databases/(default)/documents/invites/$(request.auth.token.email.lower()))
+        && request.resource.size < 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // family/<id>.jpg: the family paintings, for readers marked family: true on the guest list.
+    // Anyone in the family can see them; only the person who added one can remove it.
+    match /family/{file} {
+      allow read: if family();
+      allow delete: if family() && resource.metadata.by == request.auth.uid;
+      allow create: if family()
+        && request.resource.metadata.by == request.auth.uid
         && request.resource.size < 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
