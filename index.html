@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261118101353">
+  <link rel="stylesheet" href="room/room.css?v=20261118111312">
   <script>try { var u = localStorage.getItem('tomestead.uid'), pv = JSON.parse(localStorage.getItem('tomestead.prefs.v1' + (u ? ':' + u : '')) || '{}') || {}, cv = document.createElement('canvas'); if (!(pv.roomV1 && pv.view !== 'room') && cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -72,7 +72,7 @@
           <button id="goalMenuBtn">Reading goals</button>
           <button id="calBtn">Reading calendar</button>
           <button id="tagsBtn">Tags</button>
-          <button id="customizeBtn">Customize library</button>
+          <button id="customizeBtn">Customize the room</button>
           <button id="tourBtn" hidden>Show me around</button>
           <hr>
           <button id="csvBtn">Import from Goodreads or StoryGraph</button>
@@ -158,49 +158,19 @@
   <!-- Customize page -->
   <div id="customizePage" class="customize" hidden>
     <div class="cz-head">
-      <h2>Customize your library</h2>
+      <h2>Customize your reading room</h2>
       <button id="czDone" class="btn btn-brass">Done</button>
     </div>
-    <div id="czPreview" class="cz-preview cases" aria-label="Preview"></div>
+    <nav id="czTabs" class="cz-tabs" role="tablist" aria-label="What to change">
+      <button type="button" role="tab" data-tab="paint">Paintings</button>
+      <button type="button" role="tab" data-tab="case">Bookcase</button>
+      <button type="button" role="tab" data-tab="trinkets">Trinkets</button>
+      <button type="button" role="tab" data-tab="desk">Desk</button>
+      <button type="button" role="tab" data-tab="light">Light</button>
+    </nav>
     <div class="cz-panel paper-panel">
-      <section class="cz-section" id="czHomeSec">
-        <h3>Home</h3>
-        <p class="cz-hint">Where the app opens: the 3D reading room, or the classic flat bookcase. (Room · Classic · List at the top switches any time.)</p>
-        <div id="czHome" class="spans" role="radiogroup" aria-label="Home">
-          <button type="button" role="radio" data-home="room">3D reading room</button>
-          <button type="button" role="radio" data-home="shelf">Classic bookcase</button>
-        </div>
-      </section>
-      <section class="cz-section">
-        <h3>Opening scene</h3>
-        <p class="cz-hint">The walk into your library when you open the classic bookcase. Tap it any time to skip. (The 3D room has its own.)</p>
-        <div id="czIntro" class="spans" role="radiogroup" aria-label="Opening scene">
-          <button type="button" role="radio" data-intro="always">Every time</button>
-          <button type="button" role="radio" data-intro="day">Once a day</button>
-          <button type="button" role="radio" data-intro="never">Never</button>
-        </div>
-      </section>
-      <section class="cz-section">
-        <h3>Wallpaper</h3>
-        <div id="czWall" class="tiles" role="radiogroup" aria-label="Wallpaper"></div>
-      </section>
-      <section class="cz-section">
-        <h3>Time of day</h3>
-        <p class="cz-hint" id="czLightHint"></p>
-        <div id="czLight" class="tiles" role="radiogroup" aria-label="Time of day"></div>
-      </section>
-      <section class="cz-section">
-        <h3>Shelf wood</h3>
-        <div id="czWood" class="tiles" role="radiogroup" aria-label="Shelf wood"></div>
-      </section>
-      <section class="cz-section">
-        <h3>Climbing vine</h3>
-        <p class="cz-hint">Grows up the right side of your bookcase and over the arch.</p>
-        <div id="czVine" class="tiles" role="radiogroup" aria-label="Climbing vine"></div>
-      </section>
-      <section class="cz-section" id="czPaintSec">
+      <section class="cz-section" data-pane="paint" id="czPaintSec" role="tabpanel">
         <h3>Paintings</h3>
-        <p class="cz-hint">For the 3D reading room: landscapes painted from Poly Haven’s free photographs, two old oil paintings, or a picture of your own.</p>
         <div id="czPaintFor" class="spans cz-befor" role="radiogroup" aria-label="Choose the painting for">
           <button type="button" role="radio" data-paintfor="mantel">Over the fireplace</button>
           <button type="button" role="radio" data-paintfor="nook">Reading corner</button>
@@ -210,8 +180,12 @@
         <input id="czPaintFile" type="file" accept="image/*" hidden>
         <input id="czFamFile" type="file" accept="image/*" hidden>
       </section>
-      <section class="cz-section">
-        <h3>Bookends</h3>
+      <section class="cz-section" data-pane="case" role="tabpanel">
+        <h3>Wood</h3>
+        <div id="czWood" class="tiles" role="radiogroup" aria-label="Bookcase wood"></div>
+        <h3 class="cz-sub">Climbing vine</h3>
+        <div id="czVine" class="tiles" role="radiogroup" aria-label="Climbing vine"></div>
+        <h3 class="cz-sub">Bookends</h3>
         <p class="cz-hint">Each section of your bookcase stands between its own pair.</p>
         <div id="czBookendFor" class="spans cz-befor" role="radiogroup" aria-label="Choose bookends for">
           <button type="button" role="radio" data-befor="reading">Reading now</button>
@@ -220,21 +194,20 @@
         </div>
         <div id="czBookend" class="tiles" role="radiogroup" aria-label="Bookends"></div>
       </section>
-      <section class="cz-section">
+      <section class="cz-section" data-pane="trinkets" role="tabpanel">
         <h3>Trinkets</h3>
-        <p class="cz-hint" id="czTrinketHint">Choose what sits in the empty spots on your shelves.</p>
+        <p class="cz-hint" id="czTrinketHint"></p>
         <div id="czTrinkets" class="tiles" aria-label="Trinkets"></div>
       </section>
-      <section class="cz-section">
-        <h3>Reading table</h3>
-        <p class="cz-hint">Where a book lands when you take it off the shelf.</p>
-        <div id="czTablePreview" class="tb-preview" aria-hidden="true"></div>
-        <div id="czTable" class="tiles" role="radiogroup" aria-label="Reading table"></div>
+      <section class="cz-section" data-pane="desk" role="tabpanel">
+        <h3>On the desk</h3>
+        <p class="cz-hint" id="czTableItemsHint"></p>
+        <div id="czTableItems" class="tiles" aria-label="On the desk"></div>
       </section>
-      <section class="cz-section">
-        <h3>On the table</h3>
-        <p class="cz-hint" id="czTableItemsHint">Pick up to 5 things to keep beside your book.</p>
-        <div id="czTableItems" class="tiles" aria-label="On the table"></div>
+      <section class="cz-section" data-pane="light" role="tabpanel">
+        <h3>Time of day</h3>
+        <p class="cz-hint" id="czLightHint"></p>
+        <div id="czLight" class="tiles" role="radiogroup" aria-label="Time of day"></div>
       </section>
       <div class="cz-foot">
         <button id="czReset" class="btn btn-ghost">Reset to the original look</button>

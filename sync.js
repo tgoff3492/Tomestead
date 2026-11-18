@@ -466,12 +466,38 @@
   // (invites/<email>) has family: true. Files in Storage under family/, listed in the Firestore
   // collection familyPaintings; both are closed to everyone else (see the rules). The list is kept
   // on this device too, so the room can hang them straight away.
+  // A painting can also ship with the app sealed (AES-GCM, src = its file in the app), with the key
+  // kept in its familyPaintings document, so only family accounts can open it. Unsealed here, in memory.
   const FAM_KEY = 'tomestead.family' + (uid ? ':' + uid : '');
-  let famList = (() => { try { const a = JSON.parse(ls.get(FAM_KEY)); return Array.isArray(a) ? a : []; } catch { return []; } })();
+  let famList = (() => { try { const a = JSON.parse(ls.get(FAM_KEY)); return Array.isArray(a) ? a.map((x) => (x.src ? { ...x, url: null } : x)) : []; } catch { return []; } })();
+  const unsealed = new Map();   // src → object URL
+  async function unseal(p) {
+    if (unsealed.has(p.src)) return unsealed.get(p.src);
+    const res = await fetch(p.src, { cache: 'force-cache' });
+    if (!res.ok) throw new Error('sealed painting ' + res.status);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const raw = Uint8Array.from(atob(p.key), (c) => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12));
+    const url = URL.createObjectURL(new Blob([plain], { type: 'image/jpeg' }));
+    unsealed.set(p.src, url);
+    return url;
+  }
+  async function unsealAll() {
+    let changed = false;
+    for (const p of famList) {
+      if (!p.src || !p.key || p.url) continue;
+      try { p.url = await unseal(p); changed = true; } catch (e) { console.warn('Tomestead: family painting not opened', e); }
+    }
+    if (changed) window.dispatchEvent(new Event('tomestead:family'));
+  }
+  setTimeout(unsealAll, 0);
   function keepFamily(list) {
-    famList = list;
-    if (list.length) ls.set(FAM_KEY, JSON.stringify(list)); else ls.del(FAM_KEY);
-    if (hooks && hooks.onFamily) hooks.onFamily(list);
+    famList = list.map((x) => (x.src && unsealed.has(x.src) ? { ...x, url: unsealed.get(x.src) } : x));
+    const save = famList.map((x) => (x.src ? { ...x, url: null } : x));
+    if (save.length) ls.set(FAM_KEY, JSON.stringify(save)); else ls.del(FAM_KEY);
+    window.dispatchEvent(new Event('tomestead:family'));
+    unsealAll();
   }
   async function loadFamily() {
     if (!user || !fb) return famList;
@@ -481,8 +507,10 @@
       const snap = await F.getDocs(F.collection(fb.db, 'familyPaintings'));
       keepFamily(snap.docs.map((d) => {
         const x = d.data() || {};
-        return { id: d.id, name: String(x.name || 'Family painting').slice(0, 60), url: x.url, by: x.by || '', at: x.at && x.at.toMillis ? x.at.toMillis() : Date.now() };
-      }).filter((x) => typeof x.url === 'string' && x.url.startsWith('https://')).sort((a, b) => a.at - b.at));
+        const sealed = typeof x.src === 'string' && /^[\w/.-]+\.bin$/.test(x.src) && typeof x.key === 'string';
+        return { id: d.id, name: String(x.name || 'Family painting').slice(0, 60), url: sealed ? null : x.url, src: sealed ? x.src : undefined, key: sealed ? x.key : undefined,
+          by: x.by || '', at: x.at && x.at.toMillis ? x.at.toMillis() : Date.now() };
+      }).filter((x) => x.src || (typeof x.url === 'string' && x.url.startsWith('https://'))).sort((a, b) => a.at - b.at));
     } catch (e) {
       if (e && e.code === 'permission-denied') keepFamily([]);   // not (or no longer) family
       else console.warn('Tomestead: family paintings not loaded', e);

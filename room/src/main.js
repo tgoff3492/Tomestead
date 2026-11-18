@@ -35,6 +35,9 @@ const WOODS = {
   sage: ['#9cad92', '#7f9277', '#67795f', '#4d5c47', '#38432f', '#2b3328'],
   white: ['#eee6d6', '#d4c8b2', '#b9ab93', '#968872', '#7a6d59', '#4a4236'],
 };
+// which Poly Haven veneer each wood uses, and its tint (the rest are tinted from their colour above)
+const WOOD_SET = { oak: 'oak_veneer_01', walnut: 'walnut_veneer', cherry: 'oak_veneer_01', ebony: 'walnut_veneer', sage: 'oak_veneer_01', white: 'oak_veneer_01' };
+const WOOD_TINT = { oak: '#f0c890', walnut: '#ffffff', cherry: '#d27a52', ebony: '#6a5f57', sage: '#b2c9a2', white: '#fbf4e8' };
 function hash(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -187,12 +190,13 @@ const paintSig = () => JSON.stringify((lib.theme && lib.theme.paintings) || {}) 
 async function hangPainting(slot) {
   const mat = canvasMats[slot]; if (!mat) return;
   let id = paintChoice(slot);
-  const key = id === 'mine' ? `mine:${(lib.theme.paintings || {})[slot + 'At'] || ''}` : id;
+  const famUrl = id.startsWith('fam:') && HOST && HOST.familyPainting ? HOST.familyPainting(id.slice(4)) : null;
+  const key = id === 'mine' ? `mine:${(lib.theme.paintings || {})[slot + 'At'] || ''}` : id.startsWith('fam:') ? `${id}|${famUrl || ''}` : id;
   if (mat.userData.key === key) return;
   mat.userData.key = key;
   let url = null;
   if (id === 'mine') url = HOST && HOST.paintingPhoto ? await HOST.paintingPhoto(slot).catch(() => null) : null;
-  else if (id.startsWith('fam:')) url = HOST && HOST.familyPainting ? HOST.familyPainting(id.slice(4)) : null;
+  else if (id.startsWith('fam:')) url = famUrl;
   if (!url) { id = PAINT_DEFAULT[slot]; url = asset(`tex/paintings/${id}.webp`); }
   try {
     // a family painting that can't be fetched (offline, no longer shared) leaves the usual one up
@@ -384,7 +388,7 @@ async function build() {
     document.fonts ? document.fonts.load('40px "IM Fell English"').catch(() => {}) : Promise.resolve(),
     new Promise((r) => setTimeout(r, 1800)),
   ]);
-  const woodSet = { oak: 'oak_veneer_01', walnut: 'walnut_veneer', cherry: 'lacquered_cherry_wood' }[lib.theme.wood || 'oak'] || 'oak_veneer_01';
+  const woodSet = WOOD_SET[lib.theme.wood || 'oak'] || WOOD_SET.oak;
   const SETS = ['herringbone_parquet', 'plastered_wall', 'wooden_panels', 'dark_wooden_planks', woodSet, 'bark_willow_02', 'marble_01', 'castle_brick_07', 'slate_floor_03'];
   const [imgs, sets, MOD] = await Promise.all([
     Promise.all(['floor', 'wood-v', 'wood-h', 'plaster', 'cloth', 'leather'].map((n) => loadImg(TEX + n + '.webp'))),
@@ -419,14 +423,29 @@ async function build() {
     tomeLeather: std({ map: canvasTex(tinted(leather, '#3b2350', 0.9)), roughness: 0.6 }),
     dark: std({ color: '#1b120b', roughness: 0.8 }),
   };
-  const W = sets[woodSet];
-  if (W) {
-    const tint = { oak: '#f0c890', walnut: '#ffffff', cherry: '#ffffff' }[lib.theme.wood || 'oak'] || wood[0];
-    M.caseSide = pbrMat(W, 0.7, 1.4, { color: tint, roughness: 1 });
-    M.caseShelf = pbrMat(W, 0.7, 1.4, { color: tint, rot: true });
-    M.caseDark = pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.55) });
-    M.trim = pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.5), rot: true });
-    M.recessWood = pbrMat(W, 0.5, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.2) });
+  // the bookcase's wood (Customize → Bookcase): a Poly Haven veneer, tinted for the painted and pale woods
+  const caseMats = (key, W) => {
+    const pal = WOODS[key] || WOODS.oak;
+    if (!W) {
+      const vt = canvasTex(tinted(woodV, pal[1], 0.55)), ht = canvasTex(tinted(woodH, pal[1], 0.55));
+      const dv = canvasTex(tinted(woodV, pal[3], 0.6)), dh = canvasTex(tinted(woodH, pal[3], 0.6));
+      return { caseSide: std({ map: tile(vt, 0.5, 2.0), roughness: 0.55 }), caseShelf: std({ map: tile(ht, 1.6, 0.3), roughness: 0.55 }),
+        caseDark: std({ map: tile(dv, 0.5, 2.0), roughness: 0.6 }), trim: std({ map: tile(dh, 1.6, 0.3), roughness: 0.5 }), recessWood: std({ color: pal[5], roughness: 0.9 }) };
+    }
+    const tint = WOOD_TINT[key] || pal[0];
+    return { caseSide: pbrMat(W, 0.7, 1.4, { color: tint, roughness: 1 }), caseShelf: pbrMat(W, 0.7, 1.4, { color: tint, rot: true }),
+      caseDark: pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.55) }),
+      trim: pbrMat(W, 0.7, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.5), rot: true }),
+      recessWood: pbrMat(W, 0.5, 1.4, { color: new THREE.Color(tint).multiplyScalar(0.2) }) };
+  };
+  Object.assign(M, caseMats(lib.theme.wood || 'oak', sets[woodSet]));
+  // a new wood repaints the same materials (the fused bookcase keeps using them)
+  async function setWood(key) {
+    const set = WOOD_SET[key] || WOOD_SET.oak;
+    const W2 = sets[set] || (sets[set] = await loadSet(set));
+    const next = caseMats(key, W2);
+    for (const k of Object.keys(next)) { if (M[k]) { M[k].copy(next[k]); M[k].needsUpdate = true; } next[k].dispose(); }
+    renderer.shadowMap.needsUpdate = true; kick();
   }
   if (sets.dark_wooden_planks) M.beam = pbrMat(sets.dark_wooden_planks, 2.2, 2.2, { color: '#b9a48c' });
   if (extra.leather) { M.tomeLeather.normalMap = tile(extra.leather, 0.15, 0.15); M.tomeLeather.needsUpdate = true; }
@@ -572,7 +591,7 @@ async function build() {
   mergeStatics();
   scene.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
   renderer.shadowMap.needsUpdate = true;
-  return { books, desk, tome, beam, motes, applyLook, furniture };
+  return { books, desk, tome, beam, motes, applyLook, furniture, setWood };
 }
 
 function mergeStatics() {
@@ -803,7 +822,14 @@ function buildBookcase(M, { cloth, leather }) {
   const arcPts = []; for (let i = 0; i <= 48; i++) { const a = Math.PI - (i / 48) * Math.PI; arcPts.push(new THREE.Vector3(Math.cos(a) * (rx + 0.004), AY + HS + Math.sin(a) * (RISE + 0.004), ZF + 0.002)); }
   mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arcPts), 64, 0.009, 8, false), M.caseShelf, g);
   const AT = SILL + 0.045, AZ = ZC + 0.02;      // the arch's floor (the picked trinkets are set out there; trophies stand on the mantel)
-  if (theme.vine !== 'none') buildVine(g, { W, top: AY + HS, RISE, ZF, ivy: theme.vine === 'ivy' });
+  // the climbing vine (roses, ivy or none) lives in its own group so Customize can change it
+  const vineG = new THREE.Group(); vineG.userData.dyn = true; g.add(vineG);
+  const setVine = (kind) => {
+    for (const c of [...vineG.children]) { vineG.remove(c); if (c.geometry) c.geometry.dispose(); }
+    if (kind !== 'none') buildVine(vineG, { W, top: AY + HS, RISE, ZF, ivy: kind === 'ivy' });
+    renderer.shadowMap.needsUpdate = true;
+  };
+  setVine(theme.vine);
 
   // ---- everything that depends on the library lives in its own group, shelved again when books change
   const shelfGroup = new THREE.Group(); shelfGroup.userData.dyn = true; g.add(shelfGroup);
@@ -1126,6 +1152,7 @@ function buildBookcase(M, { cloth, leather }) {
   const HT = AY + HS + RISE;
   const hit = new THREE.Mesh(new THREE.BoxGeometry(W + 0.1, HT, D), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set(0, HT / 2, ZC); hit.userData.station = 'shelf'; scene.add(hit);
+  api.setVine = setVine;
   return api;
 }
 
@@ -1677,10 +1704,15 @@ const STATIONS = {
   hearth: { p: [-0.5, 1.45, 2.3], t: [-2.7, 0.95, 1.6], w: 2.1, h: 2.0, max: 2.9 },
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
+  case: { p: [0, 1.2, 0.4], t: [0, 1.12, -2.5], w: 2.0, h: 2.25, max: 4.2 },
 };
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 let station = 'room', tween = null;
-function portrait() { return innerWidth / innerHeight < 1; }
+// Customize covers part of the screen (a panel on the right, or a sheet along the bottom on phones):
+// the camera frames each view inside the clear part, and the rest of the room carries on under the panel
+let inset = { r: 0, b: 0 }, customizing = false;
+const viewW = () => Math.max(1, innerWidth - inset.r), viewH = () => Math.max(1, innerHeight - inset.b);
+function portrait() { return viewW() / viewH() < 1; }
 let shelfSpan = null, shelfY = null;
 function framing(name) {
   const s = STATIONS[name];
@@ -1708,7 +1740,7 @@ function topInset() {
 }
 function shelfFraming(dir) {
   const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), ht = vt * camera.aspect;
-  const H = innerHeight, top = Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - 132) / H);
+  const H = viewH(), top = customizing ? 0.04 : Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - (customizing ? 16 : 132)) / H);
   const band = bot - top, mid = (top + bot) / 2;
   const [x0, x1] = shelfSpan, [y0, y1] = shelfY;
   const dV = (y1 - y0 + 0.08) / band / 2 / vt;
@@ -1733,7 +1765,7 @@ function shelfPan() {
   const wv = 2 * Math.max(0.3, cam.pos.z - STATIONS.shelf.t[2]) * ht;
   const [x0, x1] = shelfSpan;
   if (x1 - x0 <= wv - 0.1) return null;
-  return { lo: x0 + wv / 2 - 0.05, hi: x1 - wv / 2 + 0.05, perPx: wv / innerWidth };
+  return { lo: x0 + wv / 2 - 0.05, hi: x1 - wv / 2 + 0.05, perPx: wv / viewW() };
 }
 // people who ask their phone for less motion get short, flat moves and no flicks
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1797,7 +1829,7 @@ const TOUR = [
   ['Getting around', 'Tap a place along the bottom (Shelf, Desk, Fireside or Tome) to walk over. Drag anywhere to look around.'],
   ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes down to the desk and opens. Drag to slide along the shelves; the magnifier finds any book.'],
   ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next.'],
-  ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize (wallpaper, wood, paintings) and Send feedback.'],
+  ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback.'],
 ];
 function tourCard(i) {
   const [h, t] = TOUR[i], last = i === TOUR.length - 1;
@@ -1895,6 +1927,7 @@ canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.remove('dragging'); });
 
 function tap(px, py) {
+  if (customizing) return;
   if (!world) return;
   if (outBook) { if (outBook.phase === 'out' || outBook.phase === 'open') skipAhead(); else if (!HOST && outBook.phase === 'desk') closeUp(); return; }
   if (station === 'shelf') {
@@ -2679,8 +2712,10 @@ let world = null, last = performance.now(), lastRender = 0, activeUntil = 0, fir
 const perf = { busy: [], fpsMoving: 0, frames: 0, fpsNow: 0, tick: performance.now() };
 function kick(ms = 1200) { activeUntil = performance.now() + ms; }
 function resize() {
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect = viewW() / viewH();
   camera.fov = portrait() ? 62 : 50;
+  if (inset.r || inset.b) camera.setViewOffset(viewW(), viewH(), 0, 0, innerWidth, innerHeight);
+  else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
   if (world && !tween) { const f = outBook && outBook.phase === 'desk' ? readingView(outBook) : framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
@@ -2760,7 +2795,7 @@ const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.auth
   lib.theme.bookend, lib.theme.bookends, lib.theme.trinkets]);
 const cupSig = () => JSON.stringify(lib.trophies || {});
 const deskSig = () => JSON.stringify(lib.theme.tableItems || null);
-let lastSig = '', lastPaint = '', lastCups = '', lastDesk = '';
+let lastSig = '', lastPaint = '', lastCups = '', lastDesk = '', lastWood = '', lastVine = '';
 // the app calls this after anything changes (a book added or edited, settings, a sync)
 function refresh() {
   if (!HOST || !world) return;
@@ -2783,6 +2818,8 @@ function refresh() {
   if (cupSig() !== lastCups) { lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies); }
   if (deskSig() !== lastDesk) { lastDesk = deskSig(); world.desk.dress(); }
   if (paintSig() !== lastPaint) { lastPaint = paintSig(); hangPaintings(); }
+  if ((lib.theme.wood || 'oak') !== lastWood) { lastWood = lib.theme.wood || 'oak'; world.setWood(lastWood); }
+  if ((lib.theme.vine || 'roses') !== lastVine) { lastVine = lib.theme.vine || 'roses'; world.books.setVine(lastVine); kick(); }
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
   if (!$('card').hidden && cardKind === 'hearth') hearthCard();
@@ -2806,6 +2843,7 @@ function setActive(on) {
   lastPaint = paintSig(); hangPaintings();
   lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies);
   lastDesk = deskSig();
+  lastWood = lib.theme.wood || 'oak'; lastVine = lib.theme.vine || 'roses';
   frameShelf();
   const start = params.get('st') && STATIONS[params.get('st')] ? params.get('st') : null;
   const f = framing(start || 'room');
@@ -2815,7 +2853,15 @@ function setActive(on) {
   updateCamera(0);
   renderer.compile(scene, camera);
   requestAnimationFrame(frame);
-  window.TomesteadRoom = { refresh, setActive, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
+  // Customize (app.js): frame the room beside the panel and glide to what's being changed
+  const customize = (on, r = 0, b = 0) => {
+    if (on && !customizing) { dropOutBook(); putBack(); closeCard(); if (pulled) { pulled.userData.anim = -1; pulled = null; } }
+    customizing = !!on; inset = on ? { r, b } : { r: 0, b: 0 };
+    document.documentElement.classList.toggle('rm-customizing', customizing);
+    resize(); shelfTools();
+  };
+  const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
+  window.TomesteadRoom = { refresh, setActive, customize, show, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // the title screen stays up long enough to read its quote (tap to step in sooner)
   const Q = window.TomesteadQuotes, veil = $('veil');
@@ -2831,7 +2877,7 @@ function setActive(on) {
   requestAnimationFrame(() => {
     veil.classList.add('gone');
     setTimeout(() => veil.remove(), 1400);
-    if (!start) go('room', 2.6);
+    if (!start && !customizing) go('room', 2.6);
     else { station = start; document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === start))); shelfTools(); }
     setTimeout(() => { $('hint').classList.add('show'); setTimeout(() => $('hint').classList.remove('show'), 4200); }, start ? 300 : 2600);
     if (params.get('perf') === '1') { $('perf').hidden = false; showPerf(); }

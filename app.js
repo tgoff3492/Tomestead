@@ -90,6 +90,8 @@
   if (!prefs.roomV1) { prefs.view = 'room'; prefs.roomV1 = true; }
   // the room needs WebGL 2; anything without it keeps the classic bookcase
   let canRoom = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext && c.getContext('webgl2')); } catch { return false; } })();
+  // the reading room is home: the app always opens there (Room · Classic · List still switches any time)
+  if (canRoom) prefs.view = 'room';
   const viewNow = () => (prefs.view === 'room' && !canRoom ? 'shelf' : prefs.view);
   prefs.recs = prefs.recs || { dismissed: [] };
   // days marked as reading days by hand (the reading calendar), and a reading session in progress
@@ -1044,18 +1046,28 @@
   const onCustomize = () => location.hash === '#customize';
   const onYear = () => location.hash === '#year';
 
+  let czWas = false;
   function render() {
     adoptOldGoals();
     syncTrophies();
     syncGoalMarks();
     const cz = onCustomize(), yr = onYear();
-    if (cz || yr) roomHide();
+    // Customize works on the live reading room (a panel over it); without 3D it's a plain page
+    const czRoom = cz && canRoom && !Sync.gated;
+    document.documentElement.classList.toggle('cz-on', czRoom);
+    if (czWas && !czRoom && window.TomesteadRoom) { window.TomesteadRoom.customize(false); window.TomesteadRoom.go('room'); }
+    czWas = czRoom;
+    if (yr || (cz && !czRoom)) roomHide();
     $('#libraryPage').hidden = cz || yr;
     $('#customizePage').hidden = !cz;
     $('#yearPage').hidden = !yr;
     $('.controls').style.visibility = cz || yr ? 'hidden' : '';
     renderStats();
-    if (cz) { renderCustomize(); placeFloor(); return; }
+    if (cz) {
+      renderCustomize();
+      if (czRoom) { roomShow(); requestAnimationFrame(() => { czLayout(); czShow(); }); }
+      return;
+    }
     if (yr) { yearReview.render(); placeFloor(); return; }
     renderYears();
     renderFilters();
@@ -1134,27 +1146,21 @@
   }
 
   // ---------- customize ----------
+  // ---------- Customize: the reading room, changed live (the room shows beside or above the panel) ----------
+  // one tab at a time; each tab glides the room's camera to what it changes
+  let czTab = 'paint';
+  const CZ_VIEW = { paint: () => (paintFor === 'nook' ? 'nook' : 'hearth'), case: () => 'case', trinkets: () => 'case', desk: () => 'desk', light: () => 'room' };
+  function czShow() { if (window.TomesteadRoom && document.documentElement.classList.contains('cz-on')) window.TomesteadRoom.show(CZ_VIEW[czTab]()); }
+  function czLayout() {
+    // the panel covers the right side (wide screens) or the bottom (phones); the room frames itself in the rest
+    const el = $('#customizePage'), wide = innerWidth >= 900;
+    const r = wide ? el.offsetWidth : 0, b = wide ? 0 : el.offsetHeight;
+    if (window.TomesteadRoom) window.TomesteadRoom.customize(true, r, b);
+  }
   function renderCustomize() {
     const t = prefs.theme;
-    // preview: one bookcase with the newest books (or sample classics)
-    // a shelf with each section on it: a book or two you're reading, a couple to read, then books you've read
-    const newest = (st) => books.filter(b => statusOf(b) === st).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-    const sample = (i, status) => ({ ...SAMPLE[i], status, rating: status === 'read' ? SAMPLE[i].rating : 0 });
-    let pv = books.length
-      ? [...newest('reading').slice(0, 2), ...newest('want').slice(0, 3), ...newest('read').slice(0, 12)]
-      : [sample(0, 'reading'), sample(1, 'want'), sample(2, 'want'), ...SAMPLE.slice(3).map((b, i) => sample(i + 3, 'read'))];
-    buildCases($('#czPreview'), pv.map(b => ({ type: 'book', b, sec: statusOf(b) })), { maxRows: 1, minRows: 2, perCase: 2, plate: () => 'Preview', labels: new Set(pv.map(statusOf)).size > 1 ? {} : null });
-    const im = introMode();
-    document.querySelectorAll('#czIntro [data-intro]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.intro === im)));
-    $('#czHomeSec').hidden = !canRoom;
-    const home = viewNow() === 'room' ? 'room' : 'shelf';
-    document.querySelectorAll('#czHome [data-home]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.home === home)));
-
-    $('#czWall').innerHTML = D.WALLPAPERS.map(w => `
-      <button type="button" class="tile" role="radio" aria-checked="${t.wall === w.key}" data-wall="${w.key}">
-        <span class="tile-art wall" style="background-color:${w.color};background-image:radial-gradient(ellipse at 30% 0%, rgba(242,182,90,.22), transparent 75%),${D.svgURL(w.tile)};background-size:100% 100%,${Math.round(w.size * .75)}px ${Math.round((w.h || w.size) * .75)}px"></span>
-        <span class="tile-label">${w.name}</span><span class="check" aria-hidden="true">✓</span>
-      </button>`).join('');
+    document.querySelectorAll('#czTabs [data-tab]').forEach(b => { const on = b.dataset.tab === czTab; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
+    document.querySelectorAll('#customizePage [data-pane]').forEach(p => { p.hidden = p.dataset.pane !== czTab; });
 
     const sun = '<svg viewBox="0 0 64 44" width="64" height="44"><circle cx="32" cy="26" r="10" fill="#f2c45e"/><g stroke="#f2c45e" stroke-width="2.4" stroke-linecap="round"><path d="M32 8v-5M32 49v-5M14 26H9M55 26h-5M19 13l-3-3M45 13l3-3M19 39l-3 3M45 39l3 3"/></g></svg>';
     const moon = '<svg viewBox="0 0 64 44" width="64" height="44"><path d="M38 9a15 15 0 1 0 12 23A12 12 0 0 1 38 9z" fill="#dfe6f5"/><circle cx="14" cy="10" r="1.2" fill="#efe3c0"/><circle cx="54" cy="14" r="1" fill="#efe3c0"/><circle cx="12" cy="34" r="1" fill="#efe3c0"/></svg>';
@@ -1165,7 +1171,8 @@
         <span class="tile-art light-art ${k}">${lightArt[k]}</span>
         <span class="tile-label">${l.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
-    $('#czLightHint').textContent = `Golden hour by day; moonlight and candles by night. ${D.LIGHTS[t.light || 'system'].hint || ''} It’s ${document.documentElement.dataset.light === 'night' ? 'night' : 'day'} in your library right now.`;
+    $('#czLightHint').textContent = `Golden hour by day; moonlight and candles by night. ${D.LIGHTS[t.light || 'system'].hint || ''} It’s ${document.documentElement.dataset.light === 'night' ? 'night' : 'day'} in your room right now.`;
+
 
     $('#czWood').innerHTML = D.WOODS.map(w => {
       const [hi, lt, mid, dk, , r1, r2] = w.v;
@@ -1186,7 +1193,6 @@
       </button>`).join('');
 
     // the two paintings in the 3D room
-    $('#czPaintSec').hidden = !canRoom;
     const pNow = paintingFor(paintFor), pMine = pNow === 'mine';
     const fam = Sync.familyPaintings ? Sync.familyPaintings() : [], famOn = Sync.isFamily && Sync.isFamily();
     document.querySelectorAll('#czPaintFor [data-paintfor]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.paintfor === paintFor)));
@@ -1197,7 +1203,7 @@
         <span class="tile-label">${name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('') + fam.map(f => `
       <button type="button" class="tile" role="radio" aria-checked="${pNow === 'fam:' + f.id}" data-paint="fam:${esc(f.id)}">
-        <span class="tile-art paint-art"><img src="${esc(f.url)}" alt="" loading="lazy" crossorigin="anonymous"></span>
+        <span class="tile-art paint-art${f.url ? '' : ' mine'}">${f.url ? `<img src="${esc(f.url)}" alt="" loading="lazy">` : '<span>Opening…</span>'}</span>
         <span class="tile-label">${esc(f.name)}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('') + (famOn ? `
       <button type="button" class="tile" data-paint="famadd">
@@ -1236,19 +1242,10 @@
     }).join('');
     const n = t.trinkets.length;
     $('#czTrinketHint').textContent = n
-      ? `${n} picked. Each one appears once, set out the way you'd arrange them yourself: a centrepiece or two in the arch at the top of the bookcase, the rest in open spots on your shelves (in the reading room too). The stack of books holds one of the small pieces on top.`
+      ? `${n} picked. Each one appears once: a centrepiece or two in the arch at the top of the bookcase, the rest in open spots on the shelves, and a small piece on the stack of books.`
       : 'No trinkets on display. Pick a few to fill the empty spots on your shelves.';
 
-    renderTablePreview();
-    $('#czTable').innerHTML = Object.entries(D.TABLES).map(([k, tb]) => `
-      <button type="button" class="tile" role="radio" aria-checked="${t.table === k}" data-table="${k}">
-        <span class="tile-art table-art" data-style="${k}"></span>
-        <span class="tile-label">${tb.name}</span><span class="check" aria-hidden="true">✓</span>
-      </button>`).join('');
-    $('#czTable').querySelectorAll('.table-art').forEach(el => {
-      const w = el.clientWidth || 110, hh = el.clientHeight || 74;
-      el.innerHTML = window.TomesteadTable.drawTable({ W: w, H: hh, cx: w / 2, frontY: hh * .74, farY: hh * .2, frontW: w * .92, ratio: .7, unit: 1.4, style: el.dataset.style, items: [], id: 'tt' + el.dataset.style }).html;
-    });
+
     $('#czTableItems').innerHTML = Object.entries(D.TABLE_ITEMS).map(([k, it]) => {
       const on = t.tableItems.includes(k);
       const z = Art.size(it.art);
@@ -1260,27 +1257,8 @@
     }).join('');
     const m = t.tableItems.length;
     $('#czTableItemsHint').textContent = m
-      ? `${m} of ${D.MAX_TABLE_ITEMS} on the table${m >= D.MAX_TABLE_ITEMS ? '. Take one off to add another' : ''}. Tall pieces go to the back corners.`
+      ? `${m} of ${D.MAX_TABLE_ITEMS} on the desk${m >= D.MAX_TABLE_ITEMS ? '. Take one off to add another' : ''}. The lamp and tall pieces go to the back, small things by your hands.`
       : `Pick up to ${D.MAX_TABLE_ITEMS} things to keep beside your book.`;
-    if (window.innerWidth < 720) $('#czTableItemsHint').textContent += ' On a phone there’s only room for the lamp beside your book, so these show on larger screens.';
-  }
-
-  function renderTablePreview() {
-    const el = $('#czTablePreview');
-    const w = el.clientWidth || 600, h = el.clientHeight || 260;
-    const narrow = w < 520;
-    const phone = window.innerWidth < 720;
-    const frontW = narrow ? w * .96 : Math.min(w * .8, 900);
-    const T = window.TomesteadTable.drawTable({ W: w, H: h, cx: w / 2, frontY: h * .8, farY: h * .4, frontW, ratio: .72, narrow, unit: frontW / 100, style: prefs.theme.table, items: phone ? prefs.theme.tableItems.filter(k => k === 'lamp') : prefs.theme.tableItems, maxItems: 5, book: true, id: 'tp' });
-    el.innerHTML = T.html;
-  }
-
-  // the opening scene: every time (the default), once a day, or never — kept per device
-  const introMode = () => { try { return localStorage.getItem('tomestead.intro.mode') || 'always'; } catch { return 'always'; } };
-  function setIntroMode(m) {
-    try { localStorage.setItem('tomestead.intro.mode', m); } catch {}
-    renderCustomize();
-    toast(m === 'day' ? 'The opening scene plays the first time you open Tomestead each day.' : m === 'always' ? 'The opening scene plays every time you open Tomestead.' : 'Tomestead opens straight to your shelves.');
   }
 
   // ---------- paintings in the 3D room (room/tex/paintings/; the room draws them) ----------
@@ -1353,6 +1331,7 @@
     savePrefs();
     D.applyTheme(prefs.theme);
     renderCustomize();
+    if (document.documentElement.classList.contains('cz-on')) roomRefresh();   // the room shows the change at once
   }
 
   // ---------- cover art & summaries ----------
@@ -2758,10 +2737,15 @@
     $('#tagsBtn').addEventListener('click', () => { more.open = false; openTags(); });
     $('#csvBtn').addEventListener('click', () => { more.open = false; openImport(); });
     $('#yrDone').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); render(); window.scrollTo(0, 0); });
-    $('#czIntro').addEventListener('click', e => { const b = e.target.closest('[data-intro]'); if (b) setIntroMode(b.dataset.intro); });
-    $('#czHome').addEventListener('click', e => { const b = e.target.closest('[data-home]'); if (!b) return; prefs.view = b.dataset.home; savePrefs(); renderCustomize(); });
+    $('#czTabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; czTab = b.dataset.tab; renderCustomize(); $('.cz-panel').scrollTop = 0; czShow(); });
+    $('#czTabs').addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      const tabs = [...document.querySelectorAll('#czTabs [data-tab]')], i = tabs.findIndex(b => b.dataset.tab === czTab);
+      const nb = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      czTab = nb.dataset.tab; renderCustomize(); nb.focus(); czShow();
+    });
     $('#czBookendFor').addEventListener('click', e => { const b = e.target.closest('[data-befor]'); if (b) { bookendFor = b.dataset.befor; renderCustomize(); } });
-    $('#czPaintFor').addEventListener('click', e => { const b = e.target.closest('[data-paintfor]'); if (b) { paintFor = b.dataset.paintfor; renderCustomize(); } });
+    $('#czPaintFor').addEventListener('click', e => { const b = e.target.closest('[data-paintfor]'); if (b) { paintFor = b.dataset.paintfor; renderCustomize(); czShow(); } });
     $('#czPaintFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) paintingFromFile(f); e.target.value = ''; });
     $('#czFamFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) familyFromFile(f); e.target.value = ''; });
     $('#famForm').addEventListener('submit', saveFamily);
@@ -2807,16 +2791,18 @@
 
     // customize page
     window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+    window.addEventListener('resize', () => { if (document.documentElement.classList.contains('cz-on')) czLayout(); });
+    // the family paintings arrived or were opened: show them in Customize and hang them in the room
+    window.addEventListener('tomestead:family', () => { if (onCustomize()) renderCustomize(); roomRefresh(); });
     $('#czDone').addEventListener('click', () => {
       history.pushState(null, '', location.pathname + location.search);
       render(); window.scrollTo(0, 0);
-      toast('Your library has its new look.');
+      toast('Your reading room has its new look.');
     });
     $('#customizePage').addEventListener('click', e => {
       const t = e.target.closest('.tile'); if (!t) return;
       if (t.dataset.paint) { if (t.dataset.paint === 'mine') $('#czPaintFile').click(); else if (t.dataset.paint === 'famadd') $('#czFamFile').click(); else setPainting(paintFor, t.dataset.paint); return; }
-      if (t.dataset.wall) setTheme({ wall: t.dataset.wall });
-      else if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
+      if (t.dataset.wood) setTheme({ wood: t.dataset.wood });
       else if (t.dataset.bookend) {
         const k = t.dataset.bookend;
         if (bookendFor === 'read') {
@@ -2828,7 +2814,6 @@
       }
       else if (t.dataset.light) setTheme({ light: t.dataset.light });
       else if (t.dataset.vine) setTheme({ vine: t.dataset.vine });
-      else if (t.dataset.table) setTheme({ table: t.dataset.table });
       else if (t.dataset.titem) {
         const k = t.dataset.titem, cur = prefs.theme.tableItems;
         if (!cur.includes(k) && cur.length >= D.MAX_TABLE_ITEMS) { toast(`The table holds ${D.MAX_TABLE_ITEMS} things. Take one off first.`); return; }
@@ -3010,7 +2995,6 @@
       settings: settingsForSync,
       applySettings,
       onReady: () => { offerLegacy(); syncCovers(); },
-      onFamily: () => { if (onCustomize()) renderCustomize(); roomRefresh(); },
     });
   }
 
@@ -3097,10 +3081,13 @@
     startBook: (id) => { const b = books.find(x => x.id === id); if (b) startReading(b); },
     paintingPhoto: (slot) => Covers.uploadURL('painting-' + slot),
     familyPainting: (id) => ((Sync.familyPaintings ? Sync.familyPaintings() : []).find(f => f.id === id) || {}).url || null,
-    familySig: () => (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id).join(','),
+    familySig: () => (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id + (f.url ? '+' : '')).join(','),
     openImport: () => openImport(),
     unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
-    ready: (room) => { if (viewNow() === 'room' && !onCustomize() && !onYear()) room.setActive(true); else room.setActive(false); },
+    ready: (room) => {
+      if (document.documentElement.classList.contains('cz-on')) { room.setActive(true); czLayout(); czShow(); }
+      else if (viewNow() === 'room' && !onCustomize() && !onYear()) room.setActive(true); else room.setActive(false);
+    },
   };
   function roomShow() {
     if (Sync.gated) return roomHide();          // the sign-in card comes first; the page reloads once you're in
@@ -3109,7 +3096,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261118101353').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261118111312').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
