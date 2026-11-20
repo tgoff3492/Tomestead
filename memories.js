@@ -120,6 +120,9 @@ window.TomesteadMemories = function (api) {
       build(); at = 0; paint();
       card.hidden = false;
       requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('show')));
+      // it's a passing note: any tap elsewhere (a station, the shelf, a menu) puts it away
+      const away = (e) => { if (card.contains(e.target)) return; document.removeEventListener('pointerdown', away, true); hide(); };
+      setTimeout(() => document.addEventListener('pointerdown', away, true), 400);
     };
     setTimeout(tryNow, 2600);
   }
