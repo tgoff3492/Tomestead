@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261120134114">
+  <link rel="stylesheet" href="room/room.css?v=20261120171322">
   <script>/* the reading room is home whenever this device can show it, so the old 2D opening never plays there */ try { var cv = document.createElement('canvas'); if (cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -37,7 +37,7 @@
     <canvas id="rm-scene" aria-label="Your reading room: a bookcase, a desk, a fireplace and a magic tome"></canvas>
     <div id="rm-veil" class="veil"><div class="veil-title">Tomestead</div><div class="veil-sub" id="rm-veil-sub">Lighting the lamps…</div></div>
     <nav class="stations" aria-label="Go to">
-      <button type="button" data-go="room" aria-pressed="true">Overview</button>
+      <button type="button" data-go="room" aria-pressed="true">Room</button>
       <button type="button" data-go="shelf">Shelf</button>
       <button type="button" data-go="desk">Desk</button>
       <button type="button" data-go="hearth">Fireside</button>
@@ -67,6 +67,9 @@
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
         </summary>
         <div class="menu">
+          <button id="viewClassicBtn" class="room-only">Classic bookcase view</button>
+          <button id="viewListBtn" class="room-only">List view</button>
+          <hr class="room-only">
           <button id="recBtn">What should I read next?</button>
           <button id="yearBtn">Year in review</button>
           <button id="lifeBtn">Your reading life</button>
@@ -210,6 +213,8 @@
         <h3>Time of day</h3>
         <p class="cz-hint" id="czLightHint"></p>
         <div id="czLight" class="tiles" role="radiogroup" aria-label="Time of day"></div>
+        <h3>Walls after dark</h3>
+        <div id="czNightWall" class="tiles" role="radiogroup" aria-label="Walls after dark"></div>
       </section>
       <div class="cz-foot">
         <button id="czReset" class="btn btn-ghost">Reset to the original look</button>

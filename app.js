@@ -939,8 +939,11 @@
     const rated = read.filter(b => b.rating);
     const avg = rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : 0;
     const y = thisYear();
+    // the long line for the classic views; one short line over the room
+    const sk = calendar ? calendar.streaks() : null;
+    const short = n ? [`${n} read`, `${countInYear(y)} this year`, sk && sk.cur >= 2 ? `<button type="button" class="streak-link" data-cal-open>${sk.cur}-day streak</button>` : ''].filter(Boolean).join(' · ') : '';
     $('#stats').innerHTML = n
-      ? `${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}${streakNote()}`
+      ? `<span class="st-long">${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}${streakNote()}</span><span class="st-short">${short}</span>`
       : (books.length ? 'Your first finished book goes on the shelf.' : 'Every book you’ve read, on one shelf.');
     $('#genres').innerHTML = [...new Set(books.map(b => b.genre).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
     $('#seriesList').innerHTML = [...new Set(books.map(b => b.series).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
@@ -1149,7 +1152,7 @@
   // ---------- Customize: the reading room, changed live (the room shows beside or above the panel) ----------
   // one tab at a time; each tab glides the room's camera to what it changes
   let czTab = 'paint';
-  const CZ_VIEW = { paint: () => (paintFor === 'nook' ? 'nook' : 'hearth'), case: () => 'case', trinkets: () => 'case', desk: () => 'desk', light: () => 'room' };
+  const CZ_VIEW = { paint: () => (paintFor === 'nook' ? 'nook' : 'hearth'), case: () => 'case', trinkets: () => 'case', desk: () => 'desk', light: () => (window.TomesteadRoom && window.TomesteadRoom.home ? window.TomesteadRoom.home() : 'room') };
   function czShow() { if (window.TomesteadRoom && document.documentElement.classList.contains('cz-on')) window.TomesteadRoom.show(CZ_VIEW[czTab]()); }
   function czLayout() {
     // the panel covers the right side (wide screens) or the bottom (phones); the room frames itself in the rest
@@ -1171,7 +1174,13 @@
         <span class="tile-art light-art ${k}">${lightArt[k]}</span>
         <span class="tile-label">${l.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
-    $('#czLightHint').textContent = `Golden hour by day; moonlight and candles by night. ${D.LIGHTS[t.light || 'system'].hint || ''} It’s ${document.documentElement.dataset.light === 'night' ? 'night' : 'day'} in your room right now.`;
+    $('#czLightHint').textContent = `Golden hour by day; lamplight and candles by night. ${D.LIGHTS[t.light || 'system'].hint || ''} It’s ${document.documentElement.dataset.light === 'night' ? 'night' : 'day'} in your room right now.`;
+    const nw = t.nightWall === 'stars' ? 'stars' : 'green';
+    $('#czNightWall').innerHTML = [['green', 'Library green', '#3b4a36', '#55684f'], ['stars', 'Star chart', '#0f1a2b', '#27375a']].map(([k, name, a, b]) => `
+      <button type="button" class="tile" role="radio" aria-checked="${nw === k}" data-nightwall="${k}">
+        <span class="tile-art" style="background: radial-gradient(circle at 50% 40%, ${b}, ${a}); ${k === 'stars' ? 'background-image: radial-gradient(1px 1px at 20% 30%, #efe3c0, transparent), radial-gradient(1px 1px at 70% 60%, #efe3c0, transparent), radial-gradient(1.2px 1.2px at 45% 75%, #efe3c0, transparent), radial-gradient(circle at 50% 40%, ' + b + ', ' + a + ');' : ''}"></span>
+        <span class="tile-label">${name}</span><span class="check" aria-hidden="true">✓</span>
+      </button>`).join('');
 
 
     $('#czWood').innerHTML = D.WOODS.map(w => {
@@ -2742,6 +2751,9 @@
     $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
     $('#yearBtn').addEventListener('click', () => { more.open = false; location.hash = 'year'; });
     $('#lifeBtn').addEventListener('click', () => { more.open = false; openLife(); });
+    // over the room, the view switch lives in this menu
+    $('#viewClassicBtn').addEventListener('click', () => { more.open = false; prefs.view = 'shelf'; savePrefs(); render(); });
+    $('#viewListBtn').addEventListener('click', () => { more.open = false; prefs.view = 'list'; savePrefs(); render(); });
     $('#tagsBtn').addEventListener('click', () => { more.open = false; openTags(); });
     $('#csvBtn').addEventListener('click', () => { more.open = false; openImport(); });
     $('#yrDone').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); render(); window.scrollTo(0, 0); });
@@ -2821,6 +2833,7 @@
         } else setTheme({ bookends: { ...(prefs.theme.bookends || {}), [bookendFor]: k } });
       }
       else if (t.dataset.light) setTheme({ light: t.dataset.light });
+      else if (t.dataset.nightwall) setTheme({ nightWall: t.dataset.nightwall });
       else if (t.dataset.vine) setTheme({ vine: t.dataset.vine });
       else if (t.dataset.titem) {
         const k = t.dataset.titem, cur = prefs.theme.tableItems;
@@ -3106,7 +3119,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261120134114').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261120171322').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

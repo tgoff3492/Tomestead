@@ -344,6 +344,7 @@ function placeFurniture(MOD, M) {
   let chand = null, chandGlow = null, bulbs = [];
   if (MOD.chandelier) {
     placeModel(MOD.chandelier, 0, 2.97 - 0.908 * 0.85, 0.05, 0, 0.85, { cast: false });
+    MOD.chandelier.userData.cut = true; CUT.push(MOD.chandelier);   // it hangs from the ceiling: it goes with it
     MOD.chandelier.traverse((o) => { if (o.isMesh && /bulb/.test(o.material.name)) bulbs.push(o.material); });
     chand = new THREE.PointLight('#ffc27a', 0, 7, 2); chand.position.set(0, 2.35, 0.05); scene.add(chand);
     const gm = new THREE.SpriteMaterial({ map: canvasTex(glowTex(), { repeat: false }), color: '#ffcf8a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
@@ -468,11 +469,16 @@ async function build() {
   // ----- the room: 6m wide, 5.4m deep, 3m tall
   const floor = mesh(new THREE.PlaneGeometry(6, 5.4).rotateX(-Math.PI / 2), floorMat, scene, { cast: false });
   worldUV(floor.geometry);
-  box(6.2, 0.1, 5.6, M.beam, 0, 3.05, 0);                         // ceiling
-  for (const x of [-2.25, -0.75, 0.75, 2.25]) box(0.18, 0.22, 5.4, M.beam, x, 2.89, 0);
+  // the ceiling, the right wall and the front wall lift away in the dollhouse view (CUT); they stay
+  // separate meshes (userData) so the merge below leaves them alone
+  const cut = (m) => { m.userData.cut = true; CUT.push(m); return m; };
+  cut(box(6.2, 0.1, 5.6, M.beam, 0, 3.05, 0));                    // ceiling
+  for (const x of [-2.25, -0.75, 0.75, 2.25]) cut(box(0.18, 0.22, 5.4, M.beam, x, 2.89, 0));
   box(6.2, 3.1, 0.1, wallMat, 0, 1.5, -2.75);                      // back wall
-  box(0.1, 3.1, 5.6, wallMat, 3.05, 1.5, 0);                       // right wall
-  box(6.2, 3.1, 0.1, wallMat, 0, 1.5, 2.75);                       // front wall
+  cut(box(0.1, 3.1, 5.6, wallMat, 3.05, 1.5, 0));                  // right wall
+  cut(box(6.2, 3.1, 0.1, wallMat, 0, 1.5, 2.75));                  // front wall
+  // the plinth the dollhouse stands on (only seen from outside)
+  for (const m of [box(6.3, 0.34, 5.7, M.beam, -0.05, -0.17, 0), box(6.42, 0.06, 5.82, M.trim, -0.05, -0.37, 0)]) { m.userData.plinth = true; m.visible = false; PLINTH.push(m); }
   // left wall, with the window opening (z −1.3…0.1, y 0.85…2.45)
   const WIN = { z0: -1.3, z1: 0.1, y0: 0.85, y1: 2.45 };
   box(0.1, WIN.y0, 5.6, wallMat, -3.05, WIN.y0 / 2, 0);
@@ -481,10 +487,10 @@ async function build() {
   box(0.1, WIN.y1 - WIN.y0, 2.8 - WIN.z1, wallMat, -3.05, (WIN.y0 + WIN.y1) / 2, (2.8 + WIN.z1) / 2);
   // wainscot panels and a rail along the walls
   box(6, 0.9, 0.03, panelMat, 0, 0.45, -2.685);
-  box(0.03, 0.9, 5.4, panelMat, 2.985, 0.45, 0);
+  cut(box(0.03, 0.9, 5.4, panelMat, 2.985, 0.45, 0));
   box(0.03, 0.82, 5.4, panelMat, -2.985, 0.41, 0);
   box(6, 0.045, 0.06, M.trim, 0, 0.92, -2.67);
-  box(0.06, 0.045, 5.4, M.trim, 2.97, 0.92, 0);
+  cut(box(0.06, 0.045, 5.4, M.trim, 2.97, 0.92, 0));
   box(0.06, 0.045, 5.4, M.trim, -2.97, 0.84, 0);
 
   // ----- window
@@ -524,9 +530,9 @@ async function build() {
   const rug = mesh(new THREE.PlaneGeometry(extra.rug ? 2.8 * 1580 / 1520 : 2.8, 1.9).rotateX(-Math.PI / 2), std({ map: rugMap, roughness: 0.96, alphaTest: extra.rug ? 0.5 : 0, normalMap: extra.wool ? tile(extra.wool, 0.18, 0.18) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), scene, { cast: false });
   rug.position.set(0, 0.004, -0.35);
   const map = mesh(new THREE.PlaneGeometry(1.0, 1.25).rotateY(-Math.PI / 2), std({ map: canvasTex(starChart(true), { repeat: false }), roughness: 0.8 }), scene, { cast: false });
-  map.position.set(2.985, 1.75, 0.1);
-  box(0.04, 0.05, 1.12, M.gold, 2.98, 2.4, 0.1); box(0.04, 0.05, 1.12, M.gold, 2.98, 1.1, 0.1);
-  box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, -0.45); box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, 0.65);
+  map.position.set(2.985, 1.75, 0.1); cut(map);
+  cut(box(0.04, 0.05, 1.12, M.gold, 2.98, 2.4, 0.1)); cut(box(0.04, 0.05, 1.12, M.gold, 2.98, 1.1, 0.1));
+  cut(box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, -0.45)); cut(box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, 0.65));
 
   // ----- light
   const hemi = new THREE.HemisphereLight('#ffe6c4', '#4a3020', 1);
@@ -557,14 +563,16 @@ async function build() {
 
   const LOOK = {
     day: { hemi: ['#ffe8c8', '#4a3020', 0.55], sun: ['#ffb46b', 8.5], bounce: 3.0, fill: 1.3, fillC: '#ffd9a8', lamp: 0.6, candle: 0, tome: 0.5, shelf: 0, oil: 0, chand: 0,
-      env: 0.3, exposure: 1.0, beam: [1, 0.78, 0.5], beamA: 0.85, mote: [1, 0.9, 0.7], moteA: 1, wall: wallDay, wallC: '#ffffff', sky: 'day', bg: '#140d08' },
-    night: { hemi: ['#6f86c0', '#120c10', 0.32], sun: ['#8fa8ff', 1.1], bounce: 0.25, fill: 0.7, fillC: '#8094d0', lamp: 3.4, candle: 1.6, tome: 1.6, shelf: 1.2, oil: 2.8, chand: 5.5,
-      env: 0.08, exposure: 1.08, beam: [0.55, 0.66, 1], beamA: 0.22, mote: [0.9, 0.75, 0.5], moteA: 0.45, wall: wallNight, wallC: '#ffffff', sky: 'night', bg: '#07080e' },
+      env: 0.3, exposure: 1.0, beam: [1, 0.78, 0.5], beamA: 0.85, mote: [1, 0.9, 0.7], moteA: 1, wall: wallDay, wallC: '#ecc995', sky: 'day', bg: '#1a120c' },
+    // lamplight: a darker room around warm pools of light, deep library-green walls
+    night: { hemi: ['#5c5070', '#120a08', 0.2], sun: ['#8fa8ff', 0.8], bounce: 0.18, fill: 0.42, fillC: '#ffb47a', lamp: 4.8, candle: 2.1, tome: 1.8, shelf: 1.7, oil: 4.0, chand: 4.2,
+      env: 0.06, exposure: 1.16, beam: [0.55, 0.66, 1], beamA: 0.14, mote: [0.9, 0.75, 0.5], moteA: 0.38, wall: wallDay, wallC: '#5d7055', sky: 'night', bg: '#0b0a0f' },
   };
   const skyCanvases = { day: skyMat.map, night: canvasTex(skyTex('night'), { repeat: false }) };
   function applyLook() {
     const L = LOOK[mode];
-    hemi.color.set(L.hemi[0]); hemi.groundColor.set(L.hemi[1]); hemi.intensity = L.hemi[2];
+    const starry = mode === 'night' && lib.theme.nightWall === 'stars';   // the star chart keeps its moonlight
+    hemi.color.set(starry ? '#6f86c0' : L.hemi[0]); hemi.groundColor.set(L.hemi[1]); hemi.intensity = starry ? 0.34 : L.hemi[2];
     sun.color.set(L.sun[0]); sun.intensity = L.sun[1];
     bounce.intensity = L.bounce; bounce.color.set(mode === 'day' ? '#ffb87a' : '#7d90d0');
     fill.intensity = L.fill; fill.color.set(L.fillC); shelfGlow.intensity = L.shelf;
@@ -575,7 +583,8 @@ async function build() {
     renderer.toneMappingExposure = L.exposure;
     beam.material.uniforms.uColor.value.set(...L.beam); beam.material.uniforms.uA.value = L.beamA;
     motes.material.uniforms.uColor.value.set(...L.mote); motes.material.uniforms.uA.value = L.moteA;
-    wallMat.map = L.wall; wallMat.needsUpdate = true;
+    const stars = mode === 'night' && lib.theme.nightWall === 'stars';
+    wallMat.map = stars ? wallNight : L.wall; wallMat.color.set(stars ? '#ffffff' : L.wallC); wallMat.needsUpdate = true;
     skyMat.map = skyCanvases[L.sky]; skyMat.needsUpdate = true;
     scene.background.set(L.bg);
     if ($('light')) { $('light').textContent = mode === 'day' ? '☾' : '☀'; $('light').setAttribute('aria-label', mode === 'day' ? 'Switch to night' : 'Switch to day'); }
@@ -1698,6 +1707,9 @@ function buildMotes(WIN, dir) {
 
 // ---------------------------------------------------------------- camera stations
 const STATIONS = {
+  // the dollhouse: the whole room from outside, its ceiling and two walls lifted away, on a long lens
+  house: { p: [9.6, 9.0, 11.0], t: [-0.3, 0.5, -0.2], w: 9.4, h: 6.8, max: 90, fov: 24, free: true },
+  // in the room: standing just inside the door
   room: { p: [1.0, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 },
   shelf: { p: [0, 1.4, -0.95], t: [0, 1.2, -2.4], w: 1.25, h: 1.0, max: 2.15 },
   desk: { p: [-1.25, 1.55, 0.55], t: [-2.65, 0.82, -0.6], w: 1.5, h: 1.2, max: 2.4 },
@@ -1711,6 +1723,17 @@ const STATIONS = {
 };
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 let station = 'room', tween = null;
+// home is the dollhouse, or standing in the room: your pick, remembered on this device
+const HOME_KEY = 'tomestead.roomhome';
+let homeView = (() => { try { return localStorage.getItem(HOME_KEY) === 'room' ? 'room' : 'house'; } catch { return 'house'; } })();
+const home = () => homeView;
+const isHome = (st) => st === 'house' || st === 'room';
+function setHome(v) { homeView = v === 'room' ? 'room' : 'house'; try { localStorage.setItem(HOME_KEY, homeView); } catch {} }
+const baseFov = () => (portrait() ? 62 : 50);
+const fovFor = (name) => (STATIONS[name] && STATIONS[name].fov) || baseFov();
+function pressStation(name) {
+  document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === name || (b.dataset.go === 'room' && isHome(name)))));
+}
 // Customize covers part of the screen (a panel on the right, or a sheet along the bottom on phones):
 // the camera frames each view inside the clear part, and the rest of the room carries on under the panel
 let inset = { r: 0, b: 0 }, customizing = false;
@@ -1721,13 +1744,29 @@ function framing(name) {
   const s = STATIONS[name];
   const p = new THREE.Vector3(...s.p), t = new THREE.Vector3(...s.t);
   const dir = t.clone().sub(p); const base = dir.length(); dir.normalize();
-  const hf = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect);
-  const need = Math.max(s.w / 2 / Math.tan(hf / 2), s.h / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  const fov = fovFor(name), vt = Math.tan(THREE.MathUtils.degToRad(fov) / 2);
+  const hf = 2 * Math.atan(vt * camera.aspect);
+  if (name === 'house') return houseFraming(s, t, dir, vt, hf);
+  const need = Math.max(s.w / 2 / Math.tan(hf / 2), s.h / 2 / vt);
   const d = Math.min(s.max, Math.max(base, need));
   const pos = t.clone().addScaledVector(dir, -d);
   if (name === 'shelf' && shelfSpan) return shelfFraming(dir);
   pos.x = THREE.MathUtils.clamp(pos.x, -2.75, 2.75); pos.z = Math.min(pos.z, 2.6);
   return { pos, dir: t.clone().sub(pos).normalize(), dist: t.distanceTo(pos) };
+}
+// The dollhouse sits in the clear band between the header and what's along the bottom (the stations,
+// and the Reading now card), not just the middle of the screen
+function houseFraming(s, t, dir, vt, hf) {
+  const H = viewH();
+  const top = customizing ? 0.03 : Math.min(0.35, topInset() / H);
+  const reserve = customizing ? 12 : 84 + (nowBook() && portrait() && HOST ? 170 : 0);
+  const bot = Math.max(top + 0.35, (H - reserve) / H), band = bot - top, mid = (top + bot) / 2;
+  const d = Math.max(s.w / 2 / Math.tan(hf / 2), s.h / 2 / vt / band);
+  const vh = 2 * d * vt;
+  const up = new THREE.Vector3().crossVectors(new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize(), dir).normalize();
+  const aim = t.clone().addScaledVector(up, (mid - 0.5) * vh);
+  const pos = aim.clone().addScaledVector(dir, -d);
+  return { pos, dir: dir.clone(), dist: d };
 }
 // The bookcase view: close enough that spines are readable and easy to tap on a phone, with every
 // shelf of books between the controls at the top and the station bar at the bottom. When the books
@@ -1784,10 +1823,12 @@ function go(name, dur = 1.5, { arrive = true } = {}) {
 // just the camera move
 function glide(name, dur, arrive) {
   if (calm.matches) dur = Math.min(dur, 0.35);
+  if (station === 'house' && !tween) bakeOrbit();
+  if (name === 'house' || station === 'house') dur = Math.max(dur, calm.matches ? 0.35 : 1.9);   // stepping in or out takes a breath longer
   station = name; cam.vx = 0;
-  document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === name)));
-  const to = framing(name);
-  tween = { t: 0, dur, flat: calm.matches, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to, arrive: arrive ? name : null };
+  pressStation(name);
+  const to = framing(name); to.fov = fovFor(name);
+  tween = { t: 0, dur, flat: calm.matches || name === 'house', from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist, fov: camera.fov }, to, arrive: arrive ? name : null };
   cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
   shelfTools();
 }
@@ -1797,7 +1838,7 @@ function arrived(name) {
   if (name === 'desk') deskCard();
   else if (name === 'hearth') hearthCard();
   else if (name === 'tome') tomeCard();
-  else if (name === 'room') firstRun();
+  else if (isHome(name)) firstRun();
 }
 // a word on how the shelf works, the first few visits
 const HINT_KEY = 'tomestead.shelfhint';
@@ -1829,7 +1870,7 @@ function welcomeCard() {
     <div class="acts"><button type="button" data-act="add">Add your first book</button><button type="button" class="quiet" data-act="import">Import from Goodreads or StoryGraph</button><button type="button" class="quiet" data-act="tour">Show me around</button></div>`, 'welcome');
 }
 const TOUR = [
-  ['Getting around', 'Tap a place along the bottom (Shelf, Desk, Fireside or Tome) to walk over. Drag anywhere to look around.'],
+  ['Getting around', 'Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom to walk over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse.'],
   ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes down to the desk and opens. Drag to slide along the shelves; the magnifier finds any book.'],
   ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next.'],
   ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback.'],
@@ -1861,7 +1902,8 @@ function updateCamera(dt) {
     cam.dir.copy(tween.from.dir).lerp(tween.to.dir, k).normalize();
     cam.dist = THREE.MathUtils.lerp(tween.from.dist, tween.to.dist, k);
     if (tween.flat) cam.pos.y -= Math.sin(k * Math.PI) * 0.08;
-    if (tween.t >= 1) { const a = tween.arrive; tween = null; if (a) arrived(a); }
+    if (tween.from.fov && tween.to.fov) setFov(THREE.MathUtils.lerp(tween.from.fov, tween.to.fov, k));
+    if (tween.t >= 1) { const a = tween.arrive; if (tween.to.fov) setFov(tween.to.fov); tween = null; if (a) arrived(a); }
   } else if (!drag) {
     cam.yaw += cam.vyaw; cam.pitch += cam.vpitch;
     cam.vyaw *= 0.9; cam.vpitch *= 0.9;
@@ -1876,11 +1918,47 @@ function updateCamera(dt) {
       if (Math.abs(cam.vx) < 2e-6) cam.vx = 0;
     }
   }
-  const yl = portrait() ? 0.7 : 0.5;
+  const orbit = station === 'house' && !tween;
+  const yl = orbit ? 0.55 : portrait() ? 0.7 : 0.5;
   cam.yaw = THREE.MathUtils.clamp(cam.yaw, -yl, yl);
-  cam.pitch = THREE.MathUtils.clamp(cam.pitch, -0.3, 0.3);
-  camera.position.copy(cam.pos);
-  camera.lookAt(cam.pos.clone().addScaledVector(lookDir(), cam.dist));
+  cam.pitch = THREE.MathUtils.clamp(cam.pitch, orbit ? -0.12 : -0.3, orbit ? 0.22 : 0.3);
+  if (orbit) {
+    // in the dollhouse, dragging turns the little room on its plinth (the camera circles it)
+    const tgt = cam.pos.clone().addScaledVector(cam.dir, cam.dist);
+    const off = cam.pos.clone().sub(tgt).applyAxisAngle(UP, -cam.yaw);
+    off.applyAxisAngle(new THREE.Vector3().crossVectors(off, UP).normalize(), cam.pitch);
+    camera.position.copy(tgt).add(off);
+    camera.lookAt(tgt);
+  } else {
+    camera.position.copy(cam.pos);
+    camera.lookAt(cam.pos.clone().addScaledVector(lookDir(), cam.dist));
+  }
+  outside();
+}
+const UP = new THREE.Vector3(0, 1, 0);
+function setFov(f) { if (Math.abs(camera.fov - f) > 1e-3) { camera.fov = f; camera.updateProjectionMatrix(); } }
+// leaving the dollhouse: the turned view becomes the starting point of the glide
+function bakeOrbit() {
+  cam.pos.copy(camera.position);
+  cam.dir.copy(camera.getWorldDirection(new THREE.Vector3()));
+  cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
+}
+// From outside, the ceiling and the near walls lift away and the room stands on its plinth; step
+// back in and they return. Near and far planes follow how far out the camera is.
+const CUT = [], PLINTH = [];
+let isOut = false;
+function outside() {
+  const p = camera.position;
+  const dx = Math.max(0, Math.abs(p.x) - 3.1), dy = Math.max(0, p.y - 3.1, -p.y), dz = Math.max(0, Math.abs(p.z) - 2.8);
+  const away = Math.hypot(dx, dy, dz);
+  const out = away > 0.02;
+  const near = out ? THREE.MathUtils.clamp(away * 0.5, 0.05, 3) : 0.05, far = 30 + away * 2;
+  if (Math.abs(camera.near - near) > 0.01 || Math.abs(camera.far - far) > 0.5) { camera.near = near; camera.far = far; camera.updateProjectionMatrix(); }
+  if (out === isOut) return;
+  isOut = out;
+  for (const m of CUT) m.visible = !out;
+  for (const m of PLINTH) m.visible = out;
+  renderer.shadowMap.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------- input
@@ -2562,7 +2640,7 @@ function startBack() {
     o.p0 = P.pos; o.q0 = P.q;
     browseIdx = Math.max(0, indexOfMesh(o.m));
   } else o.carry.root.visible = false;
-  const to = o.from || 'room';
+  const to = o.from || home();
   glide(to, 1.4, !o.pending && (to === 'desk' || to === 'hearth' || to === 'tome'));
   kick(2000);
 }
@@ -2699,18 +2777,100 @@ function clockText(ms) {
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
 }
 $('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
-document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go); kick(); }));
+document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go === 'room' ? home() : b.dataset.go); kick(); }));
 if ($('light')) $('light').addEventListener('click', () => { mode = mode === 'day' ? 'night' : 'day'; world.applyLook(); kick(); });
 addEventListener('keydown', (e) => {
   if (!active || outBook || document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
-  const order = ['room', 'shelf', 'desk', 'hearth', 'tome'];
+  const order = [home(), 'shelf', 'desk', 'hearth', 'tome'];
   if (station === 'shelf' && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { selectBook(browseIdx + (e.key === 'ArrowRight' ? 1 : -1)); kick(); return; }
   if (station === 'shelf' && e.key === 'Enter' && pulled) { e.preventDefault(); openOnDesk(pulled.userData.book.id); return; }
   if (station === 'shelf' && (e.key === '/' || (e.key === 'f' && (e.metaKey || e.ctrlKey)))) { e.preventDefault(); openSearch(); return; }
-  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(order.indexOf(station) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(Math.max(0, order.indexOf(isHome(station) ? home() : station)) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
   if (e.key === 'Escape') { putBack(); closeCard(); }
   kick();
 });
+
+
+// ---------------------------------------------------------------- dollhouse overlays
+// brass pins over the little room (tap one to walk over), the Step inside / Whole room switch,
+// and a Reading now card under the dollhouse
+const ROOT = canvas.parentElement;
+const PINS = [['shelf', 'Shelf', [0, 2.3, -2.45]], ['desk', 'Desk', [-2.55, 1.15, -0.6]], ['hearth', 'Fireside', [-2.72, 1.5, 1.6]], ['tome', 'Tome', [2.25, 1.55, 0.1]]];
+const pinBox = document.createElement('div');
+pinBox.className = 'pins'; pinBox.hidden = true;
+pinBox.innerHTML = PINS.map(([st, label]) => `<button type="button" class="pin" data-pin="${st}"><span class="pin-label">${label}</span><span class="pin-dot" aria-hidden="true"></span></button>`).join('');
+ROOT.appendChild(pinBox);
+pinBox.addEventListener('click', (e) => { const b = e.target.closest('[data-pin]'); if (b) { go(b.dataset.pin); kick(); } });
+const swap = document.createElement('button');
+swap.type = 'button'; swap.className = 'view-swap'; swap.hidden = true;
+ROOT.appendChild(swap);
+swap.addEventListener('click', () => { setHome(home() === 'house' ? 'room' : 'house'); go(home()); kick(); });
+const nowEl = document.createElement('section');
+nowEl.className = 'now-card'; nowEl.hidden = true; nowEl.setAttribute('aria-label', 'Reading now');
+ROOT.appendChild(nowEl);
+nowEl.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-now]'); if (!a || !HOST) return;
+  const id = a.dataset.id;
+  if (a.dataset.now === 'settle') { const t = HOST.timer && HOST.timer(); if (t && t.id === id && HOST.settle) HOST.settle(id); else HOST.startTimer(id); }
+  else if (a.dataset.now === 'open') openOnDesk(id);
+  kick();
+});
+// the book you're most likely reading right now
+function nowBook() {
+  const r = lib.books.filter((b) => b.status === 'reading');
+  if (!r.length) return null;
+  const at = (b) => Math.max(Number(b.progressAt) || 0, Date.parse(b.started || '') || 0, Number(b.addedAt) || 0);
+  return r.sort((a, b) => at(b) - at(a))[0];
+}
+function nowWhere(b) {
+  const p = Number(b.progress) || 0;
+  if (b.format === 'ebook' || b.format === 'audio' || !b.pages) return p ? `${Math.round(p)}%` : 'Just started';
+  return p ? `p. ${p} of ${b.pages}` : 'Just started';
+}
+function nowPct(b) { const p = Number(b.progress) || 0; return b.format === 'ebook' || b.format === 'audio' || !b.pages ? Math.min(100, p) : Math.min(100, Math.round((p / b.pages) * 100)); }
+let nowSig = '';
+function paintNow(b) {
+  const t = HOST && HOST.timer ? HOST.timer() : null;
+  const sig = b ? [b.id, b.title, b.progress, b.pages, t && t.id].join('|') : '';
+  if (sig === nowSig) return;
+  nowSig = sig;
+  if (!b) { nowEl.innerHTML = ''; return; }
+  const going = t && t.id === b.id;
+  nowEl.innerHTML = `<div class="now-row"><span class="now-spine" style="background:${esc(b.color || '#7a2f2f')}" aria-hidden="true"></span>
+    <div class="now-text"><p class="now-eyebrow">Reading now · ${esc(nowWhere(b))}</p><p class="now-title">${esc(b.title)}</p>
+    <div class="now-bar"><span style="width:${nowPct(b)}%"></span></div></div></div>
+    <div class="now-acts"><button type="button" class="now-go" data-now="settle" data-id="${esc(b.id)}">${going ? 'Back to reading' : 'Settle in and read'}</button>
+    <button type="button" class="now-open" data-now="open" data-id="${esc(b.id)}">Open</button></div>`;
+}
+const pv = new THREE.Vector3();
+function overlays() {
+  const calmNow = !!tween || customizing || settled || !!outBook || !world;
+  const atHouse = station === 'house' && !calmNow;
+  pinBox.hidden = !atHouse;
+  if (atHouse) {
+    pinBox.querySelectorAll('.pin').forEach((el, i) => {
+      pv.set(...PINS[i][2]).project(camera);
+      el.style.transform = `translate(${((pv.x + 1) / 2) * innerWidth}px, ${((1 - pv.y) / 2) * innerHeight}px) translate(-50%, -100%)`;
+    });
+  }
+  const showSwap = !calmNow && isHome(station) && !!HOST;
+  swap.hidden = !showSwap;
+  if (showSwap) {
+    const inHouse = station === 'house';
+    const label = inHouse ? 'Step inside' : 'Whole room';
+    if (swap.dataset.k !== label) {
+      swap.dataset.k = label;
+      swap.innerHTML = inHouse
+        ? `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20V5.5L12 3l8 2.5V20M9 20v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>${label}`
+        : `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 9l9-6 9 6-9 6-9-6zM3 9v6l9 6 9-6V9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>${label}`;
+      swap.setAttribute('aria-label', inHouse ? 'Step inside the room' : 'See the whole room, like a dollhouse');
+    }
+    swap.style.top = `${Math.round(topInset() + 2)}px`;
+  }
+  const b = atHouse && HOST && $('card').hidden ? nowBook() : null;
+  paintNow(b);
+  nowEl.hidden = !b;
+}
 
 // ---------------------------------------------------------------- loop (and keeping it fast)
 let world = null, last = performance.now(), lastRender = 0, activeUntil = 0, firstFrameAt = 0;
@@ -2718,7 +2878,7 @@ const perf = { busy: [], fpsMoving: 0, frames: 0, fpsNow: 0, tick: performance.n
 function kick(ms = 1200) { activeUntil = performance.now() + ms; }
 function resize() {
   camera.aspect = viewW() / viewH();
-  camera.fov = portrait() ? 62 : 50;
+  if (!tween) camera.fov = fovFor(station);
   if (inset.r || inset.b) camera.setViewOffset(viewW(), viewH(), 0, 0, innerWidth, innerHeight);
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
@@ -2738,6 +2898,7 @@ function frame(now) {
   const t = now / 1000;
   if (turning && (turning.t += dt) > 0.34) finishTurn();
   updateCamera(dt);
+  overlays();
   stepDesk(dt);
   const booksMoving = animateBooks(dt);
   if (booksMoving) kick(300);
@@ -2832,8 +2993,11 @@ function refresh() {
   if (!$('card').hidden && cardKind === 'welcome' && lib.books.length) { closeCard(); if (!tourSeen()) tourCard(0); }
   const m = lightNow(lib.theme.light || 'system');
   if (m !== mode && !settled) { mode = m; world.applyLook(); }
+  else if ((lib.theme.nightWall || 'green') !== lastWall) world.applyLook();
+  lastWall = lib.theme.nightWall || 'green';
   kick();
 }
+let lastWall = '';
 // reading mode (ritual.js): the room goes to lamplight and the view settles by the armchair, then
 // comes back the way it was when you're done
 let settled = false;
@@ -2846,7 +3010,7 @@ function settle(on) {
   } else {
     const m = lightNow(lib.theme.light || 'system');
     if (m !== mode) { mode = m; world.applyLook(); renderer.shadowMap.needsUpdate = true; }
-    if (!outBook) glide('room', 2.0, false);
+    if (!outBook) glide(home(), 2.0, false);
   }
   kick(2600);
 }
@@ -2870,6 +3034,7 @@ function setActive(on) {
   const f = framing(start || 'room');
   cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist;
   if (!start) { cam.pos.z = Math.min(2.6, cam.pos.z + 0.9); cam.pos.y += 0.3; cam.pitch = -0.12; }
+  if (start === 'house') setFov(fovFor('house'));
   if (params.get('yaw')) cam.yaw = Number(params.get('yaw'));
   updateCamera(0);
   renderer.compile(scene, camera);
@@ -2882,7 +3047,7 @@ function setActive(on) {
     resize(); shelfTools();
   };
   const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
-  window.TomesteadRoom = { refresh, setActive, customize, show, settle, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
+  window.TomesteadRoom = { refresh, setActive, customize, show, settle, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // the title screen stays up long enough to read its quote (tap to step in sooner)
   const Q = window.TomesteadQuotes, veil = $('veil');
@@ -2898,8 +3063,8 @@ function setActive(on) {
   requestAnimationFrame(() => {
     veil.classList.add('gone');
     setTimeout(() => veil.remove(), 1400);
-    if (!start && !customizing) go('room', 2.6);
-    else { station = start; document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === start))); shelfTools(); }
+    if (!start && !customizing) go(home(), 2.6);
+    else { station = start; pressStation(start); if (start === 'house') setFov(fovFor('house')); shelfTools(); }
     setTimeout(() => { $('hint').classList.add('show'); setTimeout(() => $('hint').classList.remove('show'), 4200); }, start ? 300 : 2600);
     if (params.get('perf') === '1') { $('perf').hidden = false; showPerf(); }
   });

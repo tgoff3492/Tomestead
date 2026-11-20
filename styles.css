@@ -1917,3 +1917,16 @@ button.lf-what:hover { text-decoration: underline; text-decoration-color: rgba(1
   .ri-body { width: 430px; padding: 0 56px; }
   .ritual.in-room .ri-shade { background: linear-gradient(90deg, rgba(8,5,3,0) 0%, rgba(8,5,3,.12) 45%, rgba(8,5,3,.82) 68%, rgba(6,4,2,.95) 100%); }
 }
+
+/* ---------- over the room: one short header line; the view switch is in the ••• menu ---------- */
+.st-short, .room-only { display: none !important; }
+html.room-mode .st-long { display: none; }
+html.room-mode .st-short { display: inline !important; }
+html.room-mode .room-only { display: block !important; }
+html.room-mode hr.room-only { display: block !important; }
+html.room-mode .viewtoggle { display: none !important; }
+html.room-mode .toolbar { min-height: 0; padding-top: 0; padding-bottom: 0; }
+html.room-mode .topbar .brand h1 { font-size: clamp(1.5rem, 6vw, 1.9rem); }
+html.room-mode .stats { font-size: .95rem; margin-top: 1px; }
+html.room-mode .stats .streak-link { font-size: inherit; }
+html.room-mode #stage::before { height: calc(env(safe-area-inset-top) + 140px); }
