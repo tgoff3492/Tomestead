@@ -99,7 +99,7 @@
   const cleanTimer = (t) => (t && typeof t === 'object' && /^[A-Za-z0-9_-]{1,120}$/.test(String(t.id || '')) && Number(t.start) > 0 ? { id: String(t.id), start: Number(t.start) } : null);
   prefs.readMarks = cleanMarks(prefs.readMarks);
   prefs.timer = cleanTimer(prefs.timer);
-  let calendar = null;
+  let calendar = null, memories = null, ritual = null, openLife = () => {};
   // tags: a starter set you can change, plus any you make yourself
   const TAG_PRESETS = ['Favorite', 'Comfort read', 'Book club', 'Cozy', 'Dark', 'Funny', 'Hopeful', 'Emotional', 'Mysterious', 'Adventurous', 'Thought-provoking', 'Fast-paced'];
   function cleanTags(arr) {
@@ -1787,14 +1787,16 @@
     const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
     return h ? `${h}:${pad2(m)}:${pad2(t % 60)}` : `${m}:${pad2(t % 60)}`;
   }
-  function startTimer(id) {
+  // settle: step straight into reading mode (the room dims, the sounds start) rather than just a toast
+  function startTimer(id, { settle = false } = {}) {
     const b = books.find(x => x.id === id);
     if (!b) return;
     const cur = timerNow();
-    if (cur && cur.id === id) return;
+    if (cur && cur.id === id) { if (settle && ritual) ritual.open(id); return; }
     if (cur) stopTimer({ quiet: true });
     prefs.timer = { id, start: Date.now() };
     savePrefs(); renderTimer(); roomRefresh();
+    if (settle && ritual && ritual.open(id)) return;
     toast(`Timer’s running for “${b.title}”. Tap it at the top when you stop.`);
   }
   function stopTimer({ quiet = false, discard = false } = {}) {
@@ -1813,6 +1815,7 @@
   function renderTimer() {
     const t = timerNow(), chip = $('#timerChip');
     clearInterval(timerTick); timerTick = null;
+    if (ritual) ritual.refresh();
     if (!chip) return;
     if (!t) { chip.hidden = true; return; }
     const b = books.find(x => x.id === t.id);
@@ -1882,6 +1885,7 @@
     $('#prSession').textContent = opts.session >= 1 ? `You read for ${opts.session >= 60 ? `${Math.floor(opts.session / 60)} h ${opts.session % 60} min` : `${opts.session} min`}. Where did you get to?` : 'Where did you get to?';
     $('#prTimer').textContent = t && t.id === id ? `Stop the timer (${clockText(Date.now() - t.start)} so far)` : 'Start a reading timer';
     $('#prTimer').hidden = opts.session != null;
+    $('#prLine').hidden = opts.session == null;
     const print = formatOf(b) === 'print';
     $('#prTitle').textContent = b.title;
     $('#prBy').textContent = b.author ? `by ${b.author}` : '';
@@ -1926,8 +1930,8 @@
     }
     $('#prSub').textContent = line;
   }
-  function saveProgress(e) {
-    e.preventDefault();
+  function saveProgress(e, { then } = {}) {
+    if (e) e.preventDefault();
     const b = books.find(x => x.id === progressId);
     if (!b) return;
     const print = formatOf(b) === 'print';
@@ -1944,6 +1948,7 @@
     if (reader && reader.currentId() === b.id) reader.refresh();
     const done = print ? (b.pages && v >= b.pages) : v >= 100;
     if (done) openEditor(b.id, null, null, { finish: true });
+    else if (then === 'line') openQuote(b.id);
     else toast(`Saved: ${progressText(b)}${print && pctOf(b) != null ? ` (${pctOf(b)}%)` : ''}.`);
   }
 
@@ -2656,11 +2661,12 @@
     $('#progressForm').addEventListener('click', e => {
       const a = e.target.closest('[data-pr]'); if (!a) return;
       const b = books.find(x => x.id === progressId); if (!b) return;
+      if (a.dataset.pr === 'line') { saveProgress(null, { then: 'line' }); return; }   // keep where you got to, then the line
       $('#progressDialog').close();
       if (a.dataset.pr === 'finish') openEditor(b.id, null, null, { finish: true });
       else if (a.dataset.pr === 'quote') openQuote(b.id);
       else if (a.dataset.pr === 'dnf') setAside(b);
-      else if (a.dataset.pr === 'timer') { const t = timerNow(); if (t && t.id === b.id) stopTimer(); else startTimer(b.id); }
+      else if (a.dataset.pr === 'timer') { const t = timerNow(); if (t && t.id === b.id) stopTimer(); else startTimer(b.id, { settle: true }); }
       else if (a.dataset.pr === 'open') openDetail(b.id, progressFrom && progressFrom.isConnected ? progressFrom : null);
     });
     // quotes
@@ -2732,8 +2738,10 @@
     $('#calBtn').addEventListener('click', () => { more.open = false; calendar.open(); });
     $('#tcStop').addEventListener('click', () => stopTimer());
     $('#tcDiscard').addEventListener('click', () => stopTimer({ discard: true }));
+    $('#tcSettle').addEventListener('click', () => { const t = timerNow(); if (t && ritual) ritual.open(t.id); });
     $('#recBtn').addEventListener('click', () => { more.open = false; recommender.open(); });
     $('#yearBtn').addEventListener('click', () => { more.open = false; location.hash = 'year'; });
+    $('#lifeBtn').addEventListener('click', () => { more.open = false; openLife(); });
     $('#tagsBtn').addEventListener('click', () => { more.open = false; openTags(); });
     $('#csvBtn').addEventListener('click', () => { more.open = false; openImport(); });
     $('#yrDone').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); render(); window.scrollTo(0, 0); });
@@ -3076,8 +3084,10 @@
     openCalendar: () => calendar.open(),
     streak: () => calendar.streaks(),
     timer: () => { const t = timerNow(); return t ? { id: t.id, start: t.start } : null; },
-    startTimer: (id) => startTimer(id),
+    startTimer: (id) => startTimer(id, { settle: true }),
     stopTimer: () => stopTimer(),
+    settle: (id) => { const t = timerNow(); if (t && ritual) ritual.open(id || t.id); },
+    openLife: () => openLife(),
     startBook: (id) => { const b = books.find(x => x.id === id); if (b) startReading(b); },
     paintingPhoto: (slot) => Covers.uploadURL('painting-' + slot),
     familyPainting: (id) => ((Sync.familyPaintings ? Sync.familyPaintings() : []).find(f => f.id === id) || {}).url || null,
@@ -3096,7 +3106,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261118111312').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261120134114').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
@@ -3160,8 +3170,11 @@
     trophies: () => prefs.trophies,
     drawTrophy: (y, n, sc) => Art.drawTrophy(y, n, sc),
     openBook: (id, el) => openDetail(id, el),
+    streak: () => (calendar ? calendar.streaks() : null),
     toast,
   });
+  // your reading life: the timeline on the year page
+  openLife = () => { yearReview.select('life'); if (location.hash === '#year') render(); else location.hash = 'year'; };
   calendar = window.TomesteadCalendar({
     esc, books: () => books, datesOf, statusOf, formatOf, today,
     marked: () => prefs.readMarks,
@@ -3171,11 +3184,29 @@
       prefs.readMarks = cleanMarks([...set]); savePrefs(); renderStats(); roomRefresh();
     },
     openBook: (id) => openDetail(id, null),
+    otherYears: (iso) => memories.sameDayOtherYears(iso),
+  });
+  // On this day: your own reading, a year (or more) ago
+  memories = window.TomesteadMemories({
+    esc, books: () => books, datesOf, statusOf, today, starsHTML, thumbHTML, wireThumbs,
+    openBook: (id) => openDetail(id, null),
+  });
+  // reading mode: settle in with a book while the timer runs
+  ritual = window.TomesteadRitual({
+    esc, thumbHTML, wireThumbs, clockText,
+    book: (id) => books.find(x => x.id === id),
+    timer: () => timerNow(),
+    stopTimer: () => stopTimer(),
+    openQuote: (id) => openQuote(id),
+    streak: () => (calendar ? calendar.streaks() : null),
+    progressText: (b) => (statusOf(b) === 'reading' && Number(b.progress) ? progressText(b) : ''),
+    room: () => (viewNow() === 'room' && !$('#room3d').hidden && window.TomesteadRoom ? window.TomesteadRoom : null),
   });
   // props on the reading table
   wire();
   render();
   renderTimer();
+  if (!Sync.gated) memories.maybeShow();
   document.addEventListener('click', e => { if (e.target.closest('[data-cal-open]')) calendar.open(); });
   setupIosTip();
   setTimeout(runLookupQueue, 1500);

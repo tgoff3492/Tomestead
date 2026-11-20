@@ -94,9 +94,11 @@ window.TomesteadYear = function (api) {
 
   function render() {
     const years = api.yearsAvailable();
-    if (!sel || (sel !== 'all' && !years.includes(sel))) sel = pickDefault();
-    $('#yrYears').innerHTML = [...years.map(y => [y, y]), ['all', 'All time']].map(([v, l]) =>
+    if (!sel || (sel !== 'all' && sel !== 'life' && !years.includes(sel))) sel = pickDefault();
+    $('#yrYears').innerHTML = [...years.map(y => [y, y]), ['all', 'All time'], ['life', 'Reading life']].map(([v, l]) =>
       `<button role="tab" data-yr="${v}" aria-selected="${sel === v}">${l}</button>`).join('');
+    $('#yearPage h2').textContent = sel === 'life' ? 'Your reading life' : 'Year in review';
+    if (sel === 'life') { renderLife(); return; }
     const all = sel === 'all';
     const g = gather(sel);
     const body = $('#yrBody');
@@ -190,6 +192,93 @@ window.TomesteadYear = function (api) {
     api.wireThumbs(body);
     last = g;
   }
+
+  // ---------- your reading life: a timeline, year by year, newest first ----------
+  const MILESTONES = [1, 10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000];
+  const ord = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  const clip = (t, n) => { t = String(t).trim().replace(/\s+/g, ' '); return t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t; };
+  function renderLife() {
+    const body = $('#yrBody');
+    const books = api.books();
+    const finishes = [];
+    for (const b of books) { const ds = [...api.datesOf(b)].sort(); ds.forEach((d, i) => finishes.push({ b, date: d, reread: i > 0 })); }
+    finishes.sort((p, q) => p.date.localeCompare(q.date));
+    const dated = finishes.filter(f => /^\d{4}/.test(f.date));
+    if (!dated.length) {
+      body.innerHTML = `<div class="yr-empty"><p>Finish a book and your reading life starts here: every year, every milestone, every line you kept.</p></div>`;
+      return;
+    }
+    const sk = api.streak ? api.streak() : null;
+    const pages = dated.reduce((t, f) => t + (api.formatOf(f.b) === 'audio' ? 0 : (f.b.pages || 0)), 0);
+    const quotes = books.flatMap(b => (Array.isArray(b.quotes) ? b.quotes : []).map(q => ({ q, b }))).filter(x => x.q && String(x.q.text || '').trim());
+    const firstY = dated[0].date.slice(0, 4), lastY = dated[dated.length - 1].date.slice(0, 4);
+    const tiles = [
+      tile(fmtNum(dated.length), dated.length === 1 ? 'book finished' : 'books finished'),
+      tile(firstY === lastY ? firstY : `${firstY}–${lastY.slice(2)}`, 'on your shelves'),
+      pages ? tile(fmtNum(pages), 'pages read') : '',
+      sk && sk.best > 1 ? tile(fmtNum(sk.best), 'days, your longest streak') : quotes.length ? tile(fmtNum(quotes.length), quotes.length === 1 ? 'line kept' : 'lines kept') : '',
+    ].join('');
+
+    // moments, by year
+    const years = new Map();
+    const at = (y) => { if (!years.has(y)) years.set(y, { moments: [], finishes: [] }); return years.get(y); };
+    const when = (d) => (ISO.test(d) ? api.fmtDate(d) : d.slice(0, 4));
+    let count = 0;
+    dated.forEach((f) => {
+      const y = f.date.slice(0, 4), n = f.reread ? 0 : ++count;   // rereads aren't new books on the shelf
+      at(y).finishes.push(f);
+      if (n === 1) at(y).moments.push({ d: f.date, k: 'first', html: `Your first book on the shelf: <i>${esc(f.b.title)}</i>`, b: f.b });
+      else if (MILESTONES.includes(n)) at(y).moments.push({ d: f.date, k: 'mile', html: `Your ${ord(n)} book: <i>${esc(f.b.title)}</i>`, b: f.b });
+      if (f.reread) at(y).moments.push({ d: f.date, k: 'again', html: `Came back to <i>${esc(f.b.title)}</i>`, b: f.b, minor: true });
+    });
+    // the first five-star read of each year, and how many more
+    for (const [y, Y] of years) {
+      const five = Y.finishes.filter(f => f.b.rating === 5 && !f.reread);
+      if (five.length) Y.moments.push({ d: five[0].date, k: 'five', html: `Five stars for <i>${esc(five[0].b.title)}</i>${five.length > 1 ? ` <span class="lf-and">and ${five.length - 1} more this year</span>` : ''}`, b: five[0].b });
+      const long = Y.finishes.filter(f => api.pagesOf(f.b) > 0).sort((a, b) => api.pagesOf(b.b) - api.pagesOf(a.b))[0];
+      if (long && Y.finishes.length > 2) Y.moments.push({ d: long.date, k: 'long', html: `Your longest of the year: <i>${esc(long.b.title)}</i>, ${api.formatOf(long.b) === 'audio' ? `${long.b.hours} hours` : `${fmtNum(long.b.pages)} pages`}`, b: long.b, minor: true });
+      const t = api.trophies()[y];
+      if (t) Y.moments.push({ d: t.at || `${y}-12-31`, k: 'goal', html: `Reached your goal of ${api.plural(t.goal, 'book')}` });
+    }
+    // a line you kept, each year (the latest one)
+    const qy = new Map();
+    for (const x of quotes) { const d = String(x.q.at || ''); if (!/^\d{4}/.test(d)) continue; const y = d.slice(0, 4); if (!qy.has(y) || d > String(qy.get(y).q.at)) qy.set(y, x); }
+    for (const [y, x] of qy) at(y).moments.push({ d: x.q.at, k: 'quote', html: `<span class="lf-quote">“${esc(clip(x.q.text, 200))}”</span><span class="lf-from">from <i>${esc(x.b.title)}</i></span>`, b: x.b });
+
+    const ICON = { first: '❧', mile: '✦', five: '★', goal: '♛', quote: '❝', long: '▤', again: '↺' };
+    const sections = [...years.keys()].sort().reverse().map(y => {
+      const Y = years.get(y);
+      const n = Y.finishes.length, pg = Y.finishes.reduce((t, f) => t + (api.formatOf(f.b) === 'audio' ? 0 : (f.b.pages || 0)), 0);
+      const t = api.trophies()[y];
+      const ms = Y.moments.sort((a, b) => String(a.d).localeCompare(String(b.d)));
+      const uniq = [...new Set(Y.finishes.map(f => f.b))];
+      const show = uniq.slice(0, 14);
+      return `<section class="lf-year">
+        <header class="lf-yhead">
+          <h3>${esc(y)}</h3>
+          <p>${api.plural(n, 'book')}${pg ? ` · ${fmtNum(pg)} pages` : ''}</p>
+          ${t ? `<span class="lf-trophy" title="Goal reached" aria-label="Goal reached">${api.drawTrophy(y, t.goal, 0.2)}</span>` : ''}
+          <button type="button" class="linkbtn ink lf-more" data-yr-go="${esc(y)}">The whole year ›</button>
+        </header>
+        ${ms.length ? `<ol class="lf-moments">${ms.map(m => `<li class="lf-m lfk-${m.k}${m.minor ? ' minor' : ''}">
+          <span class="lf-dot" aria-hidden="true">${ICON[m.k]}</span>
+          <span class="lf-when">${esc(when(String(m.d)))}</span>
+          ${m.b ? `<button type="button" class="lf-what" data-open="${esc(m.b.id)}">${m.html}</button>` : `<span class="lf-what">${m.html}</span>`}
+        </li>`).join('')}</ol>` : ''}
+        <div class="lf-strip">${show.map(b => `<button type="button" class="yr-cov" data-open="${esc(b.id)}" aria-label="${esc(b.title)}" title="${esc(b.title)}">${api.thumbHTML(b, 'M')}</button>`).join('')}${uniq.length > show.length ? `<span class="lf-plus">+${uniq.length - show.length}</span>` : ''}</div>
+      </section>`;
+    }).join('');
+    const undated = finishes.length - dated.length;
+    body.innerHTML = `
+      <section class="yr-hero">
+        <p class="yr-kicker">Your reading life, year by year</p>
+        <div class="yr-tiles">${tiles}</div>
+      </section>
+      <div class="lf-line">${sections}</div>
+      ${undated > 0 ? `<p class="yr-cap lf-undated">${api.plural(undated, 'finished book has', 'finished books have')} no date, so ${undated === 1 ? 'it isn’t' : 'they aren’t'} on the timeline.</p>` : ''}`;
+    api.wireThumbs(body);
+  }
+  function select(v) { sel = v; }
   let last = null;
   // a picture of the year: the count, a line of numbers, and a shelf of covers (five-star reads first)
   function shareYear() {
@@ -216,9 +305,11 @@ window.TomesteadYear = function (api) {
   });
   $('#yrBody').addEventListener('click', (e) => {
     if (e.target.closest('[data-share]')) { shareYear(); return; }
+    const go = e.target.closest('[data-yr-go]');
+    if (go) { sel = go.dataset.yrGo; render(); document.getElementById('yearPage').scrollIntoView({ block: 'start' }); return; }
     const b = e.target.closest('[data-open]'); if (!b) return;
     api.openBook(b.dataset.open, b.querySelector('.thumb, .chip') || b);
   });
 
-  return { render };
+  return { render, select };
 };

@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261118111312">
+  <link rel="stylesheet" href="room/room.css?v=20261120134114">
   <script>/* the reading room is home whenever this device can show it, so the old 2D opening never plays there */ try { var cv = document.createElement('canvas'); if (cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -69,6 +69,7 @@
         <div class="menu">
           <button id="recBtn">What should I read next?</button>
           <button id="yearBtn">Year in review</button>
+          <button id="lifeBtn">Your reading life</button>
           <button id="goalMenuBtn">Reading goals</button>
           <button id="calBtn">Reading calendar</button>
           <button id="tagsBtn">Tags</button>
@@ -125,6 +126,7 @@
       <button type="button" class="tc-main" id="tcStop" aria-label="Stop the reading timer and log your progress">
         <span class="tc-dot" aria-hidden="true"></span><span class="tc-time" id="tcTime">0:00</span><span class="tc-title" id="tcTitle"></span><span class="tc-stop">Stop</span>
       </button>
+      <button type="button" class="tc-settle" id="tcSettle" aria-label="Settle in: reading mode, with the fire, rain or clock" title="Settle in"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="currentColor"/></svg></button>
       <button type="button" class="tc-x" id="tcDiscard" aria-label="Discard this reading session">×</button>
     </div>
     <!-- reading goals, shown over the 3D room (the bookcase views have their own, below) -->
@@ -395,6 +397,7 @@
         <input id="prRange" class="pr-range" type="range" min="0" max="100" step="1" aria-label="How far along">
       </div>
       <p id="prSession" class="pr-session" hidden></p>
+      <button type="button" class="linkbtn ink pr-line" data-pr="line" id="prLine" hidden>❝ Save a line you liked from today</button>
       <p id="prSub" class="goal-sub"></p>
       <button type="button" class="btn btn-brass pr-finish" data-pr="finish">I finished it</button>
       <div class="pr-links">
@@ -671,6 +674,8 @@
   <script src="share.js"></script>
   <script src="yearreview.js"></script>
   <script src="calendar.js"></script>
+  <script src="memories.js"></script>
+  <script src="ritual.js"></script>
   <script src="goals.js"></script>
   <script src="app.js"></script>
   <script src="motes.js"></script>

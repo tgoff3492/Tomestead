@@ -193,10 +193,18 @@ window.TomesteadCalendar = function (api) {
       if (manual) act = `<button type="button" class="btn btn-ghost btn-sm" data-mark="${picked}">${derived ? 'Remove my mark' : 'Unmark this day'}</button>`;
       else if (!derived) act = `<button type="button" class="btn btn-ink btn-sm" data-mark="${picked}">I read this day</button>`;
     }
+    // the same date in other years (On this day)
+    const others = api.otherYears ? api.otherYears(picked) : [];
+    const verb = { finished: 'Finished', started: 'Started', quote: 'Saved a line from', stopped: 'Set aside' };
+    const otd = others.length ? `<div class="cal-otd"><h5>On this day in other years</h5><ul>${others.slice(0, 5).map(o => {
+      const seenB = new Set(), items = o.list.filter(ev => { const k = ev.kind + ev.b.id; if (seenB.has(k)) return false; seenB.add(k); return true; }).slice(0, 3);
+      return `<li><span class="cal-otd-y">${esc(o.year)}</span> ${items.map(ev => `${verb[ev.kind]} ${title(ev.b)}`).join(' · ')}</li>`;
+    }).join('')}</ul></div>` : '';
     box.innerHTML = `<h4>${esc(head)}</h4>
       ${lines ? `<ul class="cal-events">${lines}</ul>` : `<p class="meta">${manual ? 'You marked this as a reading day.' : future ? 'Still to come.' : 'Nothing logged this day.'}</p>`}
       ${manual && lines ? '<p class="meta cal-marked">You also marked it yourself.</p>' : ''}
-      ${act ? `<div class="cal-acts">${act}</div>` : ''}`;
+      ${act ? `<div class="cal-acts">${act}</div>` : ''}
+      ${otd}`;
   }
 
   function open(day) {

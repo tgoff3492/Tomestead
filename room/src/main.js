@@ -1705,6 +1705,9 @@ const STATIONS = {
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
   case: { p: [0, 1.2, 0.4], t: [0, 1.12, -2.5], w: 2.0, h: 2.25, max: 4.2 },
+  // reading mode: the armchair, the oil lamp and the tea from across the rug, sitting in the top of
+  // the screen above the reading-mode controls
+  read: { p: [-0.1, 1.8, 0.75], t: [2.0, 0.3, -2.2], w: 2.2, h: 1.5, max: 4.6 },
 };
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 let station = 'room', tween = null;
@@ -2151,7 +2154,9 @@ $('card-body').addEventListener('click', (e) => {
     else if (a === 'goals') HOST.openGoals();
     else if (a === 'year') HOST.openYear();
     else if (a === 'calendar') HOST.openCalendar();
-    else if (a === 'timer-start') { HOST.startTimer(id); deskCard(); }
+    else if (a === 'timer-start') { HOST.startTimer(id); if (!settled) deskCard(); }
+    else if (a === 'settle') { closeCard(); HOST.settle(id); }
+    else if (a === 'life') { closeCard(); HOST.openLife(); }
     else if (a === 'timer-stop') { closeCard(); HOST.stopTimer(); }
     else if (a === 'start') { closeCard(); HOST.startBook(id); }
     else if (a === 'import') { closeCard(); HOST.openImport(); }
@@ -2631,13 +2636,13 @@ function deskCard() {
   const row = (b) => {
     const pr = progressOf(b), on = t && t.id === b.id;
     const acts = !HOST ? '' : on
-      ? `<div class="acts"><button type="button" class="timer-on" data-act="timer-stop" data-id="${esc(b.id)}"><span class="rec"></span><span data-since="${t.start}">0:00</span> · Stop</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open the book</button></div>`
+      ? `<div class="acts"><button type="button" class="timer-on" data-act="timer-stop" data-id="${esc(b.id)}"><span class="rec"></span><span data-since="${t.start}">0:00</span> · Stop</button>${HOST.settle ? `<button type="button" class="quiet" data-act="settle" data-id="${esc(b.id)}">Settle in</button>` : ''}<button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open the book</button></div>`
       : `<div class="acts"><button type="button" data-act="timer-start" data-id="${esc(b.id)}">${t ? 'Switch timer here' : 'Start reading'}</button><button type="button" class="quiet" data-act="progress" data-id="${esc(b.id)}">Update progress</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open</button></div>`;
     return `<li${on ? ' class="timing"' : ''}><b>${esc(b.title)}</b>${b.author ? ` · <i>${esc(b.author)}</i>` : ''}${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><span class="meta">${esc(pr.text)}</span>` : ''}${acts}</li>`;
   };
   if (HOST) {
     return openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
-      ${reading.length ? `<ul>${reading.map(row).join('')}</ul><div class="meta desk-tip">${t ? 'When you stop, tap Stop and tell it where you got to.' : 'Start reading runs a timer while you read; stop it to log your time and page.'}</div>` : deskPile()}`, 'desk');
+      ${reading.length ? `<ul>${reading.map(row).join('')}</ul><div class="meta desk-tip">${t ? 'When you stop, tap Stop and tell it where you got to.' : 'Start reading dims the room, starts a timer and lights the fire. Stop it to log your time and page.'}</div>` : deskPile()}`, 'desk');
   }
   openCard(`<div class="eyebrow">On the desk</div><h2>${reading.length ? 'Reading now' : 'Nothing open yet'}</h2>
     ${reading.length ? `<ul>${reading.map(row).join('')}</ul>` : '<div class="meta">Start a book and it will lie open here.</div>'}
@@ -2672,7 +2677,7 @@ function hearthCard() {
   openCard(`<div class="eyebrow">By the fire</div><h2>Goals, streaks and trophies</h2>
     ${streak}
     <div class="meta">Your streak, goals and year in books live by the fire. Trophies you earn stand on the mantel.</div>
-    <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button></div>`, 'hearth');
+    <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button>${HOST && HOST.openLife ? '<button type="button" class="quiet" data-act="life">Your reading life</button>' : ''}</div>`, 'hearth');
 }
 let cardKind = '', clockTimer = null;
 function openCard(html, kind = '') {
@@ -2728,7 +2733,7 @@ function frame(now) {
   if (!active) return;
   const busy = !!tween || !!drag || !!turning || (outBook && outBook.phase !== 'desk') || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
   // when nothing is moving, only the dust and candles drift: 30 frames a second is plenty
-  if (!busy && now - lastRender < 32) return;
+  if (!busy && now - lastRender < (settled ? 66 : 32)) return;   // reading mode: the fire still flickers, at 15 fps
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   const t = now / 1000;
   if (turning && (turning.t += dt) > 0.34) finishTurn();
@@ -2826,8 +2831,24 @@ function refresh() {
   // the first book is in: the welcome gives way to the tour
   if (!$('card').hidden && cardKind === 'welcome' && lib.books.length) { closeCard(); if (!tourSeen()) tourCard(0); }
   const m = lightNow(lib.theme.light || 'system');
-  if (m !== mode) { mode = m; world.applyLook(); }
+  if (m !== mode && !settled) { mode = m; world.applyLook(); }
   kick();
+}
+// reading mode (ritual.js): the room goes to lamplight and the view settles by the armchair, then
+// comes back the way it was when you're done
+let settled = false;
+function settle(on) {
+  if (!world || on === settled) return;
+  settled = on;
+  if (on) {
+    if (!outBook) { putBack(); closeCard(); glide('read', 2.4, false); }
+    if (mode !== 'night') { mode = 'night'; world.applyLook(); renderer.shadowMap.needsUpdate = true; }
+  } else {
+    const m = lightNow(lib.theme.light || 'system');
+    if (m !== mode) { mode = m; world.applyLook(); renderer.shadowMap.needsUpdate = true; }
+    if (!outBook) glide('room', 2.0, false);
+  }
+  kick(2600);
 }
 function setActive(on) {
   active = !!on;
@@ -2861,7 +2882,7 @@ function setActive(on) {
     resize(); shelfTools();
   };
   const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
-  window.TomesteadRoom = { refresh, setActive, customize, show, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
+  window.TomesteadRoom = { refresh, setActive, customize, show, settle, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go('room', 1.5, { arrive: false }); tourCard(0); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // the title screen stays up long enough to read its quote (tap to step in sooner)
   const Q = window.TomesteadQuotes, veil = $('veil');

@@ -1,6 +1,8 @@
 /* Tomestead: a famous literary line on the title screen (the reading room's veil) each time the
    app opens. It walks through all 100 in a shuffled order before any comes back, then reshuffles
-   for the next round. The place in the rotation is kept per device. */
+   for the next round. Every third opening, if you've saved favorite lines on your books, it shows
+   one of yours instead (newest first, all of them before any repeats). The places in both
+   rotations are kept per device. */
 (() => {
   'use strict';
   // [line, author, work]
@@ -122,7 +124,30 @@
   try { n = Math.max(0, parseInt(localStorage.getItem(KEY), 10) || 0); } catch {}
   const round = Math.floor(n / QUOTES.length);
   const idx = order(round)[n % QUOTES.length];
-  const [text, author, work] = QUOTES[idx];
+
+  // Your own favorite lines (the quotes you've saved on your books) take a turn too: every third
+  // opening, one of yours, going through all of them (newest first) before any comes back.
+  const OWN = 'tomestead.quote.own', OPENS = 'tomestead.quote.opens';
+  function ownLines() {
+    try {
+      const uid = localStorage.getItem('tomestead.uid');
+      const raw = (uid && localStorage.getItem('tomestead.books.v1:' + uid)) || localStorage.getItem('tomestead.books.v1');
+      const books = JSON.parse(raw);
+      if (!Array.isArray(books)) return [];
+      const out = [];
+      for (const b of books) for (const q of (b && Array.isArray(b.quotes) ? b.quotes : [])) {
+        const t = String((q && q.text) || '').trim().replace(/\s+/g, ' ');
+        if (t.length >= 8 && t.length <= 320) out.push({ text: t.replace(/^[“"']+|[”"']+$/g, ''), author: String(b.author || ''), work: String(b.title || ''), at: String(q.at || ''), mine: true });
+      }
+      return out.sort((a, b) => b.at.localeCompare(a.at) || a.text.localeCompare(b.text));
+    } catch { return []; }
+  }
+  const mine = ownLines();
+  let opens = 0, m = 0;
+  try { opens = Math.max(0, parseInt(localStorage.getItem(OPENS), 10) || 0); m = Math.max(0, parseInt(localStorage.getItem(OWN), 10) || 0); } catch {}
+  const showMine = mine.length > 0 && opens % 3 === 2;
+  const pick = showMine ? mine[m % mine.length] : { text: QUOTES[idx][0], author: QUOTES[idx][1], work: QUOTES[idx][2], mine: false };
+  const { text, author, work } = pick;
   let counted = false;
 
   // time to read it: about four words a second, plus a moment to settle
@@ -135,7 +160,8 @@
     fig.className = 'veil-quote';
     fig.innerHTML = '<span class="veil-rule"></span><blockquote></blockquote><figcaption></figcaption>';
     fig.querySelector('blockquote').textContent = `“${text}”`;
-    fig.querySelector('figcaption').textContent = `— ${author}, ${work}`;
+    fig.querySelector('figcaption').textContent = pick.mine ? `— ${[author, work].filter(Boolean).join(', ')}` : `— ${author}, ${work}`;
+    if (pick.mine) { fig.classList.add('mine'); const k = document.createElement('p'); k.className = 'veil-mine'; k.textContent = 'A line you saved'; fig.insertBefore(k, fig.firstChild.nextSibling); }
     const sub = veil.querySelector('.veil-sub');
     veil.insertBefore(fig, sub || null);
   }
@@ -143,12 +169,16 @@
 
   window.TomesteadQuotes = {
     count: QUOTES.length,
-    current: { text, author, work },
+    current: { text, author, work, mine: pick.mine },
+    mineCount: mine.length,
     readMs,
     // called once the title screen has actually been seen, so the next open shows the next line
     seen() {
       if (counted) return; counted = true;
-      try { localStorage.setItem(KEY, String(n + 1)); } catch {}
+      try {
+        if (pick.mine) localStorage.setItem(OWN, String(m + 1)); else localStorage.setItem(KEY, String(n + 1));
+        localStorage.setItem(OPENS, String(opens + 1));
+      } catch {}
     },
   };
 })();

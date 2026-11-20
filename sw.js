@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v33';
+const VERSION = 'tomestead-v34';
 const SHELL = [
   './',
   'index.html',
@@ -18,6 +18,8 @@ const SHELL = [
   'yearreview.js',
   'share.js',
   'calendar.js',
+  'memories.js',
+  'ritual.js',
   'goals.js',
   'motes.js',
   'vine.js',
