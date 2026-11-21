@@ -344,7 +344,6 @@ function placeFurniture(MOD, M) {
   let chand = null, chandGlow = null, bulbs = [];
   if (MOD.chandelier) {
     placeModel(MOD.chandelier, 0, 2.97 - 0.908 * 0.85, 0.05, 0, 0.85, { cast: false });
-    MOD.chandelier.userData.cut = true; CUT.push(MOD.chandelier);   // it hangs from the ceiling: it goes with it
     MOD.chandelier.traverse((o) => { if (o.isMesh && /bulb/.test(o.material.name)) bulbs.push(o.material); });
     chand = new THREE.PointLight('#ffc27a', 0, 7, 2); chand.position.set(0, 2.35, 0.05); scene.add(chand);
     const gm = new THREE.SpriteMaterial({ map: canvasTex(glowTex(), { repeat: false }), color: '#ffcf8a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
@@ -478,7 +477,7 @@ async function build() {
   cut(box(0.1, 3.1, 5.6, wallMat, 3.05, 1.5, 0));                  // right wall
   cut(box(6.2, 3.1, 0.1, wallMat, 0, 1.5, 2.75));                  // front wall
   // the plinth the dollhouse stands on (only seen from outside)
-  for (const m of [box(6.3, 0.34, 5.7, M.beam, -0.05, -0.17, 0), box(6.42, 0.06, 5.82, M.trim, -0.05, -0.37, 0)]) { m.userData.plinth = true; m.visible = false; PLINTH.push(m); }
+  for (const m of [box(6.3, 0.34, 5.7, M.beam, -0.05, -0.185, 0), box(6.42, 0.06, 5.82, M.trim, -0.05, -0.385, 0)]) { m.userData.plinth = true; m.visible = false; PLINTH.push(m); }
   // left wall, with the window opening (z −1.3…0.1, y 0.85…2.45)
   const WIN = { z0: -1.3, z1: 0.1, y0: 0.85, y1: 2.45 };
   box(0.1, WIN.y0, 5.6, wallMat, -3.05, WIN.y0 / 2, 0);
