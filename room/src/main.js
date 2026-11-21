@@ -1823,11 +1823,23 @@ function go(name, dur = 1.5, { arrive = true } = {}) {
 function glide(name, dur, arrive) {
   if (calm.matches) dur = Math.min(dur, 0.35);
   if (station === 'house' && !tween) bakeOrbit();
-  if (name === 'house' || station === 'house') dur = Math.max(dur, calm.matches ? 0.35 : 1.9);   // stepping in or out takes a breath longer
+  const outer = name === 'house' || station === 'house';
+  if (outer) dur = Math.max(dur, calm.matches ? 0.35 : 1.9);   // stepping in or out takes a breath longer
   station = name; cam.vx = 0;
   pressStation(name);
   const to = framing(name); to.fov = fovFor(name);
   tween = { t: 0, dur, flat: calm.matches || name === 'house', from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist, fov: camera.fov }, to, arrive: arrive ? name : null };
+  // Into or out of the dollhouse the camera never looks away from the room: it keeps its eye on a
+  // point that slides from where it was looking to where it's going, and swings around that point
+  // while the distance shrinks (or grows) smoothly
+  if (outer) {
+    const f = tween.from;
+    const fT = f.pos.clone().addScaledVector(f.dir, f.dist), tT = to.pos.clone().addScaledVector(to.dir, to.dist);
+    const fO = f.pos.clone().sub(fT), tO = to.pos.clone().sub(tT);
+    const fD = Math.max(0.05, fO.length()), tD = Math.max(0.05, tO.length());
+    fO.divideScalar(fD); tO.divideScalar(tD);
+    tween.aim = { fT, tT, fO, fD, tD, q: new THREE.Quaternion().setFromUnitVectors(fO, tO) };
+  }
   cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
   shelfTools();
 }
@@ -1895,6 +1907,17 @@ function updateCamera(dt) {
   if (tween) {
     tween.t += dt / tween.dur;
     const k = ease(Math.min(1, tween.t));
+    if (tween.aim) {
+      const a = tween.aim;
+      const T = a.fT.clone().lerp(a.tT, k);
+      const off = a.fO.clone().applyQuaternion(new THREE.Quaternion().slerp(a.q, k));
+      const d = Math.exp(THREE.MathUtils.lerp(Math.log(a.fD), Math.log(a.tD), k));
+      cam.pos.copy(T).addScaledVector(off, d);
+      cam.dir.copy(off).negate();
+      cam.dist = d;
+      if (tween.from.fov && tween.to.fov) setFov(THREE.MathUtils.lerp(tween.from.fov, tween.to.fov, k));
+      if (tween.t >= 1) { const ar = tween.arrive; setFov(tween.to.fov); cam.pos.copy(tween.to.pos); cam.dir.copy(tween.to.dir); cam.dist = tween.to.dist; tween = null; if (ar) arrived(ar); }
+    } else {
     cam.pos.lerpVectors(tween.from.pos, tween.to.pos, k);
     // arc slightly upward mid-glide, so moves feel like walking rather than sliding
     cam.pos.y += Math.sin(k * Math.PI) * 0.08;
@@ -1903,6 +1926,7 @@ function updateCamera(dt) {
     if (tween.flat) cam.pos.y -= Math.sin(k * Math.PI) * 0.08;
     if (tween.from.fov && tween.to.fov) setFov(THREE.MathUtils.lerp(tween.from.fov, tween.to.fov, k));
     if (tween.t >= 1) { const a = tween.arrive; if (tween.to.fov) setFov(tween.to.fov); tween = null; if (a) arrived(a); }
+    }
   } else if (!drag) {
     cam.yaw += cam.vyaw; cam.pitch += cam.vpitch;
     cam.vyaw *= 0.9; cam.vpitch *= 0.9;
@@ -2847,9 +2871,12 @@ function overlays() {
   const atHouse = station === 'house' && !calmNow;
   pinBox.hidden = !atHouse;
   if (atHouse) {
+    camera.updateMatrixWorld();
+    const r = canvas.getBoundingClientRect();
     pinBox.querySelectorAll('.pin').forEach((el, i) => {
       pv.set(...PINS[i][2]).project(camera);
-      el.style.transform = `translate(${((pv.x + 1) / 2) * innerWidth}px, ${((1 - pv.y) / 2) * innerHeight}px) translate(-50%, -100%)`;
+      const x = Math.round(r.left + ((pv.x + 1) / 2) * r.width), y = Math.round(r.top + ((1 - pv.y) / 2) * r.height);
+      el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
     });
   }
   const showSwap = !calmNow && isHome(station) && !!HOST;

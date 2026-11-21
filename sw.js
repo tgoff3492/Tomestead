@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v37';
+const VERSION = 'tomestead-v38';
 const SHELL = [
   './',
   'index.html',
