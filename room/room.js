@@ -50623,42 +50623,84 @@ function buildFireplace(MOD) {
   for (const sz of [-1, 1]) box(0.06, 0.12, 0.06, M.trim, X + D + 0.02, MH - 0.07, Z + sz * (W / 2 - 0.08), g);
   for (const dz of [-0.2, 0, 0.2]) box(0.26, 0.015, 0.012, M.iron, X + 0.17, 0.09, Z + dz, g);
   for (const sz of [-1, 1]) box(0.012, 0.09, 0.012, M.iron, X + 0.27, 0.045, Z + sz * 0.26, g);
-  const logs = [[X + 0.12, 0.12, Z, 0.05, 0.62, 0.08, 0], [X + 0.21, 0.125, Z - 0.02, 0.045, 0.58, -0.12, 0.05], [X + 0.16, 0.19, Z + 0.03, 0.04, 0.5, 0.25, -0.2]];
-  for (const [x, y, z, r, l, ry, rx] of logs) {
-    const lg = mesh(new CylinderGeometry(r, r * 1.05, l, 12).rotateX(Math.PI / 2), M.logs, g);
+  const endMat = std({ map: canvasTex(logEndTex(), { repeat: false }), roughness: 0.9, emissive: "#ff5a14", emissiveMap: canvasTex(logEndGlowTex(), { repeat: false }), emissiveIntensity: 0.6 });
+  const barkMat = M.logs.clone();
+  barkMat.color = new Color("#4a382b");
+  barkMat.emissive = new Color("#ff5a12");
+  barkMat.emissiveMap = canvasTex(emberCracksTex(), { repeat: true });
+  barkMat.emissiveIntensity = 0.7;
+  const LOGS = [
+    // x, y, z, radius, length, yaw, pitch, roll, seed
+    [X + 0.11, 0.135, Z - 0.02, 0.058, 0.66, 0.06, 0.02, 0, 1],
+    [X + 0.23, 0.13, Z + 0.03, 0.052, 0.6, -0.1, -0.03, 0.4, 2],
+    [X + 0.15, 0.205, Z - 0.12, 0.044, 0.42, 1.15, 0.22, 0, 3],
+    [X + 0.17, 0.21, Z + 0.15, 0.04, 0.4, -1.2, -0.25, 0, 4],
+    [X + 0.2, 0.17, Z + 0.01, 0.018, 0.34, 0.7, 0.5, 0, 5],
+    [X + 0.14, 0.17, Z - 0.02, 0.015, 0.3, -0.55, -0.4, 0, 6]
+  ];
+  for (const [x, y, z, r, l, ry, rx, rz, seed2] of LOGS) {
+    const lg = mesh(logGeometry(r, l, seed2), [barkMat, endMat, endMat], g);
     lg.position.set(x, y, z);
-    lg.rotation.set(rx, ry, 0);
+    lg.rotation.set(rx, ry, rz, "YXZ");
   }
-  const coal = mesh(new PlaneGeometry(0.24, 0.6).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: canvasTex(coalTex(), { repeat: false }), color: "#ffffff" }), g, { cast: false });
-  coal.position.set(X + 0.16, 0.045, Z);
-  const fireMat = new ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uI: { value: 1 } },
+  const coal = mesh(new PlaneGeometry(0.26, 0.66).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: canvasTex(coalTex(), { repeat: false }), color: "#ffffff" }), g, { cast: false });
+  coal.position.set(X + 0.17, 0.046, Z);
+  const coalMat = std({ color: "#1c0d06", roughness: 0.95, emissive: "#ff4a0e", emissiveIntensity: 1.2 });
+  const cr = rng(41), coals = [];
+  for (let i = 0; i < 22; i++) {
+    const c = mesh(new IcosahedronGeometry(0.012 + cr() * 0.016, 0), coalMat, g, { cast: false });
+    c.position.set(X + 0.08 + cr() * 0.2, 0.05 + cr() * 0.012, Z - 0.28 + cr() * 0.56);
+    c.rotation.set(cr() * 3, cr() * 3, cr() * 3);
+    c.scale.y = 0.6;
+    coals.push(c);
+  }
+  const uTime = { value: 0 }, uI = { value: 1 };
+  const flameShader = (seed2) => new ShaderMaterial({
+    uniforms: { uTime, uI, uSeed: { value: seed2 } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
-    fragmentShader: `uniform float uTime, uI; varying vec2 vUv;` + NOISE + `
-      void main(){ vec2 uv = vUv;
-        float n = fbm(vec2(uv.x*3.2 + 7.0, uv.y*2.4 - uTime*1.7));
-        float n2 = fbm(vec2(uv.x*6.0 - 3.0, uv.y*4.0 - uTime*2.6));
-        float width = 1.0 - pow(abs(uv.x - 0.5)*2.0, 1.4);
-        float f = (n*1.15 + n2*0.35 - uv.y*1.05) * width + 0.25*(1.0 - uv.y)*width;
-        f = smoothstep(0.08, 0.62, f);
-        vec3 c = mix(vec3(0.85,0.16,0.02), vec3(1.0,0.62,0.16), smoothstep(0.15, 0.6, f));
-        c = mix(c, vec3(1.0,0.93,0.68), smoothstep(0.7, 1.0, f));
-        gl_FragColor = vec4(c*f*uI, f*uI); }`,
+    fragmentShader: `uniform float uTime, uI, uSeed; varying vec2 vUv;` + NOISE + `
+      void main(){ vec2 uv = vUv; float t = uTime * (0.9 + uSeed * 0.07);
+        float sway = (fbm(vec2(uv.y * 1.6 - t * 0.9 + uSeed * 3.1, t * 0.35 + uSeed)) - 0.5) * 0.55 * uv.y;
+        float x = (uv.x - 0.5 + sway) * 2.0;
+        float w = (1.0 - uv.y * 0.92) * 0.95 + 0.05;
+        float shape = 1.0 - smoothstep(0.15, 1.0, abs(x) / w);
+        float n = fbm(vec2(x * 1.4 + uSeed * 5.7, uv.y * 2.3 - t * 2.3));
+        float n2 = fbm(vec2(x * 3.6 - uSeed * 2.3, uv.y * 5.0 - t * 3.4));
+        float f = shape * (0.42 + n * 1.05 + n2 * 0.38) - uv.y * 0.95;
+        f = smoothstep(0.04, 0.72, clamp(f, 0.0, 1.0)) * smoothstep(0.0, 0.07, uv.y);
+        vec3 c = mix(vec3(0.5, 0.05, 0.0), vec3(1.0, 0.36, 0.04), smoothstep(0.04, 0.32, f));
+        c = mix(c, vec3(1.0, 0.72, 0.26), smoothstep(0.32, 0.68, f));
+        c = mix(c, vec3(1.0, 0.9, 0.7), smoothstep(0.82, 1.0, f));
+        gl_FragColor = vec4(c * f * uI * 0.85, f * uI * 0.9); }`,
     transparent: true,
     blending: AdditiveBlending,
     depthWrite: false,
     side: DoubleSide
   });
   const flames = [];
-  for (const [ry, w, h, dz] of [[0, 0.62, 0.55, 0], [0.9, 0.42, 0.5, -0.08], [-0.9, 0.42, 0.48, 0.09], [Math.PI / 2, 0.3, 0.45, 0]]) {
-    const f = new Mesh(new PlaneGeometry(w, h).translate(0, h / 2, 0), fireMat);
+  for (const [ry, w, h, dz, dx, seed2] of [
+    [0, 0.5, 0.62, 0, 0, 1],
+    [0.7, 0.34, 0.5, -0.17, 0.02, 2],
+    [-0.6, 0.36, 0.54, 0.16, 0.01, 3],
+    [1.25, 0.28, 0.46, 0.02, 0, 4],
+    [0.25, 0.26, 0.4, -0.3, 0.03, 5],
+    [-0.3, 0.26, 0.42, 0.29, 0.02, 6],
+    [1.2, 0.22, 0.34, 0.06, 0.06, 7]
+  ]) {
+    const f = new Mesh(new PlaneGeometry(w, h).translate(0, h / 2, 0), flameShader(seed2));
     f.rotation.y = Math.PI / 2 + ry;
-    f.position.set(X + 0.17, 0.08, Z + dz);
+    f.position.set(X + 0.16 + dx, 0.1, Z + dz);
     f.renderOrder = 8;
     f.userData.dyn = true;
     g.add(f);
     flames.push(f);
   }
+  const heart = new Sprite(new SpriteMaterial({ map: canvasTex(glowTex(), { repeat: false }), color: "#ff8a32", blending: AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55 }));
+  heart.scale.set(0.75, 0.55, 1);
+  heart.position.set(X + 0.2, 0.22, Z);
+  heart.renderOrder = 7;
+  heart.userData.dyn = true;
+  g.add(heart);
   const N = 50, seed = new Float32Array(N * 3), rs = rng(17);
   for (let i = 0; i < N * 3; i++) seed[i] = rs();
   const sg = new BufferGeometry();
@@ -50758,11 +50800,17 @@ function buildFireplace(MOD) {
       base = mode === "night" ? 4.2 : 1.6;
     },
     tick(t) {
-      fireMat.uniforms.uTime.value = t;
+      uTime.value = t;
       sparkMat.uniforms.uTime.value = t;
       const fl = 0.82 + 0.1 * Math.sin(t * 9.1) + 0.08 * Math.sin(t * 23.7 + 1.3) * Math.sin(t * 3.3);
       light.intensity = base * fl;
       glow.material.opacity = (mode === "night" ? 0.5 : 0.28) * fl;
+      const br = 0.75 + 0.25 * Math.sin(t * 1.7) * Math.sin(t * 0.63 + 1.1);
+      const night = mode === "night" ? 1.4 : 1;
+      barkMat.emissiveIntensity = 0.32 * br * night;
+      endMat.emissiveIntensity = 0.5 * br * night;
+      coalMat.emissiveIntensity = (0.9 + 0.5 * br) * night;
+      heart.material.opacity = 0.45 * fl * (mode === "night" ? 1.25 : 0.9);
     }
   };
 }
@@ -50783,6 +50831,101 @@ function trophyMesh(year, M) {
     h.position.set(sx * 0.064, 0.17, 0);
   }
   return g;
+}
+function logGeometry(r, len, seed) {
+  const g = new CylinderGeometry(r, r * 1.04, len, 18, 10, false);
+  const p = g.attributes.position, R = rng(seed * 13 + 1);
+  const knots = Array.from({ length: 3 }, () => ({ a: R() * Math.PI * 2, y: (R() - 0.5) * len * 0.8, s: 0.18 + R() * 0.25 }));
+  const ridge = 5 + Math.floor(R() * 4), ph = R() * 6.28, bend = (R() - 0.5) * 0.035;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const rr = Math.hypot(x, z);
+    if (rr < 1e-5) continue;
+    const a = Math.atan2(z, x);
+    let k = 1 + 0.05 * Math.sin(a * ridge + ph + y * 9) + 0.04 * Math.sin(a * 3 + y * 4.3 + ph * 2);
+    for (const kn of knots) {
+      const da = Math.atan2(Math.sin(a - kn.a), Math.cos(a - kn.a)), dy = (y - kn.y) / len;
+      k += kn.s * Math.exp(-(da * da) * 10 - dy * dy * 160) * 0.5;
+    }
+    const sc = Math.abs(y) > len / 2 - 1e-4 ? 1 : k;
+    p.setXYZ(i, x * sc, y, z * sc + bend * (1 - (2 * y / len) ** 2) * 1.2);
+  }
+  g.computeVertexNormals();
+  return g.rotateX(Math.PI / 2);
+}
+function logEndTex() {
+  const [c, x] = mkCanvas(128, 128);
+  const r = rng(5);
+  x.fillStyle = "#b58a5a";
+  x.fillRect(0, 0, 128, 128);
+  for (let i = 18; i > 0; i--) {
+    x.strokeStyle = i % 2 ? "rgba(90,55,28,.45)" : "rgba(160,115,70,.35)";
+    x.lineWidth = 2;
+    x.beginPath();
+    x.arc(64 + (r() - 0.5) * 3, 64 + (r() - 0.5) * 3, i * 3.4, 0, Math.PI * 2);
+    x.stroke();
+  }
+  x.strokeStyle = "rgba(40,20,8,.7)";
+  x.lineWidth = 1.5;
+  for (let i = 0; i < 5; i++) {
+    const a = r() * 6.28;
+    x.beginPath();
+    x.moveTo(64, 64);
+    x.lineTo(64 + Math.cos(a) * (20 + r() * 40), 64 + Math.sin(a) * (20 + r() * 40));
+    x.stroke();
+  }
+  const rim = x.createRadialGradient(64, 64, 34, 64, 64, 64);
+  rim.addColorStop(0, "rgba(0,0,0,0)");
+  rim.addColorStop(0.6, "rgba(30,14,6,.75)");
+  rim.addColorStop(1, "rgba(10,5,2,1)");
+  x.fillStyle = rim;
+  x.fillRect(0, 0, 128, 128);
+  return c;
+}
+function logEndGlowTex() {
+  const [c, x] = mkCanvas(128, 128);
+  x.fillStyle = "#000";
+  x.fillRect(0, 0, 128, 128);
+  const g = x.createRadialGradient(64, 64, 44, 64, 64, 62);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(0.7, "rgba(255,120,40,.55)");
+  g.addColorStop(1, "rgba(255,80,20,.15)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  return c;
+}
+function emberCracksTex() {
+  const [c, x] = mkCanvas(256, 256);
+  const r = rng(29);
+  x.fillStyle = "#000";
+  x.fillRect(0, 0, 256, 256);
+  x.lineCap = "round";
+  for (let i = 0; i < 26; i++) {
+    let px2 = r() * 256, py2 = r() * 256;
+    const steps = 3 + Math.floor(r() * 5);
+    x.strokeStyle = `rgba(255,${110 + Math.floor(r() * 70)},40,${0.35 + r() * 0.45})`;
+    x.lineWidth = 0.6 + r() * 1.4;
+    x.beginPath();
+    x.moveTo(px2, py2);
+    for (let k = 0; k < steps; k++) {
+      px2 += (r() - 0.5) * 30;
+      py2 += (r() - 0.3) * 22;
+      x.lineTo(px2, py2);
+    }
+    x.stroke();
+  }
+  for (let i = 0; i < 14; i++) {
+    const g = x.createRadialGradient(0, 0, 0, 0, 0, 10);
+    const cx = r() * 256, cy = r() * 256;
+    x.save();
+    x.translate(cx, cy);
+    g.addColorStop(0, "rgba(255,110,30,.5)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    x.fillStyle = g;
+    x.fillRect(-10, -10, 20, 20);
+    x.restore();
+  }
+  return c;
 }
 function coalTex() {
   const [c, x] = mkCanvas(128, 256);
