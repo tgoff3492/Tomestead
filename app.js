@@ -1604,17 +1604,24 @@
     $('#fTitle').setAttribute('aria-expanded', 'false');
     $('#fTitle').removeAttribute('aria-activedescendant');
   }
-  function onTitleInput() {
-    if (pick) { pick = null; $('#fMatch').hidden = true; }
-    const q = $('#fTitle').value.trim();
+  // the title and the author both search: a title alone, an author alone (their books), or both
+  // together to narrow it down. The list shows under whichever box you're typing in.
+  let findFrom = 'title';
+  function onTitleInput() { findFrom = 'title'; runFind(); }
+  function onAuthorInput() { if (pick) return; findFrom = 'author'; runFind(); }
+  function runFind() {
+    if (pick && findFrom === 'title') { pick = null; $('#fMatch').hidden = true; }
+    const q = $('#fTitle').value.trim(), a = $('#fAuthor').value.trim();
     clearTimeout(findTimer);
-    if (editingId || q.length < 3 || navigator.onLine === false) { closeSuggest(); return; }
+    if (editingId || navigator.onLine === false || (q.length < 3 && a.length < 3)) { closeSuggest(); return; }
+    const ul = $('#fSuggest');
+    const host = (findFrom === 'author' ? $('#fAuthor') : $('#fTitle')).closest('.field');
+    if (ul.parentElement !== host) { ul.hidden = true; host.appendChild(ul); }
     findTimer = setTimeout(async () => {
       const seq = ++findSeq;
-      const ul = $('#fSuggest');
       if (ul.hidden) { ul.innerHTML = '<li class="sg-note">Searching…</li>'; ul.hidden = false; }
       try {
-        const res = await Covers.search(q);
+        const res = await Covers.search(q.length >= 3 || !a ? q : '', 8, a.length >= 2 ? a : '');
         if (seq !== findSeq) return;
         findItems = res; findActive = -1;
         renderSuggest();
@@ -1628,7 +1635,7 @@
       return `<li role="option" id="sg${i}" data-i="${i}" aria-selected="${i === findActive}">
         <span class="sg-cover">${it.cover ? `<img alt="" loading="lazy" src="${Covers.coverURL(it.cover, 'S')}">` : ''}</span>
         <span class="sg-text"><span class="sg-title">${esc(it.title)}</span><span class="sg-by">${by}</span></span></li>`;
-    }).join('') + `<li class="sg-note">${findItems.length ? 'Not here? Keep typing, or fill in the rest yourself.' : 'No match found. Fill in the rest yourself.'}</li>`;
+    }).join('') + `<li class="sg-note">${findItems.length ? ($('#fAuthor').value.trim() ? 'Not here? Keep typing, or fill in the rest yourself.' : 'Not here? Add the author below to narrow it down.') : ($('#fAuthor').value.trim() ? 'No match found. Check the spelling, or fill in the rest yourself.' : 'No match found. Try adding the author below.')}</li>`;
     ul.querySelectorAll('img').forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
     ul.hidden = false;
     $('#fTitle').setAttribute('aria-expanded', String(findItems.length > 0));
@@ -2699,7 +2706,19 @@
       } else if (e.key === 'Enter' && findActive >= 0) { e.preventDefault(); applyPick(findItems[findActive]); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSuggest(); }
     });
-    $('#fTitle').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#fTitle')) closeSuggest(); }, 250));
+    $('#fTitle').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#fTitle') && document.activeElement !== $('#fAuthor')) closeSuggest(); }, 250));
+    $('#fAuthor').addEventListener('input', onAuthorInput);
+    $('#fAuthor').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#fTitle') && document.activeElement !== $('#fAuthor')) closeSuggest(); }, 250));
+    $('#fAuthor').addEventListener('keydown', e => {
+      if ($('#fSuggest').hidden || !findItems.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (e.key === 'ArrowDown') findActive = findActive < findItems.length - 1 ? findActive + 1 : -1;
+        else findActive = findActive === -1 ? findItems.length - 1 : findActive - 1;
+        renderSuggest();
+      } else if (e.key === 'Enter' && findActive >= 0) { e.preventDefault(); applyPick(findItems[findActive]); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSuggest(); }
+    });
     $('#fSuggest').addEventListener('mousedown', e => e.preventDefault());
     $('#fSuggest').addEventListener('click', e => { const li = e.target.closest('[data-i]'); if (li) applyPick(findItems[+li.dataset.i]); });
     $('#fMatch').addEventListener('click', e => {
@@ -3267,7 +3286,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261123030659').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261123031135').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

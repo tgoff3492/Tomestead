@@ -3050,8 +3050,8 @@ const authorsSig = () => (window.TomesteadAuthors ? window.TomesteadAuthors.top(
 function buildPortraitsNow() {
   const tok = ++portraitTok;
   lastAuthors = authorsSig();
-  if (!shown('authors')) { if (world.portraits) { world.portraits.dispose(); world.portraits = null; } delete STATIONS.authors; return; }
-  authorsSource(world.shell.tier === 'study' ? 3 : 6).then((list) => {
+  if (!shown('authors')) { if (world.portraits) { world.portraits.dispose(); world.portraits = null; } delete STATIONS.authors; return (world.portraitsReady = Promise.resolve()); }
+  return (world.portraitsReady = authorsSource(world.shell.tier === 'study' ? 3 : 6).then((list) => {
     if (tok !== portraitTok || !world) return;
     if (world.portraits) { world.portraits.dispose(); world.portraits = null; }
     delete STATIONS.authors;
@@ -3059,7 +3059,7 @@ function buildPortraitsNow() {
     world.portraits = buildPortraits(world.K, world.shell.tier, list);
     STATIONS.authors = world.portraits.station;
     renderer.shadowMap.needsUpdate = true; kick();
-  }).catch(() => {});
+  }).catch(() => {}));
 }
 function authorCard(a) {
   const stars = a.avg ? ' · ' + '★'.repeat(Math.round(a.avg)) + ` (${a.avg} on average)` : '';
@@ -3137,15 +3137,19 @@ function playArrival() {
   }
   // the piece is put in place but shrunk to nothing, the camera walks over, and it swells into view
   finish(); syncShown();
-  const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
-  if (obj) { obj.scale.multiplyScalar(0.01); obj.updateMatrix(); }
-  const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: 'hearth', display: 'display', nook: 'nook', authors: 'authors' }[step.where] || home()) : home();
-  glide(STATIONS[to] ? to : home(), 1.6, false);
-  setTimeout(() => {
-    if (key === 'tome') world.tome.wake();
-    if (obj) growIn(obj, s0);
-    setTimeout(() => card(), 650);
-  }, calm.matches ? 400 : 1700);
+  // the portraits are fetched first (they need the network): wait for them so the camera has somewhere to go
+  const ready = key === 'authors' ? Promise.race([world.portraitsReady || Promise.resolve(), new Promise((r) => setTimeout(r, 12000))]) : Promise.resolve();
+  ready.then(() => {
+    const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
+    if (obj) { obj.scale.multiplyScalar(0.01); obj.updateMatrix(); }
+    const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: 'hearth', display: 'display', nook: 'nook', authors: 'authors' }[step.where] || home()) : home();
+    glide(STATIONS[to] ? to : home(), 1.6, false);
+    setTimeout(() => {
+      if (key === 'tome') world.tome.wake();
+      if (obj) growIn(obj, s0);
+      setTimeout(() => card(), 650);
+    }, calm.matches ? 400 : 1700);
+  });
 }
 function growTarget(key) {
   const F = world.furniture;

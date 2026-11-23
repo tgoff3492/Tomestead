@@ -116,10 +116,13 @@
   const isbnOf = (s) => { const d = String(s || '').replace(/[\s-]/g, '').toUpperCase(); return /^(97[89]\d{10}|\d{9}[\dX])$/.test(d) ? d : ''; };
   // Returns [{ olKey, title, author, year, pages, cover, subjects }]
   // what you type is a title: search titles only, so "Laura" finds the book, not authors named Laura
-  async function search(text, limit = 7) {
+  // with an author too (or only an author), the search narrows to their books
+  async function search(text, limit = 7, author = '') {
+    text = String(text || '').trim(); author = String(author || '').trim();
     const isbn = isbnOf(text);
     if (isbn) { const one = await byISBN(isbn); return one ? [one] : []; }
     const ask = async (params) => (await getJSON(`${OL}/search.json?${new URLSearchParams(Object.assign({ limit: '20', fields: FIND_FIELDS }, params))}`)).docs || [];
+    if (author.length >= 2) return searchWithAuthor(text, author, limit, ask);
     let docs = titleMatches(await ask({ title: text }), text);
     // still typing the last word ("the hobb"): search the whole words, then match the rest by prefix
     if (!docs.length && /\s/.test(text.trim())) docs = titleMatches(await ask({ title: text.trim().replace(/\s+\S*$/, '') }), text).slice();
@@ -131,6 +134,32 @@
         const g = (await gbAsk(`intitle:${text.trim()}`, 15)).filter(x => { const w = foldWords(x.title); return want.slice(0, -1).every(t => w.includes(t)) && w.some(t => t.startsWith(want[want.length - 1])); });
         const seen = new Set(out.map(x => foldWords(x.title).join(' ') + '|' + foldWords(x.author)[0]));
         for (const x of g) { const k = foldWords(x.title).join(' ') + '|' + foldWords(x.author)[0]; if (!seen.has(k) && out.length < limit) { seen.add(k); out.push(x); } }
+      } catch {}
+    }
+    return out;
+  }
+  // books by an author (and, if a title is typed too, only theirs that match it)
+  async function searchWithAuthor(text, author, limit, ask) {
+    const aw = foldWords(author);
+    const byThem = (name) => { const w = foldWords(name); return aw.every((x) => w.some((y) => y.startsWith(x))); };
+    let docs = [];
+    if (text.length >= 2) {
+      docs = titleMatches(await ask({ title: text, author }), text);
+      if (!docs.length && /\s/.test(text)) docs = titleMatches(await ask({ title: text.replace(/\s+\S*$/, ''), author }), text);
+    } else {
+      docs = (await ask({ author, sort: 'readinglog', limit: '30' })).filter((d) => d && d.title);
+      const seen = new Set();
+      docs = docs.filter((d) => { const k = foldWords(d.title).join(' '); if (seen.has(k)) return false; seen.add(k); return true; });
+    }
+    docs = docs.filter((d) => (d.author_name || []).some(byThem));
+    let out = docs.slice(0, limit).map(fromDoc);
+    if (out.length < 3) {
+      try {
+        const q = (text.length >= 2 ? `intitle:${text} ` : '') + `inauthor:${author}`;
+        const want = foldWords(text);
+        const g = (await gbAsk(q, 15)).filter((x) => byThem(x.author) && (!want.length || (want.slice(0, -1).every((t) => foldWords(x.title).includes(t)) && foldWords(x.title).some((t) => t.startsWith(want[want.length - 1])))));
+        const seen = new Set(out.map((x) => foldWords(x.title).join(' ')));
+        for (const x of g) { const k = foldWords(x.title).join(' '); if (!seen.has(k) && out.length < limit) { seen.add(k); out.push(x); } }
       } catch {}
     }
     return out;

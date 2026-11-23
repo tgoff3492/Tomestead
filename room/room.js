@@ -53070,9 +53070,9 @@ function buildPortraitsNow() {
       world.portraits = null;
     }
     delete STATIONS.authors;
-    return;
+    return world.portraitsReady = Promise.resolve();
   }
-  authorsSource(world.shell.tier === "study" ? 3 : 6).then((list) => {
+  return world.portraitsReady = authorsSource(world.shell.tier === "study" ? 3 : 6).then((list) => {
     if (tok !== portraitTok || !world) return;
     if (world.portraits) {
       world.portraits.dispose();
@@ -53215,18 +53215,21 @@ function playArrival() {
   }
   finish();
   syncShown();
-  const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
-  if (obj) {
-    obj.scale.multiplyScalar(0.01);
-    obj.updateMatrix();
-  }
-  const to = step ? { tome: "tome", case: "case", room: home(), hearth: "hearth", display: "display", nook: "nook", authors: "authors" }[step.where] || home() : home();
-  glide(STATIONS[to] ? to : home(), 1.6, false);
-  setTimeout(() => {
-    if (key === "tome") world.tome.wake();
-    if (obj) growIn(obj, s0);
-    setTimeout(() => card(), 650);
-  }, calm.matches ? 400 : 1700);
+  const ready = key === "authors" ? Promise.race([world.portraitsReady || Promise.resolve(), new Promise((r) => setTimeout(r, 12e3))]) : Promise.resolve();
+  ready.then(() => {
+    const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
+    if (obj) {
+      obj.scale.multiplyScalar(0.01);
+      obj.updateMatrix();
+    }
+    const to = step ? { tome: "tome", case: "case", room: home(), hearth: "hearth", display: "display", nook: "nook", authors: "authors" }[step.where] || home() : home();
+    glide(STATIONS[to] ? to : home(), 1.6, false);
+    setTimeout(() => {
+      if (key === "tome") world.tome.wake();
+      if (obj) growIn(obj, s0);
+      setTimeout(() => card(), 650);
+    }, calm.matches ? 400 : 1700);
+  });
 }
 function growTarget(key) {
   const F = world.furniture;
