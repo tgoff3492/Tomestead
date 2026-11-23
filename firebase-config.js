@@ -10,3 +10,12 @@ window.TOMESTEAD_FIREBASE = {
   messagingSenderId: "300728391371",
   appId: "1:300728391371:web:6814bf9df3490e05cd2d4e"
 };
+
+/* Book lookups beyond Open Library (covers.js). Google Books works without a key (a small shared
+   allowance); paste a key here for your own daily allowance (Google Cloud console → APIs &
+   Services → enable "Books API" → Credentials; restrict the key to tgoff3492.github.io).
+   Hardcover runs through a small Firebase function (functions/), so its token is never in the app. */
+window.TOMESTEAD_BOOKS = {
+  googleKey: '',
+  hardcover: true,
+};

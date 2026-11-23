@@ -22,6 +22,7 @@
     { key: 'mantel', at: 5, where: 'hearth', name: 'A painting over the fireplace', line: () => `Your fifth book hung a painting over the fireplace.` },
     { key: 'display', at: 5, where: 'display', name: 'A display case for your favourites', line: () => `A glass display case arrived for your five favourite books.` },
     { key: 'ottoman', at: 8, where: 'nook', name: 'An ottoman and a cup of tea', line: () => `Eight books brought an ottoman and a cup of tea to the reading corner.` },
+    { key: 'authors', at: 10, where: 'authors', name: 'A gallery of your favourite authors', line: () => `Ten books hung portraits of the authors you've read most.` },
     { key: 'nook', at: 15, where: 'nook', name: 'A painting for the reading corner', line: () => `Fifteen books hung a painting in the reading corner.` },
     { key: 'damask', at: 20, where: 'room', name: 'The claret damask rug', line: () => `Twenty books rolled out the claret damask rug.` },
     { key: 'library', at: 25, where: 'grow', name: TIERS[1].name, line: () => `Twenty-five books. Your study has grown into a library.` },

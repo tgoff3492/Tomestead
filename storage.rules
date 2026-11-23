@@ -34,6 +34,18 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    // catalog/<isbn>.jpg: a cover a reader photographed, shared with every reader through the catalog.
+    // Anyone invited can see them; a new one can be added, never replaced or removed from the app.
+    match /catalog/{file} {
+      allow read: if request.auth != null && request.auth.token.email_verified == true
+        && firestore.exists(/databases/(default)/documents/invites/$(request.auth.token.email.lower()));
+      allow create: if request.auth != null && request.auth.token.email_verified == true
+        && firestore.exists(/databases/(default)/documents/invites/$(request.auth.token.email.lower()))
+        && request.resource.metadata.by == request.auth.uid
+        && request.resource.size < 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     // Everything else is closed.
   }
 }

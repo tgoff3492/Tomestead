@@ -4,7 +4,16 @@
 (() => {
   'use strict';
   const OL = 'https://openlibrary.org';
-  const coverURL = (id, size = 'L') => `https://covers.openlibrary.org/b/id/${id}-${size}.jpg?default=false`;
+  // a cover is an Open Library cover id (a number) or, from the other sources, a picture's address
+  const coverURL = (id, size = 'L') => {
+    if (typeof id === 'string') {
+      if (!/^https:\/\//.test(id)) return null;
+      if (/books\.google|googleusercontent/.test(id)) return id.replace(/&edge=curl/g, '').replace(/&fife=[^&]*/g, '') + `&fife=w${size === 'S' ? 140 : size === 'M' ? 320 : 640}`;
+      return id;
+    }
+    return `https://covers.openlibrary.org/b/id/${id}-${size}.jpg?default=false`;
+  };
+  const okCover = (c) => (typeof c === 'number' && c > 0) || (typeof c === 'string' && /^https:\/\//.test(c));
 
   // ---------- your own photos ----------
   let dbp = null;
@@ -113,8 +122,18 @@
     const ask = async (params) => (await getJSON(`${OL}/search.json?${new URLSearchParams(Object.assign({ limit: '20', fields: FIND_FIELDS }, params))}`)).docs || [];
     let docs = titleMatches(await ask({ title: text }), text);
     // still typing the last word ("the hobb"): search the whole words, then match the rest by prefix
-    if (!docs.length && /\s/.test(text.trim())) docs = titleMatches(await ask({ title: text.trim().replace(/\s+\S*$/, '') }), text);
-    return docs.slice(0, limit).map(fromDoc);
+    if (!docs.length && /\s/.test(text.trim())) docs = titleMatches(await ask({ title: text.trim().replace(/\s+\S*$/, '') }), text).slice();
+    let out = docs.slice(0, limit).map(fromDoc);
+    // Open Library came up short (new, small-press or self-published books): ask Google Books too
+    if (out.length < 3 && text.trim().length >= 3) {
+      try {
+        const want = foldWords(text);
+        const g = (await gbAsk(`intitle:${text.trim()}`, 15)).filter(x => { const w = foldWords(x.title); return want.slice(0, -1).every(t => w.includes(t)) && w.some(t => t.startsWith(want[want.length - 1])); });
+        const seen = new Set(out.map(x => foldWords(x.title).join(' ') + '|' + foldWords(x.author)[0]));
+        for (const x of g) { const k = foldWords(x.title).join(' ') + '|' + foldWords(x.author)[0]; if (!seen.has(k) && out.length < limit) { seen.add(k); out.push(x); } }
+      } catch {}
+    }
+    return out;
   }
   // keep only books whose title has every word you typed (the last one can be half-typed), best matches first
   const foldWords = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’']/g, '').split(/[^a-z0-9]+/).filter(Boolean);
@@ -137,9 +156,7 @@
     year: d.first_publish_year || null, pages: d.number_of_pages_median || null, cover: d.cover_i || null,
     subjects: (d.subject || []).slice(0, 40),
   });
-  async function byISBN(isbn) {
-    isbn = isbnOf(isbn);
-    if (!isbn) return null;
+  async function olByISBN(isbn) {
     try {
       const q = new URLSearchParams({ q: `isbn:${isbn}`, limit: '1', fields: FIND_FIELDS });
       const d = ((await getJSON(`${OL}/search.json?${q}`)).docs || [])[0];
@@ -155,6 +172,71 @@
       const work = (e.works || [])[0] && e.works[0].key;
       return { olKey: work || null, title: e.title, author, year: parseInt(e.publish_date, 10) || null, pages: e.number_of_pages || null, cover: (e.covers || []).find(c => c > 0) || null, subjects: e.subjects || [], isbn };
     } catch { return null; }
+  }
+
+  // ---------- more sources: the shared Tomestead catalog, Google Books, Hardcover ----------
+  // A scanned or typed ISBN is looked up in turn: the catalog every reader shares (anything found or
+  // fixed once is there for everyone), Open Library, Google Books, then Hardcover. Each fills in what
+  // the one before was missing (most often the cover). Whatever is found goes into the catalog; an
+  // ISBN nobody knows is noted (misses) so the gaps can be seen.
+  const CFG = () => window.TOMESTEAD_BOOKS || {};
+  const SY = () => window.TomesteadSync || {};
+  const GB = 'https://www.googleapis.com/books/v1/volumes';
+  const GB_FIELDS = 'items(id,volumeInfo(title,subtitle,authors,publishedDate,pageCount,categories,imageLinks,industryIdentifiers,description,language))';
+  let gbDown = 0;
+  async function gbAsk(q, n = 10) {
+    if (Date.now() < gbDown) return [];
+    const p = new URLSearchParams({ q, maxResults: String(n), printType: 'books', fields: GB_FIELDS });
+    if (CFG().googleKey) p.set('key', CFG().googleKey);
+    const r = await fetch(`${GB}?${p}`);
+    if (r.status === 429 || r.status === 403) { gbDown = Date.now() + 10 * 60 * 1000; return []; }   // over the allowance: rest a while
+    if (!r.ok) throw new Error(r.status);
+    return ((await r.json()).items || []).map(fromGB).filter(Boolean);
+  }
+  function fromGB(it) {
+    const v = it && it.volumeInfo; if (!v || !v.title) return null;
+    const ids = v.industryIdentifiers || [];
+    const isbn = (ids.find(x => x.type === 'ISBN_13') || ids.find(x => x.type === 'ISBN_10') || {}).identifier || '';
+    const im = v.imageLinks || {};
+    const pic = im.thumbnail || im.smallThumbnail || '';
+    return {
+      olKey: null, gbId: it.id, title: v.title, author: (v.authors || []).slice(0, 2).join(' & '),
+      year: parseInt(v.publishedDate, 10) || null, pages: v.pageCount || null,
+      cover: pic ? pic.replace(/^http:/, 'https:').replace(/&edge=curl/g, '') : null,
+      subjects: (v.categories || []).slice(0, 12), isbn: isbnOf(isbn), about: v.description ? cleanDesc(v.description) : '', src: 'Google Books',
+    };
+  }
+  const gbByISBN = async (isbn) => (await gbAsk(`isbn:${isbn}`, 3).catch(() => []))[0] || null;
+  async function hcByISBN(isbn) {
+    if (CFG().hardcover === false || !SY().hardcover) return null;
+    try { return await SY().hardcover({ isbn }); } catch { return null; }
+  }
+  // fill the gaps in one record from another
+  function fill(a, b) {
+    if (!a) return b; if (!b) return a;
+    const out = Object.assign({}, a);
+    for (const k of ['title', 'author', 'year', 'pages', 'isbn', 'about', 'olKey']) if (!out[k] && b[k]) out[k] = b[k];
+    if (!okCover(out.cover) && okCover(b.cover)) { out.cover = b.cover; out.coverSrc = b.src || ''; }
+    if ((!out.subjects || !out.subjects.length) && b.subjects) out.subjects = b.subjects;
+    return out;
+  }
+  async function byISBN(isbn) {
+    isbn = isbnOf(isbn);
+    if (!isbn) return null;
+    let hit = null;
+    try { hit = SY().catalogGet ? await SY().catalogGet(isbn) : null; } catch {}
+    if (hit && hit.title && okCover(hit.cover)) return Object.assign(hit, { isbn });
+    const fromCatalog = !!hit;
+    hit = fill(hit, await olByISBN(isbn));
+    if (!hit || !okCover(hit.cover) || !hit.author) hit = fill(hit, await gbByISBN(isbn));
+    if (!hit || !okCover(hit.cover)) hit = fill(hit, await hcByISBN(isbn));
+    if (hit && hit.title) {
+      hit.isbn = isbn;
+      if (SY().catalogPut) SY().catalogPut(isbn, hit, fromCatalog).catch(() => {});
+      return hit;
+    }
+    if (SY().noteMiss) SY().noteMiss(isbn).catch(() => {});
+    return null;
   }
   // Open Library subjects → one plain genre (fiction first, so "History" on a novel doesn't win)
   const GENRES = [
@@ -182,10 +264,36 @@
   // Returns { olKey, ids: [coverIds], about: {text, source, url} | null }
   // (a book picked from search or scanned already knows its Open Library work)
   async function lookup(book) {
+    const r = await olLookup(book).catch(() => ({ olKey: book.olKey || null, ids: [], about: null }));
+    if (r.ids.length && r.about) return r;
+    // no cover or no summary on Open Library: the catalog, Google Books and Hardcover
+    try {
+      let x = null;
+      const isbn = isbnOf(book.isbn);
+      if (isbn) {
+        try { x = SY().catalogGet ? await SY().catalogGet(isbn) : null; } catch {}
+        if (!x || !okCover(x.cover) || !x.about) x = fill(x, await gbByISBN(isbn));
+        if (!x || !okCover(x.cover)) x = fill(x, await hcByISBN(isbn));
+      }
+      if ((!x || !okCover(x.cover)) && book.title) {
+        const sur = String(book.author || '').trim().split(/\s+/).pop();
+        const g = await gbAsk(`intitle:"${book.title}"${sur ? ` inauthor:${sur}` : ''}`, 5);
+        const want = foldWords(book.title).join(' ');
+        x = fill(x, g.find(v => okCover(v.cover) && foldWords(v.title).join(' ').startsWith(want)) || null);
+      }
+      if (x) {
+        if (okCover(x.cover) && !r.ids.includes(x.cover)) r.ids.push(x.cover);
+        if (!r.about && x.about) r.about = { text: cleanDesc(x.about), source: x.src || 'Google Books', url: x.gbId ? `https://books.google.com/books?id=${x.gbId}` : null };
+        if (isbn && SY().catalogPut) SY().catalogPut(isbn, Object.assign({ title: book.title, author: book.author }, x), false).catch(() => {});
+      }
+    } catch {}
+    return r;
+  }
+  async function olLookup(book) {
     if (book.olKey) {
       const out = { olKey: book.olKey, ids: [], about: null };
       const seed = book.art && Array.isArray(book.art.ids) ? book.art.ids : [];
-      seed.forEach(c => { if (c > 0 && !out.ids.includes(c)) out.ids.push(c); });
+      seed.forEach(c => { if (okCover(c) && !out.ids.includes(c)) out.ids.push(c); });
       const w = await getJSON(`${OL}${book.olKey}.json`);
       const d = typeof w.description === 'string' ? w.description : w.description && w.description.value;
       if (d) out.about = { text: cleanDesc(d), source: 'Open Library', url: `${OL}${book.olKey}` };
@@ -194,7 +302,7 @@
     }
     if (book.isbn) {
       const hit = await byISBN(book.isbn).catch(() => null);
-      if (hit && hit.olKey) return lookup({ olKey: hit.olKey, art: { ids: hit.cover ? [hit.cover] : [] } });
+      if (hit && hit.olKey) return olLookup({ olKey: hit.olKey, art: { ids: okCover(hit.cover) ? [hit.cover] : [] } });
     }
     const q = new URLSearchParams({ title: book.title, limit: '6', fields: 'key,title,author_name,cover_i,first_publish_year,edition_count' });
     if (book.author) q.set('author', book.author);
@@ -234,7 +342,7 @@
     const a = book.art || {};
     if (a.status === 'upload') return (await uploadURL(book.id)) || a.url || null;   // this device's copy, else the cloud copy
     if (a.status === 'plain') return null;
-    if (a.ids && a.ids.length) return coverURL(a.ids[a.i || 0], size);
+    if (a.ids && a.ids.length) return coverURL(a.ids[Math.min(a.i || 0, a.ids.length - 1)], size);
     return null;
   }
 
@@ -249,5 +357,5 @@
     });
   }
 
-  window.TomesteadCovers = { coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, titleMatches, byISBN, isbnOf, genreFrom };
+  window.TomesteadCovers = { okCover, gbAsk, coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, titleMatches, byISBN, isbnOf, genreFrom };
 })();

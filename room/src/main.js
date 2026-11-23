@@ -12,6 +12,7 @@ import { buildShell } from './shell.js';
 import { buildDisplay } from './display.js';
 import { buildFamilyRoom } from './family.js';
 import { createWalker } from './walk.js';
+import { buildPortraits } from './portraits.js';
 
 // When the room runs inside the Tomestead app, the app hands over its books and its screens
 // through window.TomesteadRoomHost; on its own (the lab page) it reads the browser's saved library.
@@ -523,6 +524,7 @@ async function build() {
     box, mesh, mergeGroup, kick, coverMaterial, envMap: scene.environment, glowTex: canvasTex(glowTex(), { repeat: false }),
     mats: { floor: floorMat, wall: wallMat, panel: panelMat, sky: skyMat },
     paintingImage: familyPaintingImage,
+    loadImg: (src, cors) => new Promise((res) => { const i = new Image(); if (cors) i.crossOrigin = 'anonymous'; const t = setTimeout(() => res(null), 10000); i.onload = () => { clearTimeout(t); res(i.naturalWidth > 2 ? i : null); }; i.onerror = () => { clearTimeout(t); res(null); }; i.src = src; }),
   };
   let shell = buildShell(K, tierNow());
   shell.cut.forEach((m) => CUT.push(m)); shell.plinth.forEach((m) => PLINTH.push(m));
@@ -599,7 +601,7 @@ async function build() {
   mergeStatics();
   scene.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
   renderer.shadowMap.needsUpdate = true;
-  return { books, desk, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null };
+  return { books, desk, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null, portraits: null };
 }
 
 function mergeStatics() {
@@ -1769,7 +1771,7 @@ const STATIONS = {
 // How big the room is and what's in it follow what your reading has earned (the app keeps it in
 // your settings). The lab page can try any size: ?tier=study|library|hall (everything earned).
 const Grow = window.TomesteadGrowth || null;
-const ALL_EARNED = { tome: 1, vine: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, nook: 1, damask: 1, library: 1, hall: 1 };
+const ALL_EARNED = { tome: 1, vine: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, authors: 1, nook: 1, damask: 1, library: 1, hall: 1 };
 function earnedNow() {
   if (!HOST) { const t = params.get('tier'); return t === 'study' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'library' && k !== 'hall')) : t === 'library' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'hall')) : ALL_EARNED; }
   return lib.earned || {};
@@ -1985,6 +1987,7 @@ function arrived(name) {
   else if (name === 'hearth') hearthCard();
   else if (name === 'tome') tomeCard();
   else if (name === 'display') displayCard();
+  else if (name === 'authors') authorsCard();
   else if (name === 'family') familyCard();
   else if (isHome(name)) { if (!growIntro()) firstRun(); }
   setTimeout(playArrival, 400);
@@ -2195,13 +2198,14 @@ function tap(px, py) {
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(scene.children, true);
-  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.fav ? 'display' : u.station || null);
+  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.fav ? 'display' : u.author ? 'authors' : u.station || null);
   const first = hits.find((h) => kindOf(h.object.userData));
   if (first) {
     const st = kindOf(first.object.userData);
     // the invisible tap areas are generous; prefer the exact thing under your finger
     const exact = hits.find((h) => { const u = h.object.userData; return (u.book || u.tome || u.deskBook) && kindOf(u) === st && h.distance < first.distance + 0.8; });
     if (station !== st) return go(st);
+    if (st === 'authors') { const f = hits.find((h) => h.object.userData.author); return f ? authorCard(f.object.userData.author) : authorsCard(); }
     if (st === 'display') { const f = hits.find((h) => h.object.userData.fav); return f ? openOnDesk(f.object.userData.fav.id) : displayCard(); }
     if (exact && exact.object.userData.book) return selectBook(indexOfMesh(exact.object));
     const cup = hits.find((h) => h.object.userData.trophy && h.distance < first.distance + 0.8);
@@ -2403,6 +2407,7 @@ $('card-body').addEventListener('click', (e) => {
     if (a === 'step-in') { closeCard(); setHome('room'); go('room'); setTimeout(playArrival, 2600); return; }
     if (a === 'open-fav') { openOnDesk(act.dataset.id); return; }
     if (a === 'fam-go') { go('fam' + act.dataset.i); return; }
+    if (a === 'author' && world.portraits) { const m = world.portraits.items[Number(act.dataset.i)]; if (m) authorCard(m.userData.author); return; }
     if (a === 'fam-page') { const n = world.fam ? world.fam.pages : 1; famPage = (famPage + Number(act.dataset.d) + n) % n; closeCard(); crossTo('family', true); return; }
   }
   if (act && HOST) {
@@ -3021,6 +3026,7 @@ function applyEarned() {
   for (const o of [F.ottoman, F.teacup, F.steam]) if (o) o.visible = shown('ottoman');
   world.books.setVine(shown('vine') ? (lib.theme.vine || 'roses') : 'none');
   buildDisplayNow();
+  buildPortraitsNow();
   renderer.shadowMap.needsUpdate = true;
   kick();
 }
@@ -3032,6 +3038,41 @@ function buildDisplayNow() {
   world.display.setLight(mode === 'night');
   STATIONS.display = world.display.station;
 }
+// the portrait gallery of your top authors (fetched by the app: authors.js), rebuilt when the list
+// changes or the room changes size
+let portraitTok = 0, lastAuthors = '';
+const authorsSource = (n) => (HOST && HOST.authors ? HOST.authors(n) : window.TomesteadAuthors ? window.TomesteadAuthors.gallery(lib.books, n) : Promise.resolve([]));
+const authorsSig = () => (window.TomesteadAuthors ? window.TomesteadAuthors.top(lib.books, 6).map((a) => a.name + a.count + a.avg).join('|') : '') + world.shell.tier + shown('authors');
+function buildPortraitsNow() {
+  const tok = ++portraitTok;
+  lastAuthors = authorsSig();
+  if (!shown('authors')) { if (world.portraits) { world.portraits.dispose(); world.portraits = null; } delete STATIONS.authors; return; }
+  authorsSource(world.shell.tier === 'study' ? 3 : 6).then((list) => {
+    if (tok !== portraitTok || !world) return;
+    if (world.portraits) { world.portraits.dispose(); world.portraits = null; }
+    delete STATIONS.authors;
+    if (!list || !list.length) return;
+    world.portraits = buildPortraits(world.K, world.shell.tier, list);
+    STATIONS.authors = world.portraits.station;
+    renderer.shadowMap.needsUpdate = true; kick();
+  }).catch(() => {});
+}
+function authorCard(a) {
+  const stars = a.avg ? ' · ' + '★'.repeat(Math.round(a.avg)) + ` (${a.avg} on average)` : '';
+  const years = a.born ? `${a.born}–${a.died || ''}` : '';
+  openCard(`<div class="eyebrow">About the author</div><h2>${esc(a.name)}</h2>${years ? `<div class="meta">${esc(years)}</div>` : ''}
+    ${a.bio ? `<div class="author-bio">${esc(a.bio)}</div>` : '<div class="meta">No biography found yet.</div>'}
+    <div class="meta">You’ve finished ${a.count} ${a.count === 1 ? 'book' : 'books'} by ${esc(a.name.split(' ')[0])}${stars}.</div>
+    <div class="meta author-books">${(a.titles || []).map((t) => `<em>${esc(t)}</em>`).join(' · ')}</div>
+    <div class="note">${[a.credit, a.bioSrc ? 'About: ' + a.bioSrc : ''].filter(Boolean).map(esc).join(' · ')}${a.url ? ` · <a href="${esc(a.url)}" target="_blank" rel="noopener">Read more</a>` : ''}</div>`, 'author');
+}
+function authorsCard() {
+  const P = world.portraits;
+  if (!P) return;
+  openCard(`<div class="eyebrow">Your authors</div><h2>The portrait gallery</h2>
+    <div class="fam-who">${P.items.map((m, i) => `<button type="button" data-act="author" data-i="${i}">${esc(m.userData.author.name)}<small>${m.userData.author.count} ${m.userData.author.count === 1 ? 'book' : 'books'}</small></button>`).join('')}</div>
+    <div class="meta">The authors you’ve read most. Tap a portrait to read about them.</div>`, 'authors');
+}
 // the room changes size: everything that hangs off the old shell is swapped for the new one
 function rebuildShell(tier) {
   const old = world.shell;
@@ -3042,6 +3083,7 @@ function rebuildShell(tier) {
   sh.cut.forEach((m) => { CUT.push(m); m.visible = !isOut; }); sh.plinth.forEach((m) => { PLINTH.push(m); m.visible = isOut; });
   world.shell = sh;
   applyTierStations(sh);
+  buildPortraitsNow();
   if (walker && walker.on) { const w = walkWorld(tier); walker.setWorld(w.bounds, w.obstacles); }
   setTimeout(walkButton, 0);
   buildDisplayNow();
@@ -3093,7 +3135,7 @@ function playArrival() {
   finish(); syncShown();
   const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
   if (obj) { obj.scale.multiplyScalar(0.01); obj.updateMatrix(); }
-  const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: 'hearth', display: 'display', nook: 'nook' }[step.where] || home()) : home();
+  const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: 'hearth', display: 'display', nook: 'nook', authors: 'authors' }[step.where] || home()) : home();
   glide(STATIONS[to] ? to : home(), 1.6, false);
   setTimeout(() => {
     if (key === 'tome') world.tome.wake();
@@ -3103,7 +3145,7 @@ function playArrival() {
 }
 function growTarget(key) {
   const F = world.furniture;
-  return { mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, rug: world.rug, damask: world.rug }[key] || null;
+  return { mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, authors: world.portraits && world.portraits.group, rug: world.rug, damask: world.rug }[key] || null;
 }
 // the new piece swells gently into place
 function growIn(obj, s0) {
@@ -3222,7 +3264,10 @@ let PINS = BASE_PINS, pinSig = '';
 // the pins over the dollhouse (plus the display case once it's there); in the family room, one per reader
 function pinList() {
   if (where === 'family') return world && world.fam ? world.fam.cases.map((c, i) => ['fam' + i, c.name, c.pin]) : [];
-  return world && world.display ? [...BASE_PINS, ['display', 'Favourites', world.display.pin]] : BASE_PINS;
+  const out = [...BASE_PINS];
+  if (world && world.display) out.push(['display', 'Favourites', world.display.pin]);
+  if (world && world.portraits) out.push(['authors', 'Authors', world.portraits.pin]);
+  return out;
 }
 const pinBox = document.createElement('div');
 pinBox.className = 'pins'; pinBox.hidden = true;
@@ -3433,6 +3478,7 @@ function refresh() {
     else fadeThrough(() => { rebuildShell(tier); if (isHome(station) || station === 'display') { const f = framing(station === 'display' && !STATIONS.display ? home() : station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; } });
   }
   if (favSig() !== lastFav) { lastFav = favSig(); if (shown('display')) buildDisplayNow(); }
+  if (authorsSig() !== lastAuthors) buildPortraitsNow();
   if (where === 'family') {
     const before = world.fam;
     ensureFamily();

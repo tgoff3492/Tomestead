@@ -611,6 +611,68 @@
     return famShelves;
   }
 
+  // ---------- the shared book catalog ----------
+  // Every book any reader finds by ISBN (from Open Library, Google Books or Hardcover), and any cover
+  // a reader photographs, is kept in catalog/<isbn> so the next reader who scans it gets it at once.
+  // ISBNs that no source knows are noted in misses/ (read them in the Firebase console).
+  const catCache = new Map();
+  const clip = (v, n) => String(v || '').slice(0, n);
+  async function catalogGet(isbn) {
+    if (!user || !fb || !/^(\d{9}[\dX]|\d{13})$/.test(isbn)) return null;
+    if (catCache.has(isbn)) return catCache.get(isbn);
+    const { F } = fb;
+    const snap = await F.getDoc(F.doc(fb.db, 'catalog', isbn));
+    const x = snap.exists() ? snap.data() : null;
+    const out = x && x.title ? { olKey: x.olKey || null, title: x.title, author: x.author || '', year: x.year || null, pages: x.pages || null, cover: x.cover || null,
+      subjects: Array.isArray(x.subjects) ? x.subjects : [], about: x.about || '', src: x.src || 'Tomestead', isbn } : null;
+    catCache.set(isbn, out);
+    return out;
+  }
+  async function catalogPut(isbn, b, had) {
+    if (!user || !fb || !b || !b.title || !/^(\d{9}[\dX]|\d{13})$/.test(isbn)) return;
+    const cover = (typeof b.cover === 'number' && b.cover > 0) || (typeof b.cover === 'string' && /^https:\/\//.test(b.cover)) ? b.cover : null;
+    const prev = catCache.get(isbn);
+    if (had && prev && (prev.cover || !cover)) return;               // nothing new to add
+    const { F } = fb;
+    const data = { title: clip(b.title, 300), author: clip(b.author, 200), year: Number(b.year) || null, pages: Number(b.pages) || null, cover: typeof cover === 'string' ? clip(cover, 600) : cover,
+      olKey: b.olKey ? clip(b.olKey, 60) : null, subjects: (b.subjects || []).slice(0, 12).map((x) => clip(x, 60)), about: clip(b.about, 1500), src: clip(b.src || b.coverSrc || 'Open Library', 40), by: user.uid, at: F.serverTimestamp() };
+    await F.setDoc(F.doc(fb.db, 'catalog', isbn), data, { merge: true });
+    catCache.set(isbn, Object.assign({}, prev || {}, data, { isbn }));
+  }
+  const missed = new Set();
+  async function noteMiss(isbn, title) {
+    if (!user || !fb || missed.has(isbn)) return;
+    missed.add(isbn);
+    const { F } = fb;
+    await F.addDoc(F.collection(fb.db, 'misses'), { isbn: clip(isbn, 13), title: clip(title, 200), uid: user.uid, at: F.serverTimestamp() });
+  }
+  // a reader's own cover photo, shared through the catalog for that ISBN (if the catalog has none)
+  async function shareCover(isbn, blob, title, author) {
+    if (!user || !fb || !blob || !/^(\d{9}[\dX]|\d{13})$/.test(isbn)) return null;
+    const have = await catalogGet(isbn).catch(() => null);
+    if (have && have.cover) return null;
+    const { S } = fb;
+    const r = S.ref(fb.storage, `catalog/${isbn}.jpg`);
+    await S.uploadBytes(r, blob, { contentType: 'image/jpeg', cacheControl: 'public, max-age=31536000', customMetadata: { by: user.uid } });
+    const url = await S.getDownloadURL(r);
+    await catalogPut(isbn, Object.assign({}, have || { title, author }, { cover: url, src: 'A Tomestead reader' }), false);
+    return url;
+  }
+  // Hardcover's catalog, through the small Firebase function in functions/ (its token stays there).
+  // If the function isn't deployed, this quietly stays off for the rest of the visit.
+  let hcOff = false;
+  async function hardcover(q) {
+    if (!user || hcOff) return null;
+    const cfg = window.TOMESTEAD_FIREBASE || {};
+    const url = `https://us-central1-${cfg.projectId}.cloudfunctions.net/hardcover?${new URLSearchParams(q)}`;
+    let r;
+    try { r = await fetch(url, { headers: { Authorization: 'Bearer ' + (await user.getIdToken()) } }); } catch { hcOff = true; return null; }
+    if (r.status === 404 || r.status >= 500) { hcOff = true; return null; }
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    return j && j.book && j.book.title ? Object.assign(j.book, { src: 'Hardcover' }) : null;
+  }
+
   // ---------- feedback and error reports (for the person running Tomestead) ----------
   // Saved to the 'feedback' and 'errors' collections; readable only in the Firebase console.
   // Anything that can't be sent yet waits on this device and goes with the next sign-in.
@@ -669,6 +731,7 @@
     loadFamilyShelves,
     publishShelf: (now) => publishShelf(now),
     displayName: () => (user ? myName() : ''),
+    catalogGet, catalogPut, noteMiss, shareCover, hardcover,
     addFamilyPainting,
     removeFamilyPainting,
     myUid: () => (user && user.uid) || uid || '',

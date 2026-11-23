@@ -58,3 +58,15 @@ The reading room has a second, smaller room where each family member's shelves s
 2. That's it for anyone already marked `family: true`. Their shelves appear once each of them has opened Tomestead with this version.
 
 What's shared: titles, authors, stars, status (read, reading, to read, set aside), spine colour, pages and the cover. Never reviews, notes, saved lines or reading logs. Each person can turn it off in **Customize ▸ Room ▸ Share my shelves with my family** (that deletes their summary) and change the name on their bookcase there. The summaries live in the Firestore collection `familyShelves`, one document per reader, readable only by family accounts.
+
+## Finding more books (Nov 22, 2026)
+Scanning or searching now tries, in order: the **shared Tomestead catalog** → **Open Library** → **Google Books** → **Hardcover**. Each fills in what the last was missing (most often the cover). Anything found goes into the catalog, so the next reader who scans that book gets it straight away, and a cover someone photographs is shared the same way. ISBNs nobody knows are listed in Firestore → `misses`, so you can see the gaps.
+
+1. **Rules (needed):** paste `firestore.rules` into Firestore ▸ Rules and Publish, and `storage.rules` into Storage ▸ Rules and Publish. They add `catalog`, `misses` and the shared `catalog/` cover photos.
+2. **Google Books (works now):** it already works without a key on a small shared allowance. For your own daily allowance: Google Cloud console (same project) ▸ APIs & Services ▸ Library ▸ enable **Books API** ▸ Credentials ▸ Create API key, restrict it to websites `https://tgoff3492.github.io/*` and to the Books API, then paste it into `firebase-config.js` as `googleKey`.
+3. **Hardcover (optional, one-time setup on a computer):**
+   - Get your token: sign in at hardcover.app ▸ Settings ▸ API (https://hardcover.app/account/api) and copy it.
+   - Install the Firebase tools: `npm install -g firebase-tools`, then `firebase login`.
+   - In the Tomestead folder: `firebase functions:secrets:set HARDCOVER_TOKEN` (paste the token when asked), then `firebase deploy --only functions`.
+   - That's it: the app finds the function by itself. Until it's deployed, the app simply skips Hardcover.
+4. **If gaps remain:** ISBNdb (paid, from $14.99/month, 110M+ books) could be added the same way as Hardcover.

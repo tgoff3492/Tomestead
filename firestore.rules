@@ -59,6 +59,25 @@ service cloud.firestore {
       allow delete: if family() && request.auth.uid == uid;
     }
 
+    // The shared book catalog: any reader can read it and add or improve a book (found by ISBN in
+    // Open Library, Google Books or Hardcover, or a cover they photographed). Nobody can delete.
+    match /catalog/{isbn} {
+      allow read: if invited();
+      allow create, update: if invited()
+        && isbn.matches('^([0-9]{9}[0-9X]|[0-9]{13})$')
+        && request.resource.data.keys().hasOnly(['title', 'author', 'year', 'pages', 'cover', 'olKey', 'subjects', 'about', 'src', 'by', 'at'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 300
+        && request.resource.data.by == request.auth.uid
+        && (!('about' in request.resource.data) || request.resource.data.about.size() <= 1500);
+    }
+    // ISBNs no source could find (read them in the console to see where the gaps are)
+    match /misses/{id} {
+      allow create: if invited()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['isbn', 'title', 'uid', 'at'])
+        && request.resource.data.isbn is string && request.resource.data.isbn.size() <= 13;
+    }
+
     // Feedback from inside the app (••• → Send feedback) and automatic error reports.
     // Readers can add them but never read them back; you read them in the Firebase console.
     match /feedback/{id} {

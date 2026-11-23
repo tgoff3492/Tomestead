@@ -2484,7 +2484,7 @@
         for (const b of incoming) {
           if (!b || !b.title) continue;
           const clean = cleanBook(b);
-          if (b.art && typeof b.art === 'object') clean.art = Object.assign({ status: String(b.art.status || ''), ids: Array.isArray(b.art.ids) ? b.art.ids.filter(Number.isFinite) : [], i: parseInt(b.art.i, 10) || 0, olKey: b.art.olKey ? String(b.art.olKey) : null }, photoFields(b.art));
+          if (b.art && typeof b.art === 'object') clean.art = Object.assign({ status: String(b.art.status || ''), ids: Array.isArray(b.art.ids) ? b.art.ids.filter(Covers.okCover).slice(0, 60) : [], i: parseInt(b.art.i, 10) || 0, olKey: b.art.olKey ? String(b.art.olKey) : null }, photoFields(b.art));
           if (b.about && b.about.text) clean.about = { text: String(b.about.text), source: String(b.about.source || 'Open Library'), url: String(b.about.url || '') };
           if (b.lookedUp) clean.lookedUp = Number(b.lookedUp) || 0;
           const i = books.findIndex(x => x.id === clean.id);
@@ -2974,6 +2974,9 @@
           const now = books.find(x => x.id === b.id);
           if (!up) break;
           if (now && now.art && now.art.status === 'upload' && !now.art.url) { Object.assign(now.art, up); save(); }
+          // a cover you photographed helps every reader who scans this book after you (if nobody has one yet)
+          const isbn = Covers.isbnOf(b.isbn);
+          if (isbn && Sync.shareCover) Sync.shareCover(isbn, blob, b.title, b.author).catch(() => {});
           else Sync.removeCover(up.path);   // the cover changed while it was uploading
         } catch (e) { console.warn('Tomestead: photo upload failed', e); break; }
       }
@@ -3185,6 +3188,7 @@
     paintSig: () => (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id + (f.url ? '+' : '')).join(','),
     openImport: () => openImport(),
     wantBook: (p) => addWant(p),
+    authors: (n) => (window.TomesteadAuthors ? window.TomesteadAuthors.gallery(books, n) : Promise.resolve([])),
     unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
     ready: (room) => {
       if (document.documentElement.classList.contains('cz-on')) { room.setActive(true); czLayout(); czShow(); }
@@ -3198,7 +3202,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261122220438').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261122221619').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

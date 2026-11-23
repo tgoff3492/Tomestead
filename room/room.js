@@ -48655,6 +48655,187 @@ function createWalker({ THREE, root, kick: kick2 }) {
   };
 }
 
+// src/portraits.js
+function buildPortraits(K, tier, authors) {
+  const { THREE, M } = K;
+  const G = new THREE.Group();
+  G.userData.dyn = true;
+  K.scene.add(G);
+  const X = 2.985, Z0 = 1.85, gapZ = 0.6;
+  const rows = tier === "study" ? [1.86] : [2.3, 1.48];
+  const W = 0.34, H = 0.44;
+  const slots = [];
+  rows.forEach((y) => [-1, 0, 1].forEach((k) => slots.push({ y, z: Z0 + k * gapZ })));
+  const list = authors.slice(0, slots.length);
+  const items = [];
+  const ovalGeo = (w, h) => {
+    const s = new THREE.Shape();
+    s.absellipse(0, 0, w / 2, h / 2, 0, Math.PI * 2, false);
+    const g = new THREE.ShapeGeometry(s, 48);
+    const p = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / w + 0.5, p.getY(i) / h + 0.5);
+    uv.needsUpdate = true;
+    return g;
+  };
+  list.forEach((a, i) => {
+    const s = slots[i];
+    const P = new THREE.Group();
+    G.add(P);
+    P.position.set(X, s.y, s.z);
+    P.rotation.y = -Math.PI / 2;
+    const ring = new THREE.Shape();
+    ring.absellipse(0, 0, W / 2 + 0.045, H / 2 + 0.045, 0, Math.PI * 2, false);
+    const hole = new THREE.Path();
+    hole.absellipse(0, 0, W / 2, H / 2, 0, Math.PI * 2, true);
+    ring.holes = [hole];
+    K.mesh(new THREE.ExtrudeGeometry(ring, { depth: 0.035, bevelEnabled: true, bevelThickness: 8e-3, bevelSize: 8e-3, bevelSegments: 2, curveSegments: 48 }), M.gold, P, { cast: false });
+    const bead = new THREE.Shape();
+    bead.absellipse(0, 0, W / 2 + 6e-3, H / 2 + 6e-3, 0, Math.PI * 2, false);
+    const bh = new THREE.Path();
+    bh.absellipse(0, 0, W / 2 - 4e-3, H / 2 - 4e-3, 0, Math.PI * 2, true);
+    bead.holes = [bh];
+    const bm = K.mesh(new THREE.ExtrudeGeometry(bead, { depth: 0.042, bevelEnabled: false, curveSegments: 48 }), M.brass, P, { cast: false });
+    bm.position.z = -2e-3;
+    const top = K.mesh(new THREE.SphereGeometry(0.018, 14, 10), M.gold, P, { cast: false });
+    top.position.set(0, H / 2 + 0.06, 0.03);
+    const mat = K.std({ map: K.canvasTex(cameo(K, a.name), { repeat: false }), roughness: 0.62 });
+    const face = K.mesh(ovalGeo(W, H), mat, P, { cast: false });
+    face.position.z = 0.012;
+    face.userData = { author: a, dyn: true };
+    const years = a.born ? `${a.born}\u2013${a.died || ""}` : "";
+    const plate = K.mesh(new THREE.PlaneGeometry(0.3, 0.05), K.std({ map: K.canvasTex(K.plateTex(years ? `${a.name} \xB7 ${years}` : a.name, 768, 128), { repeat: false }), roughness: 0.35, metalness: 0.6 }), P, { cast: false });
+    plate.position.set(0, -H / 2 - 0.085, 5e-3);
+    plate.userData = { author: a, dyn: true };
+    items.push(face);
+    if (a.photo) K.loadImg(a.photo, true).then((img) => {
+      if (!img) return;
+      const old = mat.map;
+      mat.map = K.canvasTex(oilPortrait(K, img), { repeat: false });
+      mat.needsUpdate = true;
+      old.dispose();
+      K.kick();
+    });
+  });
+  if (list.length) {
+    const ys = list.map((_, i) => slots[i].y);
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(0.1, Math.max(...ys) - Math.min(...ys) + H + 0.3, gapZ * 3), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.position.set(X - 0.05, (Math.max(...ys) + Math.min(...ys)) / 2, Z0);
+    hit.userData.station = "authors";
+    G.add(hit);
+  }
+  G.traverse((o) => {
+    o.userData.dyn = true;
+  });
+  const yMid = rows.reduce((a, b) => a + b, 0) / rows.length;
+  return {
+    group: G,
+    items,
+    count: list.length,
+    station: { p: [1.05, 1.7, Z0], t: [2.95, yMid, Z0], w: gapZ * 3 + 0.1, h: rows.length > 1 ? 1.55 : 0.75, max: 2.6 },
+    pin: [2.9, Math.max(...rows) + 0.42, Z0],
+    dispose() {
+      K.scene.remove(G);
+      G.traverse((o) => {
+        if (o.isMesh) {
+          o.geometry.dispose();
+          if (o.material && o.material.map && o.material !== M.gold && o.material !== M.brass) {
+            o.material.map.dispose();
+            o.material.dispose();
+          }
+        }
+      });
+    }
+  };
+}
+function oilPortrait(K, img) {
+  const w = 320, h = 414;
+  const [c, x] = K.mkCanvas(w, h);
+  const [s, sx] = K.mkCanvas(80, 104);
+  const fit = (ctx, cw, ch) => {
+    const k = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
+    const iw = img.naturalWidth * k, ih = img.naturalHeight * k;
+    ctx.drawImage(img, (cw - iw) / 2, (ch - ih) / 2 - ch * 0.04, iw, ih);
+  };
+  fit(sx, 80, 104);
+  let px2 = null;
+  try {
+    px2 = sx.getImageData(0, 0, 80, 104).data;
+  } catch {
+    px2 = null;
+  }
+  x.imageSmoothingQuality = "high";
+  x.drawImage(s, 0, 0, w, h);
+  if (px2) {
+    const r = K.rng(7);
+    x.lineCap = "round";
+    for (let i = 0; i < 4200; i++) {
+      const u = r(), v = r(), ix = Math.min(79, Math.floor(u * 80)), iy = Math.min(103, Math.floor(v * 104)), o = (iy * 80 + ix) * 4;
+      const lum = (px2[o] + px2[o + 1] + px2[o + 2]) / 3;
+      x.strokeStyle = `rgba(${px2[o]},${px2[o + 1]},${px2[o + 2]},${0.55})`;
+      x.lineWidth = 2 + r() * (lum > 140 ? 4 : 3);
+      const a = (r() - 0.5) * 1.2 + (u - 0.5) * 0.8, L = 4 + r() * 9;
+      const cx = u * w, cy = v * h;
+      x.beginPath();
+      x.moveTo(cx - Math.cos(a) * L / 2, cy - Math.sin(a) * L / 2);
+      x.lineTo(cx + Math.cos(a) * L / 2, cy + Math.sin(a) * L / 2);
+      x.stroke();
+    }
+  }
+  x.globalCompositeOperation = "multiply";
+  x.fillStyle = "rgba(214,176,120,0.42)";
+  x.fillRect(0, 0, w, h);
+  x.globalCompositeOperation = "source-over";
+  const vg = x.createRadialGradient(w / 2, h * 0.42, w * 0.2, w / 2, h / 2, w * 0.72);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(25,14,6,0.65)");
+  x.fillStyle = vg;
+  x.fillRect(0, 0, w, h);
+  weave(K, x, w, h);
+  return c;
+}
+function cameo(K, name) {
+  const w = 320, h = 414;
+  const [c, x] = K.mkCanvas(w, h);
+  const bg = x.createRadialGradient(w / 2, h * 0.45, 20, w / 2, h / 2, w * 0.7);
+  bg.addColorStop(0, "#efe2c4");
+  bg.addColorStop(1, "#bfa47a");
+  x.fillStyle = bg;
+  x.fillRect(0, 0, w, h);
+  x.fillStyle = "#3b2a1f";
+  x.beginPath();
+  x.ellipse(w * 0.5, h * 0.36, w * 0.17, h * 0.15, -0.15, 0, Math.PI * 2);
+  x.fill();
+  x.beginPath();
+  x.moveTo(w * 0.22, h);
+  x.quadraticCurveTo(w * 0.24, h * 0.62, w * 0.47, h * 0.55);
+  x.quadraticCurveTo(w * 0.74, h * 0.6, w * 0.8, h);
+  x.fill();
+  x.beginPath();
+  x.ellipse(w * 0.36, h * 0.37, w * 0.02, h * 0.03, 0, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = "rgba(59,42,31,.85)";
+  x.font = '600 30px "IM Fell English", Georgia, serif';
+  x.textAlign = "center";
+  const initials = String(name || "").split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 3).join("");
+  x.fillStyle = "#d8b25e";
+  x.fillText(initials, w / 2, h * 0.88);
+  weave(K, x, w, h);
+  return c;
+}
+function weave(K, x, w, h) {
+  const r = K.rng(3);
+  x.globalAlpha = 0.07;
+  x.fillStyle = "#000";
+  for (let y = 0; y < h; y += 3) x.fillRect(0, y, w, 1);
+  for (let i = 0; i < w; i += 3) x.fillRect(i, 0, 1, h);
+  x.globalAlpha = 0.05;
+  for (let i = 0; i < 600; i++) {
+    x.fillStyle = r() > 0.5 ? "#fff" : "#000";
+    x.fillRect(r() * w, r() * h, 2, 2);
+  }
+  x.globalAlpha = 1;
+}
+
 // src/main.js
 var HOST = window.TomesteadRoomHost || null;
 var $ = (id) => document.getElementById("rm-" + id);
@@ -49345,7 +49526,21 @@ async function build() {
     envMap: scene.environment,
     glowTex: canvasTex(glowTex(), { repeat: false }),
     mats: { floor: floorMat, wall: wallMat, panel: panelMat, sky: skyMat },
-    paintingImage: familyPaintingImage
+    paintingImage: familyPaintingImage,
+    loadImg: (src, cors) => new Promise((res) => {
+      const i = new Image();
+      if (cors) i.crossOrigin = "anonymous";
+      const t = setTimeout(() => res(null), 1e4);
+      i.onload = () => {
+        clearTimeout(t);
+        res(i.naturalWidth > 2 ? i : null);
+      };
+      i.onerror = () => {
+        clearTimeout(t);
+        res(null);
+      };
+      i.src = src;
+    })
   };
   let shell = buildShell(K, tierNow());
   shell.cut.forEach((m) => CUT.push(m));
@@ -49479,7 +49674,7 @@ async function build() {
     }
   });
   renderer.shadowMap.needsUpdate = true;
-  return { books, desk, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null };
+  return { books, desk, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null, portraits: null };
 }
 function mergeStatics() {
   scene.updateMatrixWorld(true);
@@ -51116,7 +51311,7 @@ var STATIONS = {
   read: { p: [-0.1, 1.8, 0.75], t: [2, 0.3, -2.2], w: 2.2, h: 1.5, max: 4.6 }
 };
 var Grow = window.TomesteadGrowth || null;
-var ALL_EARNED = { tome: 1, vine: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, nook: 1, damask: 1, library: 1, hall: 1 };
+var ALL_EARNED = { tome: 1, vine: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, authors: 1, nook: 1, damask: 1, library: 1, hall: 1 };
 function earnedNow() {
   if (!HOST) {
     const t = params.get("tier");
@@ -51368,6 +51563,7 @@ function arrived(name) {
   else if (name === "hearth") hearthCard();
   else if (name === "tome") tomeCard();
   else if (name === "display") displayCard();
+  else if (name === "authors") authorsCard();
   else if (name === "family") familyCard();
   else if (isHome(name)) {
     if (!growIntro()) firstRun();
@@ -51654,7 +51850,7 @@ function tap(px2, py2) {
   ndc.set(px2 / innerWidth * 2 - 1, -(py2 / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(scene.children, true);
-  const kindOf = (u) => u.book ? "shelf" : u.tome ? "tome" : u.deskBook ? "desk" : u.trophy ? "hearth" : u.fav ? "display" : u.station || null;
+  const kindOf = (u) => u.book ? "shelf" : u.tome ? "tome" : u.deskBook ? "desk" : u.trophy ? "hearth" : u.fav ? "display" : u.author ? "authors" : u.station || null;
   const first = hits.find((h) => kindOf(h.object.userData));
   if (first) {
     const st = kindOf(first.object.userData);
@@ -51663,6 +51859,10 @@ function tap(px2, py2) {
       return (u.book || u.tome || u.deskBook) && kindOf(u) === st && h.distance < first.distance + 0.8;
     });
     if (station !== st) return go(st);
+    if (st === "authors") {
+      const f = hits.find((h) => h.object.userData.author);
+      return f ? authorCard(f.object.userData.author) : authorsCard();
+    }
     if (st === "display") {
       const f = hits.find((h) => h.object.userData.fav);
       return f ? openOnDesk(f.object.userData.fav.id) : displayCard();
@@ -51930,6 +52130,11 @@ $("card-body").addEventListener("click", (e) => {
     }
     if (a === "fam-go") {
       go("fam" + act.dataset.i);
+      return;
+    }
+    if (a === "author" && world.portraits) {
+      const m = world.portraits.items[Number(act.dataset.i)];
+      if (m) authorCard(m.userData.author);
       return;
     }
     if (a === "fam-page") {
@@ -52817,6 +53022,7 @@ function applyEarned() {
   for (const o of [F.ottoman, F.teacup, F.steam]) if (o) o.visible = shown("ottoman");
   world.books.setVine(shown("vine") ? lib.theme.vine || "roses" : "none");
   buildDisplayNow();
+  buildPortraitsNow();
   renderer.shadowMap.needsUpdate = true;
   kick();
 }
@@ -52830,6 +53036,52 @@ function buildDisplayNow() {
   world.display = buildDisplay(world.K, world.shell.tier, favourites());
   world.display.setLight(mode === "night");
   STATIONS.display = world.display.station;
+}
+var portraitTok = 0;
+var lastAuthors = "";
+var authorsSource = (n) => HOST && HOST.authors ? HOST.authors(n) : window.TomesteadAuthors ? window.TomesteadAuthors.gallery(lib.books, n) : Promise.resolve([]);
+var authorsSig = () => (window.TomesteadAuthors ? window.TomesteadAuthors.top(lib.books, 6).map((a) => a.name + a.count + a.avg).join("|") : "") + world.shell.tier + shown("authors");
+function buildPortraitsNow() {
+  const tok = ++portraitTok;
+  lastAuthors = authorsSig();
+  if (!shown("authors")) {
+    if (world.portraits) {
+      world.portraits.dispose();
+      world.portraits = null;
+    }
+    delete STATIONS.authors;
+    return;
+  }
+  authorsSource(world.shell.tier === "study" ? 3 : 6).then((list) => {
+    if (tok !== portraitTok || !world) return;
+    if (world.portraits) {
+      world.portraits.dispose();
+      world.portraits = null;
+    }
+    delete STATIONS.authors;
+    if (!list || !list.length) return;
+    world.portraits = buildPortraits(world.K, world.shell.tier, list);
+    STATIONS.authors = world.portraits.station;
+    renderer.shadowMap.needsUpdate = true;
+    kick();
+  }).catch(() => {
+  });
+}
+function authorCard(a) {
+  const stars = a.avg ? " \xB7 " + "\u2605".repeat(Math.round(a.avg)) + ` (${a.avg} on average)` : "";
+  const years = a.born ? `${a.born}\u2013${a.died || ""}` : "";
+  openCard(`<div class="eyebrow">About the author</div><h2>${esc(a.name)}</h2>${years ? `<div class="meta">${esc(years)}</div>` : ""}
+    ${a.bio ? `<div class="author-bio">${esc(a.bio)}</div>` : '<div class="meta">No biography found yet.</div>'}
+    <div class="meta">You\u2019ve finished ${a.count} ${a.count === 1 ? "book" : "books"} by ${esc(a.name.split(" ")[0])}${stars}.</div>
+    <div class="meta author-books">${(a.titles || []).map((t) => `<em>${esc(t)}</em>`).join(" \xB7 ")}</div>
+    <div class="note">${[a.credit, a.bioSrc ? "About: " + a.bioSrc : ""].filter(Boolean).map(esc).join(" \xB7 ")}${a.url ? ` \xB7 <a href="${esc(a.url)}" target="_blank" rel="noopener">Read more</a>` : ""}</div>`, "author");
+}
+function authorsCard() {
+  const P = world.portraits;
+  if (!P) return;
+  openCard(`<div class="eyebrow">Your authors</div><h2>The portrait gallery</h2>
+    <div class="fam-who">${P.items.map((m, i) => `<button type="button" data-act="author" data-i="${i}">${esc(m.userData.author.name)}<small>${m.userData.author.count} ${m.userData.author.count === 1 ? "book" : "books"}</small></button>`).join("")}</div>
+    <div class="meta">The authors you\u2019ve read most. Tap a portrait to read about them.</div>`, "authors");
 }
 function rebuildShell(tier) {
   const old = world.shell;
@@ -52853,6 +53105,7 @@ function rebuildShell(tier) {
   });
   world.shell = sh;
   applyTierStations(sh);
+  buildPortraitsNow();
   if (walker && walker.on) {
     const w = walkWorld(tier);
     walker.setWorld(w.bounds, w.obstacles);
@@ -52947,7 +53200,7 @@ function playArrival() {
     obj.scale.multiplyScalar(0.01);
     obj.updateMatrix();
   }
-  const to = step ? { tome: "tome", case: "case", room: home(), hearth: "hearth", display: "display", nook: "nook" }[step.where] || home() : home();
+  const to = step ? { tome: "tome", case: "case", room: home(), hearth: "hearth", display: "display", nook: "nook", authors: "authors" }[step.where] || home() : home();
   glide(STATIONS[to] ? to : home(), 1.6, false);
   setTimeout(() => {
     if (key === "tome") world.tome.wake();
@@ -52957,7 +53210,7 @@ function playArrival() {
 }
 function growTarget(key) {
   const F = world.furniture;
-  return { mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, rug: world.rug, damask: world.rug }[key] || null;
+  return { mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, authors: world.portraits && world.portraits.group, rug: world.rug, damask: world.rug }[key] || null;
 }
 function growIn(obj, s0) {
   const t0 = performance.now();
@@ -53098,7 +53351,10 @@ var PINS = BASE_PINS;
 var pinSig = "";
 function pinList() {
   if (where === "family") return world && world.fam ? world.fam.cases.map((c, i) => ["fam" + i, c.name, c.pin]) : [];
-  return world && world.display ? [...BASE_PINS, ["display", "Favourites", world.display.pin]] : BASE_PINS;
+  const out = [...BASE_PINS];
+  if (world && world.display) out.push(["display", "Favourites", world.display.pin]);
+  if (world && world.portraits) out.push(["authors", "Authors", world.portraits.pin]);
+  return out;
 }
 var pinBox = document.createElement("div");
 pinBox.className = "pins";
@@ -53397,6 +53653,7 @@ function refresh() {
     lastFav = favSig();
     if (shown("display")) buildDisplayNow();
   }
+  if (authorsSig() !== lastAuthors) buildPortraitsNow();
   if (where === "family") {
     const before = world.fam;
     ensureFamily();
