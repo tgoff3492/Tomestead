@@ -51464,6 +51464,8 @@ var STATIONS = {
   hearth: { p: [-0.5, 1.45, 2.3], t: [-2.7, 0.95, 1.6], w: 2.1, h: 2, max: 2.9 },
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
+  // (the painting above the reading corner, for when it arrives)
+  nookart: { p: [1.55, 1.6, -0.55], t: [1.85, 2, -2.69], w: 1.3, h: 1.1, max: 2.6 },
   case: { p: [0, 1.2, 0.4], t: [0, 1.12, -2.5], w: 2, h: 2.25, max: 4.2 },
   // reading mode: the armchair, the oil lamp and the tea from across the rug, sitting in the top of
   // the screen above the reading-mode controls
@@ -53425,7 +53427,7 @@ function playArrival() {
       obj.scale.multiplyScalar(0.01);
       obj.updateMatrix();
     }
-    const to = step ? { tome: "tome", case: "case", room: home(), hearth: "hearth", display: "display", nook: "nook", authors: "authors" }[step.where] || home() : home();
+    const to = step ? { tome: "tome", case: "case", room: home(), hearth: "hearth", display: "display", nook: key === "nook" ? "nookart" : "nook", authors: "authors" }[step.where] || home() : home();
     glide(STATIONS[to] ? to : home(), 1.6, false);
     setTimeout(() => {
       if (key === "tome") world.tome.wake();
