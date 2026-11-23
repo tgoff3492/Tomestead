@@ -1383,9 +1383,11 @@ function buildFireplace(MOD) {
     if (elephant) elephant.visible = years.length < 2;
     renderer.shadowMap.needsUpdate = true;
   }
+  // the cat, asleep on the hearth beside the fire (earned at three books)
+  const cat = buildCat(); cat.group.position.set(-2.52, 0.04, 2.3); cat.group.rotation.y = 0.5; g.add(cat.group);
   let base = 2;
   return {
-    setTrophies, art,
+    setTrophies, art, cat: cat.group,
     setLight(L) { base = mode === 'night' ? 4.2 : 1.6; },
     tick(t) {
       uTime.value = t; sparkMat.uniforms.uTime.value = t;
@@ -1396,6 +1398,76 @@ function buildFireplace(MOD) {
       const night = mode === 'night' ? 1.4 : 1;
       barkMat.emissiveIntensity = 0.32 * br * night; endMat.emissiveIntensity = 0.5 * br * night; coalMat.emissiveIntensity = (0.9 + 0.5 * br) * night;
       heart.material.opacity = 0.45 * fl * (mode === 'night' ? 1.25 : 0.9);
+      if (cat.group.visible) cat.tick(t);
+    },
+  };
+}
+// ---------------------------------------------------------------- the cat by the fire
+// A ginger tabby asleep on the hearth, curled nose to tail with its back to the fire. It breathes,
+// and now and then an ear twitches.
+function furTex(seed) {
+  const [c, x] = mkCanvas(512, 256); const r = rng(seed);
+  x.fillStyle = '#c87a3c'; x.fillRect(0, 0, 512, 256);
+  // lighter underneath (the bottom of the sphere), darker along the back
+  const gv = x.createLinearGradient(0, 0, 0, 256); gv.addColorStop(0, 'rgba(110,50,15,.35)'); gv.addColorStop(0.5, 'rgba(0,0,0,0)'); gv.addColorStop(1, 'rgba(255,225,180,.55)');
+  x.fillStyle = gv; x.fillRect(0, 0, 512, 256);
+  // tabby stripes: wavy bands running down the flanks
+  for (let i = 0; i < 22; i++) {
+    const u = (i / 22) * 512 + (r() - 0.5) * 10, w = 5 + r() * 9;
+    x.fillStyle = `rgba(${120 + r() * 20},${55 + r() * 15},20,${0.45 + r() * 0.25})`;
+    x.beginPath(); x.moveTo(u, 0);
+    for (let v = 0; v <= 190; v += 10) x.lineTo(u + Math.sin(v * 0.05 + i) * 7, v);
+    for (let v = 190; v >= 0; v -= 10) x.lineTo(u + w + Math.sin(v * 0.05 + i) * 7 * 0.6, v);
+    x.closePath(); x.fill();
+  }
+  // a fine grain of hairs
+  for (let i = 0; i < 5000; i++) { x.fillStyle = r() < 0.5 ? 'rgba(255,220,170,.12)' : 'rgba(80,35,10,.12)'; x.fillRect(r() * 512, r() * 256, 1, 2 + r() * 3); }
+  return c;
+}
+function buildCat() {
+  const g = new THREE.Group();
+  const fur = new THREE.MeshPhysicalMaterial({ map: canvasTex(furTex(7), { repeat: false }), roughness: 0.92, sheen: 1, sheenRoughness: 0.55, sheenColor: new THREE.Color('#ffd2a0') });
+  const cream = new THREE.MeshPhysicalMaterial({ color: '#efd8b8', roughness: 0.95, sheen: 1, sheenRoughness: 0.6, sheenColor: new THREE.Color('#fff0dc') });
+  const dark = std({ color: '#2a1810', roughness: 0.7 });
+  const pink = std({ color: '#c98278', roughness: 0.6 });
+  const blob = (rx, ry, rz, mat, x, y, z, parent = g) => { const m = mesh(new THREE.SphereGeometry(1, 32, 20), mat, parent); m.scale.set(rx, ry, rz); m.position.set(x, y, z); return m; };
+  // body and haunch
+  const body = blob(0.165, 0.085, 0.13, fur, 0, 0.082, 0);
+  const haunch = blob(0.1, 0.08, 0.095, fur, -0.075, 0.09, -0.035);
+  const chest = blob(0.065, 0.05, 0.06, cream, 0.085, 0.055, 0.045);
+  // front paws, tucked under the chin
+  blob(0.03, 0.018, 0.024, cream, 0.155, 0.02, 0.0); blob(0.03, 0.018, 0.024, cream, 0.165, 0.02, 0.05);
+  // the tail, wrapped round the front
+  const tc = new THREE.CatmullRomCurve3([[-0.15, 0.05, -0.06], [-0.14, 0.03, 0.08], [-0.04, 0.025, 0.145], [0.08, 0.025, 0.15], [0.17, 0.03, 0.1]].map((p) => new THREE.Vector3(...p)));
+  mesh(new THREE.TubeGeometry(tc, 40, 0.022, 10, false), fur, g);
+  blob(0.022, 0.022, 0.022, dark, 0.17, 0.03, 0.1);
+  // the head, resting on its paws, nose tipped down
+  const head = new THREE.Group(); head.position.set(0.125, 0.095, 0.045); head.rotation.set(0.22, 0.35, -0.3); head.scale.setScalar(1.2); g.add(head);
+  blob(0.062, 0.054, 0.066, fur, 0, 0, 0, head);
+  blob(0.028, 0.022, 0.034, cream, 0.05, -0.016, 0, head);
+  blob(0.008, 0.006, 0.01, pink, 0.077, -0.006, 0, head);
+  for (const sz of [-1, 1]) {
+    const lid = mesh(new THREE.TorusGeometry(0.011, 0.0018, 6, 12, Math.PI), dark, head); lid.position.set(0.054, 0.014, sz * 0.024); lid.rotation.set(0, Math.PI / 2 - sz * 0.35, Math.PI);
+  }
+  const ears = [];
+  for (const sz of [-1, 1]) {
+    const ear = new THREE.Group(); ear.position.set(-0.005, 0.042, sz * 0.036); ear.rotation.set(sz * -0.35, 0, -0.15); head.add(ear);
+    const outer = mesh(new THREE.ConeGeometry(0.026, 0.048, 4).translate(0, 0.024, 0), fur, ear); outer.scale.z = 0.45;
+    const inner = mesh(new THREE.ConeGeometry(0.017, 0.034, 4).translate(0, 0.017, 0), pink, ear); inner.scale.z = 0.3; inner.position.set(0.006, 0.002, 0);
+    ears.push(ear);
+  }
+  g.traverse((o) => { o.userData.dyn = true; });
+  let nextTwitch = 6;
+  return {
+    group: g,
+    tick(t) {
+      const b = Math.sin(t * 1.5);                       // a slow, sleepy breath
+      body.scale.y = 0.085 * (1 + 0.035 * b); body.position.y = 0.082 + 0.002 * b;
+      haunch.scale.y = 0.08 * (1 + 0.02 * b); chest.scale.y = 0.06 * (1 + 0.04 * b);
+      head.position.y = 0.095 + 0.0015 * b;
+      if (t > nextTwitch + 0.35) nextTwitch = t + 5 + ((t * 7.31) % 9);
+      const tw = t > nextTwitch ? Math.sin(((t - nextTwitch) / 0.35) * Math.PI * 2) * 0.3 : 0;
+      ears[1].rotation.x = 0.35 + tw; ears[0].rotation.x = -0.35;
     },
   };
 }
@@ -1850,6 +1922,8 @@ const STATIONS = {
   hearth: { p: [-0.5, 1.45, 2.3], t: [-2.7, 0.95, 1.6], w: 2.1, h: 2.0, max: 2.9 },
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
+  // (the cat on the hearth, for when it arrives)
+  catview: { p: [-1.65, 0.85, 2.75], t: [-2.5, 0.15, 2.25], w: 0.9, h: 0.7, max: 1.6 },
   // (the painting above the reading corner, for when it arrives)
   nookart: { p: [1.55, 1.6, -0.55], t: [1.85, 2.0, -2.69], w: 1.3, h: 1.1, max: 2.6 },
   case: { p: [0, 1.2, 0.4], t: [0, 1.12, -2.5], w: 2.0, h: 2.25, max: 4.2 },
@@ -1861,7 +1935,7 @@ const STATIONS = {
 // How big the room is and what's in it follow what your reading has earned (the app keeps it in
 // your settings). The lab page can try any size: ?tier=study|library|hall (everything earned).
 const Grow = window.TomesteadGrowth || null;
-const ALL_EARNED = { tome: 1, vine: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, authors: 1, nook: 1, damask: 1, library: 1, hall: 1 };
+const ALL_EARNED = { tome: 1, vine: 1, cat: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, authors: 1, nook: 1, damask: 1, library: 1, hall: 1 };
 function earnedNow() {
   if (!HOST) { const t = params.get('tier'); return t === 'study' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'library' && k !== 'hall')) : t === 'library' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'hall')) : ALL_EARNED; }
   return lib.earned || {};
@@ -3220,6 +3294,7 @@ function applyEarned() {
   world.rug.visible = !!rugOn;
   if (rugOn && world.rug.material.map !== world.rugMaps[rugOn]) { world.rug.material.map = world.rugMaps[rugOn]; world.rug.material.alphaTest = rugOn === 'damask' && extra.rug ? 0.5 : 0; world.rug.material.needsUpdate = true; }
   if (F.hearth.art) F.hearth.art.visible = shown('mantel');
+  F.hearth.cat.visible = shown('cat');
   if (F.nookPainting) F.nookPainting.visible = shown('nook');
   for (const o of [F.ottoman, F.teacup, F.steam]) if (o) o.visible = shown('ottoman');
   world.books.setVine(shown('vine') ? (lib.theme.vine || 'roses') : 'none');
@@ -3337,7 +3412,7 @@ function playArrival() {
   ready.then(() => {
     const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
     if (obj) { obj.scale.multiplyScalar(0.01); obj.updateMatrix(); }
-    const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: 'hearth', display: 'display', nook: key === 'nook' ? 'nookart' : 'nook', authors: 'authors' }[step.where] || home()) : home();
+    const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: key === 'cat' ? 'catview' : 'hearth', display: 'display', nook: key === 'nook' ? 'nookart' : 'nook', authors: 'authors' }[step.where] || home()) : home();
     glide(STATIONS[to] ? to : home(), 1.6, false);
     setTimeout(() => {
       if (key === 'tome') world.tome.wake();
@@ -3348,7 +3423,7 @@ function playArrival() {
 }
 function growTarget(key) {
   const F = world.furniture;
-  return { mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, authors: world.portraits && world.portraits.group, rug: world.rug, damask: world.rug }[key] || null;
+  return { cat: F.hearth.cat, mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, authors: world.portraits && world.portraits.group, rug: world.rug, damask: world.rug }[key] || null;
 }
 // the new piece swells gently into place
 function growIn(obj, s0) {
@@ -3365,7 +3440,7 @@ function growIntro() {
   const n = Grow.readCount(lib.books), e = earnedNow(), got = Grow.LADDER.filter((x) => e[x.key]);
   const nx = HOST.nextUnlock ? HOST.nextUnlock() : null;
   openCard(`<div class="eyebrow">New</div><h2>Your room grows as you read</h2>
-    <div class="meta">Finishing books adds to the room: a vine, paintings, a case for your five favourites, and in time a bigger room. ${got.length ? `Your ${n} finished ${n === 1 ? 'book has' : 'books have'} already earned ${got.length === Grow.LADDER.length ? 'all of it' : got.length + ' of ' + Grow.LADDER.length + ' things'}.` : ''} ${nx ? esc(nx.text) : ''}</div>
+    <div class="meta">Finishing books adds to the room: a vine, a cat by the fire, paintings, a case for your five favourites, and in time a bigger room. ${got.length ? `Your ${n} finished ${n === 1 ? 'book has' : 'books have'} already earned ${got.length === Grow.LADDER.length ? 'all of it' : got.length + ' of ' + Grow.LADDER.length + ' things'}.` : ''} ${nx ? esc(nx.text) : ''}</div>
     <div class="acts"><button type="button" data-act="arrived">Lovely</button><button type="button" class="quiet" data-act="room-size">Room size</button></div>`, 'arrival');
   return true;
 }

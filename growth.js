@@ -18,6 +18,7 @@
   const LADDER = [
     { key: 'tome', at: 1, where: 'tome', name: 'The magic tome wakes', line: (n) => `Your first finished book woke the magic tome.` },
     { key: 'vine', at: 1, where: 'case', name: 'A climbing vine', line: () => `A vine sprouted on your bookcase. It grows with every book.` },
+    { key: 'cat', at: 3, where: 'hearth', name: 'A cat by the fire', line: () => `Three books brought a cat to doze on the hearth.` },
     { key: 'mantel', at: 5, where: 'hearth', name: 'A painting over the fireplace', line: () => `Your fifth book hung a painting over the fireplace.` },
     { key: 'display', at: 5, where: 'display', name: 'A display case for your favourites', line: () => `A glass display case arrived for your five favourite books.` },
     { key: 'ottoman', at: 8, where: 'nook', name: 'An ottoman and a cup of tea', line: () => `Eight books brought an ottoman and a cup of tea to the reading corner.` },
