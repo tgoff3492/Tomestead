@@ -53170,7 +53170,8 @@ function familyButton() {
   const bar = document.querySelector(".stations");
   if (!bar) return;
   let b = bar.querySelector('[data-go="family"]');
-  const on = familyData().on;
+  const fd = familyData(), on = fd.on && fd.shelves.length > 0;
+  if (!on && where === "family") go(home());
   if (!on) {
     if (b) b.remove();
     return;

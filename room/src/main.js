@@ -3179,7 +3179,9 @@ function walkButton() {
 function familyButton() {
   const bar = document.querySelector('.stations'); if (!bar) return;
   let b = bar.querySelector('[data-go="family"]');
-  const on = familyData().on;
+  // only once someone else in the family has shelves to show (a family invite on its own isn't enough)
+  const fd = familyData(), on = fd.on && fd.shelves.length > 0;
+  if (!on && where === 'family') go(home());
   if (!on) { if (b) b.remove(); return; }
   if (b) return;
   b = document.createElement('button'); b.type = 'button'; b.dataset.go = 'family'; b.textContent = 'Family';
