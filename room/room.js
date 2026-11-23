@@ -53235,7 +53235,7 @@ function applyEarned() {
   if (!world) return;
   const F = world.furniture;
   world.tome.sleep(!shown("tome"));
-  const rugOn = shown("damask") ? "damask" : shown("rug") ? "wool" : null;
+  const rugOn = "damask";
   world.rug.visible = !!rugOn;
   if (rugOn && world.rug.material.map !== world.rugMaps[rugOn]) {
     world.rug.material.map = world.rugMaps[rugOn];
@@ -53389,6 +53389,11 @@ function idle() {
 function playArrival() {
   if (!pendingArrive.length || !idle()) return;
   const key = pendingArrive[0], step = Grow ? Grow.step(key) : null;
+  if (Grow && !step) {
+    pendingArrive.shift();
+    if (HOST && HOST.arrived) HOST.arrived(key);
+    return playArrival();
+  }
   arriving = key;
   const finish = () => {
     pendingArrive = pendingArrive.filter((k) => k !== key);
@@ -53466,7 +53471,7 @@ function growIntro() {
   const n = Grow.readCount(lib.books), e = earnedNow(), got = Grow.LADDER.filter((x) => e[x.key]);
   const nx = HOST.nextUnlock ? HOST.nextUnlock() : null;
   openCard(`<div class="eyebrow">New</div><h2>Your room grows as you read</h2>
-    <div class="meta">Finishing books adds to the room: a vine, rugs, paintings, a case for your five favourites, and in time a bigger room. ${got.length ? `Your ${n} finished ${n === 1 ? "book has" : "books have"} already earned ${got.length === Grow.LADDER.length ? "all of it" : got.length + " of " + Grow.LADDER.length + " things"}.` : ""} ${nx ? esc(nx.text) : ""}</div>
+    <div class="meta">Finishing books adds to the room: a vine, paintings, a case for your five favourites, and in time a bigger room. ${got.length ? `Your ${n} finished ${n === 1 ? "book has" : "books have"} already earned ${got.length === Grow.LADDER.length ? "all of it" : got.length + " of " + Grow.LADDER.length + " things"}.` : ""} ${nx ? esc(nx.text) : ""}</div>
     <div class="acts"><button type="button" data-act="arrived">Lovely</button><button type="button" class="quiet" data-act="room-size">Room size</button></div>`, "arrival");
   return true;
 }
