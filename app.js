@@ -318,6 +318,28 @@
     });
     if (changed) savePrefs();
   }
+  // the room grows as you read (growth.js): what this library has earned, kept forever. A reader's
+  // history is adopted quietly the first time; anything new after that arrives in the room with a
+  // small moment (queued on this device until the room plays it)
+  const Grow = window.TomesteadGrowth;
+  const ARRIVE_KEY = 'tomestead.arrivals' + (Sync.suffix || '');
+  function syncEarned() {
+    if (!Grow || Sync.gated) return;
+    if (Sync.enabled && !Sync.isReady()) return;     // wait for the cloud's copy before adopting a history
+    const r = Grow.update(books, prefs.earned, today());
+    if (!r.adopted && !r.fresh.length) return;
+    prefs.earned = r.earned;
+    savePrefs();
+    if (r.fresh.length) {
+      const q = loadJSON(ARRIVE_KEY, []);
+      try { localStorage.setItem(ARRIVE_KEY, JSON.stringify([...new Set([...(Array.isArray(q) ? q : []), ...r.fresh])])); } catch {}
+      if (window.TomesteadRoom && window.TomesteadRoom.arrive) window.TomesteadRoom.arrive();
+    }
+  }
+  function cleanFamily(f) {
+    return { share: f && f.share === false ? false : true, name: String((f && f.name) || '').trim().slice(0, 40) };
+  }
+  prefs.family = cleanFamily(prefs.family);
   function trophiesShown() {
     const y = prefs.year;
     const all = Object.keys(prefs.trophies).sort().map(yr => ({ year: yr, ...prefs.trophies[yr] }));
@@ -1053,6 +1075,7 @@
   function render() {
     adoptOldGoals();
     syncTrophies();
+    syncEarned();
     syncGoalMarks();
     const cz = onCustomize(), yr = onYear();
     // Customize works on the live reading room (a panel over it); without 3D it's a plain page
@@ -1151,8 +1174,8 @@
   // ---------- customize ----------
   // ---------- Customize: the reading room, changed live (the room shows beside or above the panel) ----------
   // one tab at a time; each tab glides the room's camera to what it changes
-  let czTab = 'paint';
-  const CZ_VIEW = { paint: () => (paintFor === 'nook' ? 'nook' : 'hearth'), case: () => 'case', trinkets: () => 'case', desk: () => 'desk', light: () => (window.TomesteadRoom && window.TomesteadRoom.home ? window.TomesteadRoom.home() : 'room') };
+  let czTab = 'room';
+  const CZ_VIEW = { room: () => (window.TomesteadRoom && window.TomesteadRoom.home ? window.TomesteadRoom.home() : 'room'), paint: () => (paintFor === 'nook' ? 'nook' : 'hearth'), case: () => 'case', trinkets: () => 'case', desk: () => 'desk', light: () => (window.TomesteadRoom && window.TomesteadRoom.home ? window.TomesteadRoom.home() : 'room') };
   function czShow() { if (window.TomesteadRoom && document.documentElement.classList.contains('cz-on')) window.TomesteadRoom.show(CZ_VIEW[czTab]()); }
   function czLayout() {
     // the panel covers the right side (wide screens) or the bottom (phones); the room frames itself in the rest
@@ -1175,6 +1198,39 @@
         <span class="tile-label">${l.name}</span><span class="check" aria-hidden="true">✓</span>
       </button>`).join('');
     $('#czLightHint').textContent = `Golden hour by day; lamplight and candles by night. ${D.LIGHTS[t.light || 'system'].hint || ''} It’s ${document.documentElement.dataset.light === 'night' ? 'night' : 'day'} in your room right now.`;
+    // Room: how big the room is (only sizes your reading has earned), and what it has earned so far
+    if (Grow) {
+      const earned = prefs.earned || {}, n = Grow.readCount(books), pick = t.roomSize || 'auto';
+      const now = Grow.tierOf(earned, pick);
+      const SIZE_ART = {
+        study: '<svg viewBox="0 0 64 44" width="64" height="44"><rect x="14" y="14" width="36" height="26" fill="#5a3a22"/><path d="M10 16 32 4l22 12" fill="none" stroke="#c9a15b" stroke-width="2"/><rect x="22" y="22" width="20" height="18" fill="#2c1a0f"/><g fill="#9b5b3a"><rect x="24" y="24" width="3" height="7"/><rect x="28" y="25" width="2" height="6"/><rect x="31" y="23" width="3" height="8"/><rect x="35" y="25" width="3" height="6"/></g></svg>',
+        library: '<svg viewBox="0 0 64 44" width="64" height="44"><rect x="8" y="6" width="48" height="36" fill="#5a3a22"/><rect x="8" y="20" width="48" height="2" fill="#c9a15b"/><g stroke="#1c1a19" stroke-width="1"><path d="M10 20v-4M14 20v-4M18 20v-4M22 20v-4M42 20v-4M46 20v-4M50 20v-4M54 20v-4"/></g><circle cx="32" cy="12" r="4" fill="#a9c6e8"/><rect x="11" y="24" width="14" height="16" fill="#2c1a0f"/><rect x="39" y="24" width="14" height="16" fill="#2c1a0f"/><rect x="28" y="26" width="8" height="14" fill="#3b2415"/></svg>',
+        hall: '<svg viewBox="0 0 64 44" width="64" height="44"><path d="M8 42V18a24 16 0 0 1 48 0v24z" fill="#5a3a22"/><path d="M14 18a18 11 0 0 1 36 0" fill="none" stroke="#c9a15b" stroke-width="1.5"/><rect x="8" y="22" width="48" height="1.6" fill="#c9a15b"/><rect x="8" y="31" width="48" height="1.6" fill="#c9a15b"/><path d="M28 42V30a4 4 0 0 1 8 0v12z" fill="#a9c6e8"/><circle cx="22" cy="27" r="1.4" fill="#ffd98a"/><circle cx="42" cy="27" r="1.4" fill="#ffd98a"/></svg>',
+      };
+      $('#czSize').innerHTML = `<button type="button" class="tile" role="radio" aria-checked="${pick === 'auto'}" data-size="auto">
+          <span class="tile-art size-art"><span style="align-self:center;color:#cdbf9f;font-size:.82rem;text-align:center">Grow with<br>my reading</span></span>
+          <span class="tile-label">Automatic</span><span class="check" aria-hidden="true">✓</span></button>` +
+        Grow.TIERS.map(tr => {
+          const open = tr.at === 0 || Grow.has(earned, tr.key);
+          return `<button type="button" class="tile${open ? '' : ' locked'}" role="radio" aria-checked="${pick === tr.key}" data-size="${tr.key}" ${open ? '' : 'aria-disabled="true"'}>
+            <span class="tile-art size-art">${SIZE_ART[tr.key]}</span>
+            <span class="tile-label">${esc(tr.name)}${open ? '' : `<small>Finish ${tr.at} books</small>`}</span><span class="check" aria-hidden="true">✓</span></button>`;
+        }).join('');
+      const tierNow = Grow.TIERS.find(x => x.key === now);
+      const nx = Grow.next(books, earned);
+      $('#czSizeHint').textContent = `${tierNow.blurb} You’ve finished ${n} ${n === 1 ? 'book' : 'books'}.${nx ? ' ' + nx.text : ''}`;
+      $('#czEarned').innerHTML = Grow.LADDER.map(x => {
+        const got = Grow.has(earned, x.key);
+        return `<li class="${got ? 'got' : 'not'}"><span class="mark" aria-hidden="true">${got ? '✦' : '·'}</span><span>${esc(x.name)}</span><small>${got ? 'Earned' : `${x.at} ${x.at === 1 ? 'book' : 'books'}`}</small></li>`;
+      }).join('');
+      const famOn = Sync.isFamily && Sync.isFamily();
+      $('#czFamShare').hidden = !famOn;
+      if (famOn) {
+        $('#czShareShelf').checked = prefs.family.share !== false;
+        if (document.activeElement !== $('#czShelfName')) $('#czShelfName').value = prefs.family.name || '';
+        $('#czShelfName').placeholder = (Sync.displayName && Sync.displayName()) || 'Your name';
+      }
+    }
     const nw = t.nightWall === 'stars' ? 'stars' : 'green';
     $('#czNightWall').innerHTML = [['green', 'Library green', '#3b4a36', '#55684f'], ['stars', 'Star chart', '#0f1a2b', '#27375a']].map(([k, name, a, b]) => `
       <button type="button" class="tile" role="radio" aria-checked="${nw === k}" data-nightwall="${k}">
@@ -2264,6 +2320,7 @@
   let shareMoment = null;
   function celebrate(y) {
     syncTrophies();
+    syncEarned();
     $('#celebrateText').textContent = `You read ${plural(countForGoal(y), 'book')} toward your ${y} goal of ${goalFor(y)}. Your ${y} trophy now stands in the arch of your bookcase.`;
     $('#celebrateTrophy').innerHTML = Art.drawTrophy(y, goalFor(y), 0.9);
     shareMoment = { kicker: `My ${y} reading goal`, big: countForGoal(y), bigLabel: `of ${goalFor(y)} books: goal reached`, lines: [`Trophy earned ${fmtDate(today())}`], art: Art.drawTrophy(y, goalFor(y), 2.4) };
@@ -2814,6 +2871,8 @@
     window.addEventListener('resize', () => { if (document.documentElement.classList.contains('cz-on')) czLayout(); });
     // the family paintings arrived or were opened: show them in Customize and hang them in the room
     window.addEventListener('tomestead:family', () => { if (onCustomize()) renderCustomize(); roomRefresh(); });
+    $('#czShareShelf').addEventListener('change', e => { prefs.family = cleanFamily({ ...prefs.family, share: e.target.checked }); savePrefs(); if (Sync.publishShelf) Sync.publishShelf(true); toast(e.target.checked ? 'Your family can see your shelves.' : 'Your shelves are private again.'); });
+    $('#czShelfName').addEventListener('change', e => { prefs.family = cleanFamily({ ...prefs.family, name: e.target.value }); savePrefs(); if (Sync.publishShelf) Sync.publishShelf(true); });
     $('#czDone').addEventListener('click', () => {
       history.pushState(null, '', location.pathname + location.search);
       render(); window.scrollTo(0, 0);
@@ -2834,6 +2893,10 @@
       }
       else if (t.dataset.light) setTheme({ light: t.dataset.light });
       else if (t.dataset.nightwall) setTheme({ nightWall: t.dataset.nightwall });
+      else if (t.dataset.size) {
+        if (t.classList.contains('locked')) { const tr = Grow.TIERS.find(x => x.key === t.dataset.size); toast(`${tr.name} opens up when you’ve finished ${tr.at} books.`); return; }
+        setTheme({ roomSize: t.dataset.size });
+      }
       else if (t.dataset.vine) setTheme({ vine: t.dataset.vine });
       else if (t.dataset.titem) {
         const k = t.dataset.titem, cur = prefs.theme.tableItems;
@@ -2845,7 +2908,7 @@
         const list = prefs.theme.trinkets.includes(k) ? prefs.theme.trinkets.filter(x => x !== k) : [...prefs.theme.trinkets, k];
         setTheme({ trinkets: list });
       }
-      const attr = ['wall', 'light', 'wood', 'vine', 'bookend', 'table', 'titem', 'trinket'].find(a => t.dataset[a]);
+      const attr = ['wall', 'light', 'wood', 'vine', 'bookend', 'table', 'titem', 'trinket', 'size'].find(a => t.dataset[a]);
       const sel = `[data-${attr}="${t.dataset[attr]}"]`;
       const again = $(`#customizePage .tile${sel}`); again && again.focus();
     });
@@ -2918,7 +2981,7 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null };
+    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null, earned: prefs.earned || null, family: prefs.family || null };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
@@ -2936,6 +2999,9 @@
     // (older devices don't send these; keep what's here)
     if (Array.isArray(s.readMarks)) prefs.readMarks = cleanMarks(s.readMarks);
     if ('timer' in s) prefs.timer = cleanTimer(s.timer);
+    // what the room has earned is kept forever: join both sides rather than replace
+    if (s.earned && typeof s.earned === 'object') prefs.earned = Object.assign({}, s.earned, prefs.earned || {});
+    if (s.family && typeof s.family === 'object') prefs.family = cleanFamily(s.family);
     savePrefsHere();
     renderTimer();
     if (calendar) calendar.refresh();
@@ -2956,6 +3022,7 @@
     saveHere();
     adoptOldGoals();
     syncTrophies();
+    syncEarned();
     renderSoon();
   }
   let renderWait = null;
@@ -3001,6 +3068,7 @@
     if (Array.isArray(old.tagList)) prefs.tagList = cleanTags([...prefs.tagList, ...old.tagList]);
     if (old.recs && Array.isArray(old.recs.dismissed)) prefs.recs.dismissed = [...new Set([...prefs.recs.dismissed, ...old.recs.dismissed])];
     syncTrophies();
+    syncEarned();
     savePrefs();
     save();
     render();
@@ -3015,12 +3083,16 @@
       applyBooks,
       settings: settingsForSync,
       applySettings,
-      onReady: () => { offerLegacy(); syncCovers(); },
+      onReady: () => { offerLegacy(); syncCovers(); syncEarned(); },
+      family: () => prefs.family,
     });
+    // the family's shelves arrived: the family room restocks
+    window.addEventListener('tomestead:familyshelves', () => roomRefresh());
   }
 
   D.applyTheme(prefs.theme);
   if (!Sync.gated) savePrefsHere();   // keeps a migrated look for next time (and for the opening scene)
+  syncEarned();
   // what the open book's pages say about where this book stands
   function nextInSeries(b) {
     const no = Number(b.seriesNo);
@@ -3086,7 +3158,13 @@
     return el;
   }
   window.TomesteadRoomHost = {
-    data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies }),
+    data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies, earned: prefs.earned || {} }),
+    arrivals: () => { const q = loadJSON(ARRIVE_KEY, []); return Array.isArray(q) ? q : []; },
+    arrived: (key) => { const q = loadJSON(ARRIVE_KEY, []); try { localStorage.setItem(ARRIVE_KEY, JSON.stringify((Array.isArray(q) ? q : []).filter(k => k !== key))); } catch {} },
+    nextUnlock: () => (Grow ? Grow.next(books, prefs.earned || {}) : null),
+    openCustomize: (tab) => { if (tab) czTab = tab; location.hash = 'customize'; },
+    family: () => ({ on: !!(Sync.isFamily && Sync.isFamily()), shelves: Sync.familyShelves ? Sync.familyShelves() : [], share: prefs.family.share }),
+    familySig: () => (Sync.familyShelves ? Sync.familyShelves() : []).map(f => f.uid + ':' + f.sig).join(',') + '|' + (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id + (f.url ? '+' : '')).join(','),
     openBook: (id, rect) => reader.open(id, rect ? roomOrigin(rect) : null),
     openOnDesk: (id, hooks) => reader.openOnDesk(id, hooks || {}),
     openProgress: (id) => openProgress(id),
@@ -3104,8 +3182,9 @@
     startBook: (id) => { const b = books.find(x => x.id === id); if (b) startReading(b); },
     paintingPhoto: (slot) => Covers.uploadURL('painting-' + slot),
     familyPainting: (id) => ((Sync.familyPaintings ? Sync.familyPaintings() : []).find(f => f.id === id) || {}).url || null,
-    familySig: () => (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id + (f.url ? '+' : '')).join(','),
+    paintSig: () => (Sync.familyPaintings ? Sync.familyPaintings() : []).map(f => f.id + (f.url ? '+' : '')).join(','),
     openImport: () => openImport(),
+    wantBook: (p) => addWant(p),
     unavailable: () => { canRoom = false; document.documentElement.classList.remove('room-mode'); render(); },
     ready: (room) => {
       if (document.documentElement.classList.contains('cz-on')) { room.setActive(true); czLayout(); czShow(); }
@@ -3119,7 +3198,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261122195623').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261122213349').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

@@ -8,6 +8,10 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { buildShell } from './shell.js';
+import { buildDisplay } from './display.js';
+import { buildFamilyRoom } from './family.js';
+import { createWalker } from './walk.js';
 
 // When the room runs inside the Tomestead app, the app hands over its books and its screens
 // through window.TomesteadRoomHost; on its own (the lab page) it reads the browser's saved library.
@@ -93,7 +97,7 @@ function sampleLibrary() {
 }
 function fromHost() {
   const d = HOST.data();
-  return { books: (d.books || []).filter((b) => b && b.id && b.title), theme: d.theme || {}, trophies: d.trophies || {}, sample: false };
+  return { books: (d.books || []).filter((b) => b && b.id && b.title), theme: d.theme || {}, trophies: d.trophies || {}, earned: d.earned || {}, sample: false };
 }
 let lib = HOST ? fromHost() : (() => { const l = loadLibrary(); return l.books.length && params.get('sample') !== '1' ? l : Object.assign(sampleLibrary(), { theme: l.theme }); })();
 const wood = WOODS[lib.theme.wood] || WOODS.oak;
@@ -186,7 +190,7 @@ const paintChoice = (slot) => {
   const p = (lib.theme && lib.theme.paintings) || {};
   const fam = typeof p[slot] === 'string' && p[slot].startsWith('fam:') && HOST && HOST.familyPainting && HOST.familyPainting(p[slot].slice(4));
   return p[slot] === 'mine' || fam || PAINTINGS.includes(p[slot]) ? p[slot] : PAINT_DEFAULT[slot]; };
-const paintSig = () => JSON.stringify((lib.theme && lib.theme.paintings) || {}) + (HOST && HOST.familySig ? HOST.familySig() : '');
+const paintSig = () => JSON.stringify((lib.theme && lib.theme.paintings) || {}) + (HOST && HOST.paintSig ? HOST.paintSig() : '');
 async function hangPainting(slot) {
   const mat = canvasMats[slot]; if (!mat) return;
   let id = paintChoice(slot);
@@ -351,7 +355,7 @@ function placeFurniture(MOD, M) {
   }
   const hearth = buildFireplace(MOD);
   return {
-    hearth,
+    hearth, steam, nookPainting: MOD.painting || null, ottoman: MOD.ottoman || null, teacup: MOD.teacup || null,
     tick(t) { if (steam) steam.material.uniforms.uTime.value = t; hearth.tick(t); },
     setLight(L) {
       hearth.setLight(L);
@@ -465,32 +469,10 @@ async function build() {
   const panelMat = sets.wooden_panels ? pbrMat(sets.wooden_panels, 1.2, 1.2, { color: '#d9b48f' }) : std({ map: canvasTex(panelTex(woodH)), roughness: 0.6 });
   if (!sets.wooden_panels) panelMat.map.repeat.set(1 / 1.2, 1 / 0.9);
 
-  // ----- the room: 6m wide, 5.4m deep, 3m tall
-  const floor = mesh(new THREE.PlaneGeometry(6, 5.4).rotateX(-Math.PI / 2), floorMat, scene, { cast: false });
-  worldUV(floor.geometry);
-  // the ceiling, the right wall and the front wall lift away in the dollhouse view (CUT); they stay
-  // separate meshes (userData) so the merge below leaves them alone
+  // ----- the room's shell: floor, walls, ceiling. It grows as you read (shell.js): a study, then a
+  // two-storey library, then a great hall. Built further down, once the materials are ready.
   const cut = (m) => { m.userData.cut = true; CUT.push(m); return m; };
-  cut(box(6.2, 0.1, 5.6, M.beam, 0, 3.05, 0));                    // ceiling
-  for (const x of [-2.25, -0.75, 0.75, 2.25]) cut(box(0.18, 0.22, 5.4, M.beam, x, 2.89, 0));
-  box(6.2, 3.1, 0.1, wallMat, 0, 1.5, -2.75);                      // back wall
-  cut(box(0.1, 3.1, 5.6, wallMat, 3.05, 1.5, 0));                  // right wall
-  cut(box(6.2, 3.1, 0.1, wallMat, 0, 1.5, 2.75));                  // front wall
-  // the plinth the dollhouse stands on (only seen from outside)
-  for (const m of [box(6.3, 0.34, 5.7, M.beam, -0.05, -0.185, 0), box(6.42, 0.06, 5.82, M.trim, -0.05, -0.385, 0)]) { m.userData.plinth = true; m.visible = false; PLINTH.push(m); }
-  // left wall, with the window opening (z −1.3…0.1, y 0.85…2.45)
   const WIN = { z0: -1.3, z1: 0.1, y0: 0.85, y1: 2.45 };
-  box(0.1, WIN.y0, 5.6, wallMat, -3.05, WIN.y0 / 2, 0);
-  box(0.1, 3.1 - WIN.y1, 5.6, wallMat, -3.05, (WIN.y1 + 3.1) / 2, 0);
-  box(0.1, WIN.y1 - WIN.y0, 2.8 + WIN.z0, wallMat, -3.05, (WIN.y0 + WIN.y1) / 2, (-2.8 + WIN.z0) / 2);
-  box(0.1, WIN.y1 - WIN.y0, 2.8 - WIN.z1, wallMat, -3.05, (WIN.y0 + WIN.y1) / 2, (2.8 + WIN.z1) / 2);
-  // wainscot panels and a rail along the walls
-  box(6, 0.9, 0.03, panelMat, 0, 0.45, -2.685);
-  cut(box(0.03, 0.9, 5.4, panelMat, 2.985, 0.45, 0));
-  box(0.03, 0.82, 5.4, panelMat, -2.985, 0.41, 0);
-  box(6, 0.045, 0.06, M.trim, 0, 0.92, -2.67);
-  cut(box(0.06, 0.045, 5.4, M.trim, 2.97, 0.92, 0));
-  box(0.06, 0.045, 5.4, M.trim, -2.97, 0.84, 0);
 
   // ----- window
   const winMid = (WIN.z0 + WIN.z1) / 2, winW = WIN.z1 - WIN.z0, winH = WIN.y1 - WIN.y0;
@@ -528,10 +510,23 @@ async function build() {
   const rugMap = extra.rug ? Object.assign(extra.rug, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping }) : canvasTex(rugTex(), { repeat: false });
   const rug = mesh(new THREE.PlaneGeometry(extra.rug ? 2.8 * 1580 / 1520 : 2.8, 1.9).rotateX(-Math.PI / 2), std({ map: rugMap, roughness: 0.96, alphaTest: extra.rug ? 0.5 : 0, normalMap: extra.wool ? tile(extra.wool, 0.18, 0.18) : null, normalScale: new THREE.Vector2(0.6, 0.6) }), scene, { cast: false });
   rug.position.set(0, 0.004, -0.35);
+  rug.userData.dyn = true;              // it changes with what your reading has earned (bare boards, wool, damask)
+  const rugMaps = { damask: rug.material.map, wool: canvasTex(rugTex(), { repeat: false }) };
   const map = mesh(new THREE.PlaneGeometry(1.0, 1.25).rotateY(-Math.PI / 2), std({ map: canvasTex(starChart(true), { repeat: false }), roughness: 0.8 }), scene, { cast: false });
   map.position.set(2.985, 1.75, 0.1); cut(map);
   cut(box(0.04, 0.05, 1.12, M.gold, 2.98, 2.4, 0.1)); cut(box(0.04, 0.05, 1.12, M.gold, 2.98, 1.1, 0.1));
   cut(box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, -0.45)); cut(box(0.04, 1.35, 0.05, M.gold, 2.98, 1.75, 0.65));
+
+  // ----- the shell, at the size your reading has earned
+  const K = {
+    THREE, scene, M, MOD, WIN, rng, hash, mergeGeometries, worldUV, canvasTex, mkCanvas, std, lathe, plateTex, colorOf, roundRugTex,
+    box, mesh, mergeGroup, kick, coverMaterial, envMap: scene.environment, glowTex: canvasTex(glowTex(), { repeat: false }),
+    mats: { floor: floorMat, wall: wallMat, panel: panelMat, sky: skyMat },
+    paintingImage: familyPaintingImage,
+  };
+  let shell = buildShell(K, tierNow());
+  shell.cut.forEach((m) => CUT.push(m)); shell.plinth.forEach((m) => PLINTH.push(m));
+  applyTierStations(shell);
 
   // ----- light
   const hemi = new THREE.HemisphereLight('#ffe6c4', '#4a3020', 1);
@@ -578,6 +573,11 @@ async function build() {
     desk.setLight(L.lamp, L.candle);
     furniture.setLight(L);
     tome.setLight(L.tome);
+    if (world && world.shell) world.shell.setLight(L, mode === 'night'); else shell.setLight(L, mode === 'night');
+    if (world && world.display) world.display.setLight(mode === 'night');
+    if (world && world.fam) world.fam.setLight(mode === 'night');
+    const big = (world && world.shell ? world.shell : shell).tier !== 'study';
+    hemi.intensity = (starry ? 0.34 : L.hemi[2]) * (big ? (mode === 'night' ? 1.4 : 1.35) : 1);
     scene.environmentIntensity = L.env;
     renderer.toneMappingExposure = L.exposure;
     beam.material.uniforms.uColor.value.set(...L.beam); beam.material.uniforms.uA.value = L.beamA;
@@ -599,7 +599,7 @@ async function build() {
   mergeStatics();
   scene.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
   renderer.shadowMap.needsUpdate = true;
-  return { books, desk, tome, beam, motes, applyLook, furniture, setWood };
+  return { books, desk, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null };
 }
 
 function mergeStatics() {
@@ -607,7 +607,7 @@ function mergeStatics() {
   const buckets = new Map();
   scene.traverse((o) => {
     if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || !o.material.visible || Object.keys(o.userData).length) return;
-    for (let p = o.parent; p; p = p.parent) if (p.userData && p.userData.dyn) return;
+    for (let p = o.parent; p; p = p.parent) if (p.userData && (p.userData.dyn || p.userData.shell)) return;
     const key = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '');
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(o);
@@ -626,6 +626,48 @@ function mergeStatics() {
     const m = new THREE.Mesh(merged, list[0].material);
     m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
     scene.add(m);
+    for (const o of list) { o.parent.remove(o); o.geometry.dispose(); }
+  }
+}
+
+// the same, inside one group (the shell, the family room): fuse still pieces that share a material.
+// Pieces listed in `cutList` (they lift away in the dollhouse) fuse among themselves, and the fused
+// mesh takes their place in the list.
+function mergeGroup(G, cutList) {
+  G.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(G.matrixWorld).invert();
+  const buckets = new Map();
+  G.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || !o.material.visible) return;
+    const keys = Object.keys(o.userData).filter((k) => k !== 'cut');
+    if (keys.length) return;
+    for (let p = o.parent; p && p !== G; p = p.parent) if (p.userData && Object.keys(p.userData).length) return;
+    const isCut = !!o.userData.cut;
+    const key = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '') + (isCut ? 'X' : '');
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(o);
+  });
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((o) => {
+      const g2 = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      g2.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+      for (const k of Object.keys(g2.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g2.deleteAttribute(k);
+      if (!g2.attributes.uv) return null;
+      g2.clearGroups();
+      return g2;
+    });
+    if (geos.some((g) => !g)) continue;
+    const merged = mergeGeometries(geos, false);
+    if (!merged) continue;
+    const m = new THREE.Mesh(merged, list[0].material);
+    m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
+    G.add(m);
+    if (list[0].userData.cut) {
+      m.userData.cut = true;
+      for (const o of list) { const i = cutList.indexOf(o); if (i >= 0) cutList.splice(i, 1); }
+      cutList.push(m);
+    }
     for (const o of list) { o.parent.remove(o); o.geometry.dispose(); }
   }
 }
@@ -1274,8 +1316,9 @@ function buildFireplace(MOD) {
   }
   const vase = placeModel(MOD.vase, X + 0.19, MT, Z - 0.42, 0.3, 0.45);
   // a big painting over the mantel: Highland cattle on the moor, in the ornate gilt frame
+  let art = null;
   if (MOD.painting) {
-    const art = MOD.painting.clone(true);
+    art = MOD.painting.clone(true);
     art.traverse((o) => { if (o.isMesh && /canvas/.test(o.material.name)) { o.material = o.material.clone(); o.material.map = null; o.material.color.set('#3a2a1c'); canvasMats.mantel = o.material; o.material.needsUpdate = true; } });
     placeModel(art, X + 0.005, MT + 0.62, Z, Math.PI / 2, 2.25, { cast: false });
   }
@@ -1309,7 +1352,7 @@ function buildFireplace(MOD) {
   }
   let base = 2;
   return {
-    setTrophies,
+    setTrophies, art,
     setLight(L) { base = mode === 'night' ? 4.2 : 1.6; },
     tick(t) {
       fireMat.uniforms.uTime.value = t; sparkMat.uniforms.uTime.value = t;
@@ -1560,12 +1603,14 @@ function buildTome(M) {
   const sparks = new THREE.Points(sg, sparkMat); sparks.frustumCulled = false; g.add(sparks);
   const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 12), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.y = 0.8; hit.userData.station = 'tome'; g.add(hit);
-  let openTo = 0.32, open = 0.32, boost = 0, base = 1;
+  let openTo = 0.32, open = 0.32, boost = 0, base = 1, asleep = false;
   return {
     group: g,
     setLight(v) { base = v; },
-    wake() { openTo = 0.06; boost = 1; },
-    rest() { openTo = 0.32; },
+    // before your first finished book the tome lies closed and dark (it still answers if you ask)
+    sleep(on) { asleep = !!on; rings.forEach((r) => { r.visible = !asleep; }); sparks.visible = !asleep; if (asleep) openTo = -0.02; else if (openTo < 0) openTo = 0.32; },
+    wake() { if (asleep) return; openTo = 0.06; boost = 1; },
+    rest() { openTo = asleep ? -0.02 : 0.32; },
     tick(t, dt) {
       open += (openTo - open) * Math.min(1, dt * 3);
       boost = Math.max(0, boost - dt * 0.25);
@@ -1573,8 +1618,8 @@ function buildTome(M) {
       rings[0].rotation.y = t * 0.25 * (1 + boost * 3); rings[1].rotation.y = -t * 0.4 * (1 + boost * 3);
       const glow = 0.8 + 0.2 * Math.sin(t * 1.7) + boost;
       ringMat.opacity = (mode === 'night' ? 0.9 : 0.55) * Math.min(1.3, glow);
-      pageMat.emissiveIntensity = (mode === 'night' ? 0.8 : 0.7) * glow;
-      light.intensity = base * glow;
+      pageMat.emissiveIntensity = asleep ? 0 : (mode === 'night' ? 0.8 : 0.7) * glow;
+      light.intensity = asleep ? 0 : base * glow;
       sparkMat.uniforms.uTime.value = t; sparkMat.uniforms.uBoost.value = boost;
       sparkMat.uniforms.uA.value = mode === 'night' ? 1 : 0.6;
     },
@@ -1720,6 +1765,94 @@ const STATIONS = {
   // the screen above the reading-mode controls
   read: { p: [-0.1, 1.8, 0.75], t: [2.0, 0.3, -2.2], w: 2.2, h: 1.5, max: 4.6 },
 };
+// ---------------------------------------------------------------- the room grows (growth.js)
+// How big the room is and what's in it follow what your reading has earned (the app keeps it in
+// your settings). The lab page can try any size: ?tier=study|library|hall (everything earned).
+const Grow = window.TomesteadGrowth || null;
+const ALL_EARNED = { tome: 1, vine: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, nook: 1, damask: 1, library: 1, hall: 1 };
+function earnedNow() {
+  if (!HOST) { const t = params.get('tier'); return t === 'study' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'library' && k !== 'hall')) : t === 'library' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'hall')) : ALL_EARNED; }
+  return lib.earned || {};
+}
+// what the room shows: earned, minus anything still waiting for its moment of arrival
+let pendingArrive = [];
+const shown = (k) => !!earnedNow()[k] && !pendingArrive.includes(k);
+function tierNow() {
+  const e = earnedNow(), pick = (lib.theme && lib.theme.roomSize) || 'auto';
+  const ok = (k) => !!e[k] && !pendingArrive.includes(k);
+  const top = ok('hall') ? 'hall' : ok('library') ? 'library' : 'study';
+  const order = ['study', 'library', 'hall'];
+  return pick !== 'auto' && order.indexOf(pick) >= 0 && order.indexOf(pick) <= order.indexOf(top) ? pick : top;
+}
+// the dollhouse and the doorway view, for each size of room
+let dims = { x: 3, zB: -2.7, zF: 2.7, H: 3, top: 3 };
+function applyTierStations(sh) {
+  dims = sh.dims;
+  const T = sh.tier;
+  Object.assign(STATIONS.house, T === 'hall' ? { p: [11.5, 13.5, 21.0], t: [-0.4, 3.9, 3.6], w: 12.5, h: 15.8, max: 120 }
+    : T === 'library' ? { p: [10.6, 11.0, 15.5], t: [-0.4, 2.1, 1.7], w: 10.8, h: 9.6, max: 100 }
+    : { p: [9.6, 9.0, 11.0], t: [-0.3, 0.5, -0.2], w: 9.4, h: 6.8, max: 90 });
+  Object.assign(STATIONS.room, T === 'hall' ? { p: [1.55, 1.7, 9.9], t: [-0.25, 3.1, -1.5], w: 4.4, h: 2.6, max: 13.5 }
+    : T === 'library' ? { p: [1.45, 1.7, 5.95], t: [-0.45, 2.35, -1.6], w: 4.4, h: 2.6, max: 9.6 }
+    : { p: [1.0, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 });
+}
+// ---------------------------------------------------------------- walking (walk.js)
+// Where you can walk in each size of room, and what's in the way (outlines on the floor, metres)
+function walkWorld(T) {
+  const zF = T === 'hall' ? 10.3 : T === 'library' ? 6.3 : 2.7;
+  const zones = [{ z0: -99, z1: 2.9, x0: -3, x1: 3 }, { z0: 2.9, z1: 99, x0: T === 'study' ? -3 : -2.66, x1: T === 'study' ? 3 : 2.66 }];
+  const ob = [
+    { x0: -3, x1: -2.05, z0: -1.4, z1: 0.2 },       // the desk
+    { x: -1.95, z: -0.55, r: 0.3 },                 // its chair
+    { x0: -3, x1: -2.25, z0: 0.75, z1: 2.6 },       // the fireplace and hearth
+    { x0: -0.9, x1: 0.9, z0: -2.7, z1: -2.2 },      // the bookcase
+    { x: -1.6, z: -2.45, r: 0.3 }, { x: -2.5, z: -2.2, r: 0.42 },   // the clock, the big plant
+    { x: 1.75, z: -2.0, r: 0.5 }, { x: 2.55, z: -2.38, r: 0.32 },   // the armchair, the side table
+    { x: 2.25, z: 0.1, r: 0.45 },                   // the tome on its branches
+  ];
+  if (shown('ottoman')) ob.push({ x: 1.2, z: -1.2, r: 0.35 });
+  if (shown('display')) {
+    if (T === 'study') ob.push({ x0: 2.35, x1: 3, z0: 1.3, z1: 2.4 });
+    if (T === 'library') ob.push({ x0: -0.72, x1: 0.72, z0: 3.9, z1: 4.6 });
+    if (T === 'hall') for (let i = 0; i < 5; i++) ob.push({ x: (i - 2) * 0.82, z: 4.4 + Math.abs(i - 2) * 0.18, r: 0.24 });
+  }
+  if (T !== 'study') ob.push({ x: -1.84, z: zF - 1.15, r: 0.85 });                              // the spiral stair
+  if (T === 'hall') ob.push({ x0: -0.95, x1: 0.95, z0: 6.0, z1: 9.0 });                          // the reading table and chairs
+  return { bounds: { zones, zMin: -2.7, zMax: T === 'study' ? 2.7 : zF - 0.36 }, obstacles: ob };
+}
+let walker = null;
+function startWalk() {
+  if (!world || where !== 'main' || outBook) return;
+  putBack(); closeCard();
+  let p = cam.pos.clone(), d = lookDir();
+  if (station === 'house') { const f = framing('room'); p = f.pos; d = f.dir; isOut = true; }
+  const w = walkWorld(world.shell.tier);
+  walker.setWorld(w.bounds, w.obstacles);
+  tween = null; station = 'walk'; pressStation('walk');
+  cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
+  setFov(baseFov());
+  walker.start(p, d);
+  shelfTools();
+  showHint(isPhone ? 'Thumbstick to walk · drag to look around' : 'W A S D to walk · Q E to turn · drag to look · Esc to stop', 4200, 200);
+}
+// a cover for the display case: the plain cloth one at once, the real picture once it loads
+function coverMaterial(b, aspect) {
+  const mat = std({ map: canvasTex(plainCover(b, aspect), { repeat: false }), roughness: 0.5 });
+  coverImage(b).then((img) => { if (!img) return; const old = mat.map; mat.map = canvasTex(artCover(img, aspect), { repeat: false }); mat.needsUpdate = true; old.dispose(); kick(); });
+  return mat;
+}
+// the family room's painting: the first family painting, otherwise a landscape
+async function familyPaintingImage() {
+  const fam = HOST && HOST.family ? HOST.family() : null;
+  let url = null;
+  if (HOST && HOST.familyPainting && lib.theme && lib.theme.paintings) {
+    const k = [lib.theme.paintings.mantel, lib.theme.paintings.nook].find((v) => String(v || '').startsWith('fam:'));
+    if (k) url = HOST.familyPainting(k.slice(4));
+  }
+  if (!url && fam && fam.paintings && fam.paintings.length) url = fam.paintings[0];
+  if (!url) url = asset('tex/paintings/pastoral.webp');
+  return loadImg(url);
+}
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 let station = 'room', tween = null;
 // home is the dollhouse, or standing in the room: your pick, remembered on this device
@@ -1750,7 +1883,7 @@ function framing(name) {
   const d = Math.min(s.max, Math.max(base, need));
   const pos = t.clone().addScaledVector(dir, -d);
   if (name === 'shelf' && shelfSpan) return shelfFraming(dir);
-  pos.x = THREE.MathUtils.clamp(pos.x, -2.75, 2.75); pos.z = Math.min(pos.z, 2.6);
+  pos.x = THREE.MathUtils.clamp(pos.x, -2.75, 2.75); pos.z = Math.min(pos.z, (where === 'family' ? 2.05 : dims.zF - 0.1));
   return { pos, dir: t.clone().sub(pos).normalize(), dist: t.distanceTo(pos) };
 }
 // The dollhouse sits in the clear band between the header and what's along the bottom (the stations,
@@ -1821,6 +1954,8 @@ function go(name, dur = 1.5, { arrive = true } = {}) {
 }
 // just the camera move
 function glide(name, dur, arrive) {
+  if (walker && walker.on && name !== 'walk') walker.stop();
+  if ((famStation(name) ? 'family' : 'main') !== where) { crossTo(name, arrive); return; }
   if (calm.matches) dur = Math.min(dur, 0.35);
   if (station === 'house' && !tween) bakeOrbit();
   const outer = name === 'house' || station === 'house';
@@ -1849,7 +1984,10 @@ function arrived(name) {
   if (name === 'desk') deskCard();
   else if (name === 'hearth') hearthCard();
   else if (name === 'tome') tomeCard();
-  else if (isHome(name)) firstRun();
+  else if (name === 'display') displayCard();
+  else if (name === 'family') familyCard();
+  else if (isHome(name)) { if (!growIntro()) firstRun(); }
+  setTimeout(playArrival, 400);
 }
 // a word on how the shelf works, the first few visits
 const HINT_KEY = 'tomestead.shelfhint';
@@ -1904,6 +2042,14 @@ function lookDir() {
   return d;
 }
 function updateCamera(dt) {
+  if (station === 'walk' && !tween && walker && walker.on) {
+    walker.step(dt, cam.pos, cam.dir);
+    cam.dist = 1; cam.yaw = 0; cam.pitch = 0;
+    camera.position.copy(cam.pos);
+    camera.lookAt(cam.pos.clone().add(cam.dir));
+    outside();
+    return;
+  }
   if (tween) {
     tween.t += dt / tween.dur;
     const k = ease(Math.min(1, tween.t));
@@ -1972,7 +2118,8 @@ const CUT = [], PLINTH = [];
 let isOut = false;
 function outside() {
   const p = camera.position;
-  const dx = Math.max(0, Math.abs(p.x) - 3.1), dy = Math.max(0, p.y - 3.1, -p.y), dz = Math.max(0, Math.abs(p.z) - 2.8);
+  if (where === 'family') { if (isOut) { isOut = false; for (const m of CUT) m.visible = true; for (const m of PLINTH) m.visible = false; } return; }
+  const dx = Math.max(0, Math.abs(p.x) - 3.1), dy = Math.max(0, p.y - dims.top - 0.1, -p.y), dz = Math.max(0, p.z - dims.zF - 0.1, dims.zB - 0.1 - p.z);
   const away = Math.hypot(dx, dy, dz);
   const out = away > 0.02;
   const near = out ? THREE.MathUtils.clamp(away * 0.5, 0.05, 3) : 0.05, far = 30 + away * 2;
@@ -1998,6 +2145,7 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
   if (drag.moved < 6 || outBook) return;
+  if (station === 'walk' && walker.on) { walker.look(dx, dy); return; }
   if (station === 'shelf' && !searching) {
     // at the bookcase, dragging slides the view along the shelves (like the classic bookcase scrolls)
     const lim = shelfPan();
@@ -2034,6 +2182,7 @@ function tap(px, py) {
   if (customizing) return;
   if (!world) return;
   if (outBook) { if (outBook.phase === 'out' || outBook.phase === 'open') skipAhead(); else if (!HOST && outBook.phase === 'desk') closeUp(); return; }
+  if (where === 'family') return famTap(px, py);
   if (station === 'shelf') {
     if (searching) return closeSearch();
     if (turning) return;
@@ -2046,13 +2195,14 @@ function tap(px, py) {
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(scene.children, true);
-  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.station || null);
+  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.fav ? 'display' : u.station || null);
   const first = hits.find((h) => kindOf(h.object.userData));
   if (first) {
     const st = kindOf(first.object.userData);
     // the invisible tap areas are generous; prefer the exact thing under your finger
     const exact = hits.find((h) => { const u = h.object.userData; return (u.book || u.tome || u.deskBook) && kindOf(u) === st && h.distance < first.distance + 0.8; });
     if (station !== st) return go(st);
+    if (st === 'display') { const f = hits.find((h) => h.object.userData.fav); return f ? openOnDesk(f.object.userData.fav.id) : displayCard(); }
     if (exact && exact.object.userData.book) return selectBook(indexOfMesh(exact.object));
     const cup = hits.find((h) => h.object.userData.trophy && h.distance < first.distance + 0.8);
     if (cup) return trophyCard(cup.object.userData.trophy);
@@ -2247,6 +2397,14 @@ $('card-body').addEventListener('click', (e) => {
   }
   const act = e.target.closest('[data-act]');
   if (act && act.dataset.act === 'putback') { closeUp(); return; }
+  if (act) {
+    const a = act.dataset.act;
+    if (a === 'arrived') { closeCard(); setTimeout(playArrival, 300); return; }
+    if (a === 'step-in') { closeCard(); setHome('room'); go('room'); setTimeout(playArrival, 2600); return; }
+    if (a === 'open-fav') { openOnDesk(act.dataset.id); return; }
+    if (a === 'fam-go') { go('fam' + act.dataset.i); return; }
+    if (a === 'fam-page') { const n = world.fam ? world.fam.pages : 1; famPage = (famPage + Number(act.dataset.d) + n) % n; closeCard(); crossTo('family', true); return; }
+  }
   if (act && HOST) {
     const id = act.dataset.id, a = act.dataset.act;
     if (a === 'progress') HOST.openProgress(id);
@@ -2265,6 +2423,9 @@ $('card-body').addEventListener('click', (e) => {
     else if (a === 'tour-next') tourCard(Number(act.dataset.i));
     else if (a === 'tour-done') { markTour(); closeCard(); }
     else if (a === 'wake') { closeCard(); magic(); }
+    else if (a === 'room-size') { closeCard(); if (HOST.openCustomize) HOST.openCustomize('room'); }
+    else if (a === 'open-mine') { closeCard(); crossTo(home(), false); setTimeout(() => openOnDesk(id), 900); }
+    else if (a === 'fam-want' && famPick && HOST.wantBook) { HOST.wantBook({ title: famPick.t, author: famPick.a, pages: famPick.p || null, olKey: famPick.k || null, cover: famPick.cv || null }); closeCard(); }
   }
 });
 
@@ -2778,6 +2939,7 @@ function hearthCard() {
   openCard(`<div class="eyebrow">By the fire</div><h2>Goals, streaks and trophies</h2>
     ${streak}
     <div class="meta">Your streak, goals and year in books live by the fire. Trophies you earn stand on the mantel.</div>
+    ${(() => { const nx = HOST && HOST.nextUnlock ? HOST.nextUnlock() : null; return nx ? `<div class="meta next-up">✦ ${esc(nx.text)}</div>` : ''; })()}
     <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button>${HOST && HOST.openLife ? '<button type="button" class="quiet" data-act="life">Your reading life</button>' : ''}</div>`, 'hearth');
 }
 let cardKind = '', clockTimer = null;
@@ -2801,6 +2963,29 @@ function clockText(ms) {
 }
 $('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go === 'room' ? home() : b.dataset.go); kick(); }));
+// the Walk button: once the room is big enough to roam (and while you're in it, not the family room)
+function walkButton() {
+  const bar = document.querySelector('.stations'); if (!bar || !world) return;
+  let b = bar.querySelector('[data-go="walk"]');
+  const on = world.shell.tier !== 'study' && where === 'main';
+  if (!on) { if (b) b.remove(); if (station === 'walk') go(home()); return; }
+  if (b) return;
+  b = document.createElement('button'); b.type = 'button'; b.dataset.go = 'walk'; b.textContent = 'Walk'; b.setAttribute('aria-pressed', String(station === 'walk'));
+  b.addEventListener('click', () => { if (station === 'walk') go(home()); else startWalk(); kick(); });
+  const fam = bar.querySelector('[data-go="family"]');
+  bar.insertBefore(b, fam || null);
+}
+// the Family button: for family accounts, beside the others
+function familyButton() {
+  const bar = document.querySelector('.stations'); if (!bar) return;
+  let b = bar.querySelector('[data-go="family"]');
+  const on = familyData().on;
+  if (!on) { if (b) b.remove(); return; }
+  if (b) return;
+  b = document.createElement('button'); b.type = 'button'; b.dataset.go = 'family'; b.textContent = 'Family';
+  b.addEventListener('click', () => { putBack(); go('family'); kick(); });
+  bar.appendChild(b);
+}
 if ($('light')) $('light').addEventListener('click', () => { mode = mode === 'day' ? 'night' : 'day'; world.applyLook(); kick(); });
 addEventListener('keydown', (e) => {
   if (!active || outBook || document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
@@ -2809,19 +2994,245 @@ addEventListener('keydown', (e) => {
   if (station === 'shelf' && e.key === 'Enter' && pulled) { e.preventDefault(); openOnDesk(pulled.userData.book.id); return; }
   if (station === 'shelf' && (e.key === '/' || (e.key === 'f' && (e.metaKey || e.ctrlKey)))) { e.preventDefault(); openSearch(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(Math.max(0, order.indexOf(isHome(station) ? home() : station)) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
-  if (e.key === 'Escape') { putBack(); closeCard(); }
+  if (e.key === 'Escape') { if (station === 'walk') go(home()); putBack(); closeCard(); }
   kick();
 });
 
+
+// ---------------------------------------------------------------- what your reading has earned
+// Pieces of the room appear as your reading earns them (growth.js). Before then: bare floorboards,
+// a bare wall over the mantel and in the reading corner, no ottoman or tea, no vine, a sleeping tome,
+// no display case. (Everything useful works from the first minute; this only changes how it looks.)
+function favourites() {
+  if (Grow) return Grow.favourites(lib.books);
+  return lib.books.filter((b) => (b.status || 'read') === 'read' && Number(b.rating) > 0).sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 5);
+}
+const favSig = () => favourites().map((b) => [b.id, b.rating, b.title, JSON.stringify(b.art || null)].join('~')).join('|');
+let lastEarned = '', lastFav = '', lastTier = '';
+function applyEarned() {
+  if (!world) return;
+  const F = world.furniture;
+  world.tome.sleep(!shown('tome'));
+  const rugOn = shown('damask') ? 'damask' : shown('rug') ? 'wool' : null;
+  world.rug.visible = !!rugOn;
+  if (rugOn && world.rug.material.map !== world.rugMaps[rugOn]) { world.rug.material.map = world.rugMaps[rugOn]; world.rug.material.alphaTest = rugOn === 'damask' && extra.rug ? 0.5 : 0; world.rug.material.needsUpdate = true; }
+  if (F.hearth.art) F.hearth.art.visible = shown('mantel');
+  if (F.nookPainting) F.nookPainting.visible = shown('nook');
+  for (const o of [F.ottoman, F.teacup, F.steam]) if (o) o.visible = shown('ottoman');
+  world.books.setVine(shown('vine') ? (lib.theme.vine || 'roses') : 'none');
+  buildDisplayNow();
+  renderer.shadowMap.needsUpdate = true;
+  kick();
+}
+function buildDisplayNow() {
+  if (world.display) { world.display.dispose(); world.display = null; }
+  delete STATIONS.display;
+  if (!shown('display')) return;
+  world.display = buildDisplay(world.K, world.shell.tier, favourites());
+  world.display.setLight(mode === 'night');
+  STATIONS.display = world.display.station;
+}
+// the room changes size: everything that hangs off the old shell is swapped for the new one
+function rebuildShell(tier) {
+  const old = world.shell;
+  for (const m of old.cut) { const i = CUT.indexOf(m); if (i >= 0) CUT.splice(i, 1); }
+  for (const m of old.plinth) { const i = PLINTH.indexOf(m); if (i >= 0) PLINTH.splice(i, 1); }
+  old.dispose();
+  const sh = buildShell(world.K, tier);
+  sh.cut.forEach((m) => { CUT.push(m); m.visible = !isOut; }); sh.plinth.forEach((m) => { PLINTH.push(m); m.visible = isOut; });
+  world.shell = sh;
+  applyTierStations(sh);
+  if (walker && walker.on) { const w = walkWorld(tier); walker.setWorld(w.bounds, w.obstacles); }
+  setTimeout(walkButton, 0);
+  buildDisplayNow();
+  world.applyLook();
+  sh.group.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
+  renderer.shadowMap.needsUpdate = true;
+  lastTier = tier;
+}
+
+// a short fade to black and back, for changing rooms (the family room, a bigger room)
+const fader = document.createElement('div'); fader.className = 'rm-fade'; canvas.parentElement.appendChild(fader);
+function fadeThrough(mid, ms = 380) {
+  fader.style.transition = `opacity ${ms}ms ease`; fader.classList.add('on');
+  return new Promise((done) => setTimeout(() => { try { mid(); } finally { kick(1500); requestAnimationFrame(() => { fader.classList.remove('on'); setTimeout(done, ms); }); } }, ms));
+}
+
+// ---------------------------------------------------------------- arrivals: the small moment when something is earned
+// The camera walks over to where the new piece will be, it grows into place, and a brass card names
+// it. A bigger room arrives from the dollhouse: the old room fades, the bigger one rises in its place.
+let arriving = null;
+function queueArrivals() {
+  if (!HOST || !HOST.arrivals) return;
+  const q = HOST.arrivals().filter((k) => earnedNow()[k] && !pendingArrive.includes(k) && (!Grow || Grow.step(k)));
+  if (q.length) { pendingArrive.push(...q); syncShown(); }
+  playArrival();
+}
+function syncShown() { if (!world) return; const sig = JSON.stringify([Object.keys(earnedNow()).sort(), pendingArrive]); if (sig !== lastEarned) { lastEarned = sig; applyEarned(); } }
+function idle() { return world && !arriving && !outBook && !tween && !customizing && !settled && where === 'main' && $('card').hidden && !document.querySelector('dialog[open]') && active; }
+function playArrival() {
+  if (!pendingArrive.length || !idle()) return;
+  const key = pendingArrive[0], step = Grow ? Grow.step(key) : null;
+  arriving = key;
+  const finish = () => { pendingArrive = pendingArrive.filter((k) => k !== key); if (HOST && HOST.arrived) HOST.arrived(key); arriving = null; };
+  const card = (extra = '') => openCard(`<div class="eyebrow">Your reading earned</div><h2>${esc(step ? step.name : key)}</h2><div class="meta">${esc(step ? step.line() : '')}</div>${extra}
+      <div class="acts"><button type="button" data-act="arrived">Lovely</button>${step && step.where === 'grow' ? '<button type="button" class="quiet" data-act="step-in">Step inside</button>' : ''}</div>`, 'arrival');
+  if (step && step.where === 'grow') {
+    // from the dollhouse: the old room fades out, the bigger one rises in its place
+    const target = key;
+    glide('house', 2.2, false);
+    setTimeout(() => {
+      finish();
+      const want = tierNow();
+      fadeThrough(() => { if (want !== world.shell.tier) rebuildShell(want); const f = framing('house'); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; setFov(fovFor('house')); tween = null; }, 650)
+        .then(() => { kick(4000); card(`<div class="note">${esc((Grow.TIERS.find((t) => t.key === target) || {}).blurb || '')}</div>`); });
+    }, calm.matches ? 400 : 2400);
+    return;
+  }
+  // the piece is put in place but shrunk to nothing, the camera walks over, and it swells into view
+  finish(); syncShown();
+  const obj = growTarget(key), s0 = obj ? obj.scale.clone() : null;
+  if (obj) { obj.scale.multiplyScalar(0.01); obj.updateMatrix(); }
+  const to = step ? ({ tome: 'tome', case: 'case', room: home(), hearth: 'hearth', display: 'display', nook: 'nook' }[step.where] || home()) : home();
+  glide(STATIONS[to] ? to : home(), 1.6, false);
+  setTimeout(() => {
+    if (key === 'tome') world.tome.wake();
+    if (obj) growIn(obj, s0);
+    setTimeout(() => card(), 650);
+  }, calm.matches ? 400 : 1700);
+}
+function growTarget(key) {
+  const F = world.furniture;
+  return { mantel: F.hearth.art, nook: F.nookPainting, ottoman: F.ottoman, display: world.display && world.display.group, rug: world.rug, damask: world.rug }[key] || null;
+}
+// the new piece swells gently into place
+function growIn(obj, s0) {
+  const t0 = performance.now();
+  const step = () => { const k = Math.min(1, (performance.now() - t0) / 900); const e = 1 - Math.pow(1 - k, 3); obj.scale.copy(s0).multiplyScalar(0.01 + 0.99 * e); obj.updateMatrix(); kick(200); if (k < 1) requestAnimationFrame(step); else renderer.shadowMap.needsUpdate = true; };
+  requestAnimationFrame(step);
+}
+// the first time growth runs for a reader who already had a library: a word on what's happened
+const GROW_KEY = 'tomestead.grow.v1';
+function growIntro() {
+  if (!HOST || !Grow || !idle()) return false;
+  try { if (localStorage.getItem(GROW_KEY)) return false; localStorage.setItem(GROW_KEY, '1'); } catch { return false; }
+  if (!lib.books.length) return false;
+  const n = Grow.readCount(lib.books), e = earnedNow(), got = Grow.LADDER.filter((x) => e[x.key]);
+  const nx = HOST.nextUnlock ? HOST.nextUnlock() : null;
+  openCard(`<div class="eyebrow">New</div><h2>Your room grows as you read</h2>
+    <div class="meta">Finishing books adds to the room: a vine, rugs, paintings, a case for your five favourites, and in time a bigger room. ${got.length ? `Your ${n} finished ${n === 1 ? 'book has' : 'books have'} already earned ${got.length === Grow.LADDER.length ? 'all of it' : got.length + ' of ' + Grow.LADDER.length + ' things'}.` : ''} ${nx ? esc(nx.text) : ''}</div>
+    <div class="acts"><button type="button" data-act="arrived">Lovely</button><button type="button" class="quiet" data-act="room-size">Room size</button></div>`, 'arrival');
+  return true;
+}
+
+// ---------------------------------------------------------------- the display case
+function displayCard() {
+  const favs = favourites();
+  if (!favs.length) return openCard(`<div class="eyebrow">Your favourites</div><h2>An empty case, for now</h2><div class="meta">Give your best books their stars and your top five stand here, behind glass.</div>`, 'display');
+  const stars = (r) => '★'.repeat(Math.round(Number(r) || 0));
+  openCard(`<div class="eyebrow">Your five favourites</div><h2>On display</h2>
+    <ol class="fav-list">${favs.map((b) => `<li><button type="button" data-act="open-fav" data-id="${esc(b.id)}"><span class="fav-t">${esc(b.title)}</span><span class="fav-a">${esc(b.author || '')}</span><span class="fav-s">${stars(b.rating)}</span></button></li>`).join('')}</ol>
+    <div class="meta">${favs.length < 5 ? `Rate ${5 - favs.length} more ${5 - favs.length === 1 ? 'book' : 'books'} to fill the case. ` : ''}Highest rated first; the most recently finished among equals.</div>`, 'display');
+}
+
+// ---------------------------------------------------------------- the family room
+// A second, smaller room (its own scene) with each family reader's shelves. Walking there (or back)
+// is a short fade.
+let where = 'main';
+const famStation = (n) => n === 'family' || /^fam\d$/.test(n);
+let famPage = 0, famSig = '';
+function familyData() {
+  if (HOST && HOST.family) return HOST.family();
+  if (params.get('family') === '1') return { on: true, shelves: sampleFamily(), share: true };
+  return { on: false, shelves: [] };
+}
+function sampleFamily() {
+  const names = ['Kathryn', 'Ryder', 'Grandma'];
+  return names.map((name, k) => ({ uid: 'u' + k, name, sig: 's', books: SAMPLE.slice(k * 3).concat(SAMPLE, SAMPLE).slice(0, 26 + k * 12).map(([title, author], i) => ({ t: title, a: author, s: i % 7 === 0 ? 'reading' : i % 5 === 0 ? 'want' : 'read', r: (i % 5) + 1, c: PALETTE[(i + k) % PALETTE.length][0], p: 200 + i * 13 })) }));
+}
+function ensureFamily() {
+  const d = familyData();
+  const sig = JSON.stringify([d.shelves.map((m) => [m.uid, m.sig, m.name, m.books.length]), famPage, HOST && HOST.paintSig ? HOST.paintSig() : '']);
+  if (world.fam && sig === famSig) return world.fam;
+  if (world.fam) { world.fam.dispose(); world.fam = null; }
+  famSig = sig;
+  world.fam = buildFamilyRoom(world.K, d.shelves, famPage);
+  world.fam.setLight(mode === 'night');
+  STATIONS.family = world.fam.overview;
+  for (let i = 0; i < 4; i++) delete STATIONS['fam' + i];
+  world.fam.cases.forEach((c, i) => { STATIONS['fam' + i] = c.station; });
+  return world.fam;
+}
+// moving between the two rooms
+function crossTo(name, arrive) {
+  const into = famStation(name) ? 'family' : 'main';
+  fadeThrough(() => {
+    if (into === 'family') ensureFamily();
+    where = into;
+    if (station === 'house' && into === 'family') bakeOrbit();
+    station = name; tween = null; cam.vx = 0; cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
+    pressStation(name);
+    setFov(fovFor(name));
+    const f = framing(name); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist;
+    renderer.shadowMap.needsUpdate = true;
+    updateCamera(0);
+  }).then(() => { if (arrive) arrived(name); shelfTools(); walkButton(); });
+}
+function familyCard() {
+  const d = familyData(), fam = world.fam;
+  if (!d.on) return;
+  if (!d.shelves.length) return openCard(`<div class="eyebrow">The family room</div><h2>Shelves for the whole family</h2><div class="meta">Each family reader’s bookcase stands here once they’ve opened Tomestead. ${d.share === false ? 'Your own shelves are private (Customize → Room).' : 'Yours is shared with them too.'}</div>`, 'family');
+  const pages = fam ? fam.pages : 1;
+  openCard(`<div class="eyebrow">The family room</div><h2>Whose shelves?</h2>
+    <div class="fam-who">${(fam ? fam.cases : []).map((c, i) => `<button type="button" data-act="fam-go" data-i="${i}">${esc(c.name)}<small>${c.count} ${c.count === 1 ? 'book' : 'books'}</small></button>`).join('')}</div>
+    ${pages > 1 ? `<div class="acts"><button type="button" class="quiet" data-act="fam-page" data-d="-1">‹ Before</button><button type="button" class="quiet" data-act="fam-page" data-d="1">More family ›</button></div>` : ''}
+    <div class="meta">Titles, stars and what they’re reading. Never reviews or notes.</div>`, 'family');
+}
+function famBookCard(b, who) {
+  const stars = b.r ? '★'.repeat(Math.floor(b.r)) + (b.r % 1 ? '½' : '') : '';
+  const st = { read: 'Read', reading: 'Reading it now', want: 'Wants to read it', dnf: 'Set it aside' }[b.s] || '';
+  const mine = lib.books.find((x) => String(x.title).trim().toLowerCase() === String(b.t).trim().toLowerCase());
+  famPick = b;
+  openCard(`<div class="eyebrow">${esc(who)}’s shelf</div><h2>${esc(b.t)}</h2><div class="meta">${esc(b.a || '')}</div>
+    <div class="meta">${esc(st)}${stars ? ' · ' + stars : ''}${b.f ? ' · ' + esc(fmtDate(b.f)) : ''}</div>
+    <div class="acts">${mine ? `<button type="button" class="quiet" data-act="open-mine" data-id="${esc(mine.id)}">On your shelves too</button>` : HOST ? '<button type="button" data-act="fam-want">Add to my to-read pile</button>' : ''}</div>`, 'fambook');
+}
+let famPick = null;
+function famTap(px, py) {
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(world.fam.scene.children, true);
+  const bk = hits.find((h) => h.object.userData.famBooks);
+  const cs = hits.find((h) => h.object.userData.famCase !== undefined);
+  if (bk && (!cs || bk.distance < cs.distance + 0.5)) {
+    const u = bk.object.userData, i = Math.floor(bk.faceIndex / 12), b = u.famBooks[i];
+    if (station !== 'fam' + u.slot) return go('fam' + u.slot);
+    if (b) return famBookCard(b, u.member);
+  }
+  if (cs) { const n = 'fam' + cs.object.userData.famCase; if (station !== n) return go(n); }
+  closeCard();
+}
 
 // ---------------------------------------------------------------- dollhouse overlays
 // brass pins over the little room (tap one to walk over), the Step inside / Whole room switch,
 // and a Reading now card under the dollhouse
 const ROOT = canvas.parentElement;
-const PINS = [['shelf', 'Shelf', [0, 2.3, -2.45]], ['desk', 'Desk', [-2.55, 1.15, -0.6]], ['hearth', 'Fireside', [-2.72, 1.5, 1.6]], ['tome', 'Tome', [2.25, 1.55, 0.1]]];
+const BASE_PINS = [['shelf', 'Shelf', [0, 2.3, -2.45]], ['desk', 'Desk', [-2.55, 1.15, -0.6]], ['hearth', 'Fireside', [-2.72, 1.5, 1.6]], ['tome', 'Tome', [2.25, 1.55, 0.1]]];
+let PINS = BASE_PINS, pinSig = '';
+// the pins over the dollhouse (plus the display case once it's there); in the family room, one per reader
+function pinList() {
+  if (where === 'family') return world && world.fam ? world.fam.cases.map((c, i) => ['fam' + i, c.name, c.pin]) : [];
+  return world && world.display ? [...BASE_PINS, ['display', 'Favourites', world.display.pin]] : BASE_PINS;
+}
 const pinBox = document.createElement('div');
 pinBox.className = 'pins'; pinBox.hidden = true;
-pinBox.innerHTML = PINS.map(([st, label]) => `<button type="button" class="pin" data-pin="${st}"><span class="pin-label">${label}</span><span class="pin-dot" aria-hidden="true"></span></button>`).join('');
+function paintPins() {
+  PINS = pinList();
+  const sig = PINS.map((p) => p[0] + p[1]).join('|');
+  if (sig === pinSig) return;
+  pinSig = sig;
+  pinBox.innerHTML = PINS.map(([st, label]) => `<button type="button" class="pin" data-pin="${st}"><span class="pin-label">${esc(label)}</span><span class="pin-dot" aria-hidden="true"></span></button>`).join('');
+}
 ROOT.appendChild(pinBox);
 pinBox.addEventListener('click', (e) => { const b = e.target.closest('[data-pin]'); if (b) { go(b.dataset.pin); kick(); } });
 const swap = document.createElement('button');
@@ -2868,9 +3279,10 @@ function paintNow(b) {
 const pv = new THREE.Vector3();
 function overlays() {
   const calmNow = !!tween || customizing || settled || !!outBook || !world;
-  const atHouse = station === 'house' && !calmNow;
-  pinBox.hidden = !atHouse;
+  const atHouse = (station === 'house' || station === 'family') && !calmNow;
+  pinBox.hidden = !atHouse || (station === 'family' && !$('card').hidden && portrait());
   if (atHouse) {
+    paintPins();
     camera.updateMatrixWorld();
     const r = canvas.getBoundingClientRect();
     pinBox.querySelectorAll('.pin').forEach((el, i) => {
@@ -2909,7 +3321,7 @@ function resize() {
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
-  if (world && !tween) { const f = outBook && outBook.phase === 'desk' ? readingView(outBook) : framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
+  if (world && !tween && station !== 'walk') { const f = outBook && outBook.phase === 'desk' ? readingView(outBook) : framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
   kick();
 }
 addEventListener('resize', resize);
@@ -2932,7 +3344,7 @@ function frame(now) {
   world.beam.material.uniforms.uTime.value = t;
   world.motes.material.uniforms.uTime.value = t;
   const r0 = performance.now();
-  renderer.render(scene, camera);
+  renderer.render(where === 'family' && world.fam ? world.fam.scene : scene, camera);
   lastRender = now;
   if (!firstFrameAt) firstFrameAt = performance.now();
   perf.frames++;
@@ -3011,7 +3423,22 @@ function refresh() {
   if (deskSig() !== lastDesk) { lastDesk = deskSig(); world.desk.dress(); }
   if (paintSig() !== lastPaint) { lastPaint = paintSig(); hangPaintings(); }
   if ((lib.theme.wood || 'oak') !== lastWood) { lastWood = lib.theme.wood || 'oak'; world.setWood(lastWood); }
-  if ((lib.theme.vine || 'roses') !== lastVine) { lastVine = lib.theme.vine || 'roses'; world.books.setVine(lastVine); kick(); }
+  if ((lib.theme.vine || 'roses') !== lastVine) { lastVine = lib.theme.vine || 'roses'; world.books.setVine(shown('vine') ? lastVine : 'none'); kick(); }
+  // what your reading has earned, the size of the room, the favourites in the case, the family's shelves
+  queueArrivals();
+  syncShown();
+  const tier = tierNow();
+  if (tier !== world.shell.tier && !arriving) {
+    if (station === 'house' || !active) rebuildShell(tier);
+    else fadeThrough(() => { rebuildShell(tier); if (isHome(station) || station === 'display') { const f = framing(station === 'display' && !STATIONS.display ? home() : station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; } });
+  }
+  if (favSig() !== lastFav) { lastFav = favSig(); if (shown('display')) buildDisplayNow(); }
+  if (where === 'family') {
+    const before = world.fam;
+    ensureFamily();
+    if (world.fam !== before && !STATIONS[station]) { station = 'family'; const f = framing('family'); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
+  }
+  familyButton(); walkButton();
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
   if (!$('card').hidden && cardKind === 'hearth') hearthCard();
@@ -3042,22 +3469,28 @@ function settle(on) {
 }
 function setActive(on) {
   active = !!on;
-  if (active) { last = performance.now(); resize(); kick(); }
+  if (active) { last = performance.now(); resize(); kick(); setTimeout(playArrival, 1200); }
   else { dropOutBook(); putBack(); closeCard(); }
   shelfTools();
 }
 
 (async () => {
   resize();
+  walker = createWalker({ THREE, root: canvas.parentElement, kick });
   world = await build();
   lastSig = libSig();
   lastPaint = paintSig(); hangPaintings();
   lastCups = cupSig(); world.furniture.hearth.setTrophies(lib.trophies);
   lastDesk = deskSig();
   lastWood = lib.theme.wood || 'oak'; lastVine = lib.theme.vine || 'roses';
+  lastTier = world.shell.tier; lastFav = favSig();
+  if (HOST && HOST.arrivals) pendingArrive = HOST.arrivals().filter((k) => earnedNow()[k]);
+  lastEarned = ''; syncShown();
+  if (world.shell.tier !== tierNow()) rebuildShell(tierNow());
+  familyButton(); walkButton();
   frameShelf();
-  const start = params.get('st') && STATIONS[params.get('st')] ? params.get('st') : null;
-  const f = framing(start || 'room');
+  const start = params.get('st') && (STATIONS[params.get('st')] || famStation(params.get('st')) || params.get('st') === 'display') ? params.get('st') : null;
+  const f = framing(start && STATIONS[start] && !famStation(start) ? start : 'room');
   cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist;
   if (!start) { cam.pos.z = Math.min(2.6, cam.pos.z + 0.9); cam.pos.y += 0.3; cam.pitch = -0.12; }
   if (start === 'house') setFov(fovFor('house'));
@@ -3073,8 +3506,10 @@ function setActive(on) {
     resize(); shelfTools();
   };
   const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
-  window.TomesteadRoom = { refresh, setActive, customize, show, settle, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
+  window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
+  // something earned while a dialog was open (or the room was busy) arrives once things are quiet
+  setInterval(() => { if (pendingArrive.length) playArrival(); }, 2500);
   // the title screen stays up long enough to read its quote (tap to step in sooner)
   const Q = window.TomesteadQuotes, veil = $('veil');
   const wait = Math.max(0, (Q ? T0 + Q.readMs : 0) - performance.now());
@@ -3090,6 +3525,7 @@ function setActive(on) {
     veil.classList.add('gone');
     setTimeout(() => veil.remove(), 1400);
     if (!start && !customizing) go(home(), 2.6);
+    else if (famStation(start)) { crossTo(start, false); }
     else { station = start; pressStation(start); if (start === 'house') setFov(fovFor('house')); shelfTools(); }
     setTimeout(() => { $('hint').classList.add('show'); setTimeout(() => $('hint').classList.remove('show'), 4200); }, start ? 300 : 2600);
     if (params.get('perf') === '1') { $('perf').hidden = false; showPerf(); }

@@ -159,3 +159,34 @@ html.reading .rm .stations, html.reading .rm .shelf-tools, html.reading .rm .hin
 }
 html.cz-on .rm .pins, html.cz-on .rm .view-swap, html.cz-on .rm .now-card, html.ritual-on .rm .pins, html.ritual-on .rm .view-swap, html.ritual-on .rm .now-card { display: none; }
 html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-swap, html:has(details.more[open]) .rm .now-card { display: none; }
+/* changing rooms (the family room, a bigger room): a short fade through black */
+.rm-fade { position: fixed; inset: 0; z-index: 15; background: #0b0806; opacity: 0; pointer-events: none; }
+.rm-fade.on { opacity: 1; pointer-events: auto; }
+/* the display case: your five favourites */
+.rm .card .fav-list { list-style: none; margin: 8px 0 6px; padding: 0; counter-reset: fav; }
+.rm .card .fav-list li { margin: 0; counter-increment: fav; }
+.rm .card .fav-list button { display: grid; grid-template-columns: 1.6em 1fr auto; grid-template-rows: auto auto; column-gap: 8px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid rgba(42,30,22,.12); padding: 7px 2px; cursor: pointer; color: var(--ink); font: inherit; }
+.rm .card .fav-list li:first-child button { border-top: 0; }
+.rm .card .fav-list button::before { content: counter(fav, upper-roman); grid-row: 1 / span 2; font-family: var(--serif); color: #a87b2c; align-self: center; }
+.rm .card .fav-t { font-family: var(--serif); font-size: 1.05rem; line-height: 1.2; }
+.rm .card .fav-a { grid-column: 2; font-size: .82rem; color: var(--ink-soft); font-style: italic; }
+.rm .card .fav-s { grid-column: 3; grid-row: 1 / span 2; align-self: center; color: #a87b2c; letter-spacing: 1px; font-size: .9rem; }
+.rm .card .fav-list button:hover .fav-t { text-decoration: underline; text-decoration-color: rgba(168,123,44,.6); }
+/* the family room: whose shelves */
+.rm .card .fam-who { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+.rm .card .fam-who button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(168,123,44,.45); background: rgba(255,255,255,.35); font-family: var(--serif); font-size: 1.05rem; color: var(--ink); cursor: pointer; }
+.rm .card .fam-who small { font-family: var(--sans); font-size: .74rem; color: var(--ink-soft); }
+/* the fireside's one quiet line about what comes next */
+.rm .card .next-up { color: #7a5520; font-style: italic; }
+/* walking: a thumbstick at the bottom left (phones and tablets) */
+.walk-pad { position: fixed; z-index: 11; left: calc(18px + env(safe-area-inset-left)); bottom: calc(env(safe-area-inset-bottom) + 84px); touch-action: none; }
+.walk-pad .walk-ring { display: grid; place-items: center; width: 112px; height: 112px; border-radius: 50%; background: radial-gradient(circle, rgba(20,12,6,.28), rgba(20,12,6,.5)); border: 1.5px solid rgba(230,200,134,.55); box-shadow: 0 6px 20px rgba(0,0,0,.35), inset 0 0 18px rgba(0,0,0,.35); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.walk-pad .walk-knob { width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f1d89c, #b8904a 70%, #8a6a32); box-shadow: 0 3px 10px rgba(0,0,0,.45); transition: transform .12s ease-out; }
+.walk-pad.held .walk-knob { transition: none; }
+/* six or seven stations (Walk, Family) on a narrow phone: tighter, and the bar scrolls sideways if it must */
+.rm .stations { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+.rm .stations::-webkit-scrollbar { display: none; }
+@media (max-width: 520px) {
+  .rm .stations:has(> button:nth-child(6)) button { padding: 8px 8px; font-size: .84rem; }
+  .rm .stations:has(> button:nth-child(7)) button { padding: 7px 6px; font-size: .8rem; }
+}

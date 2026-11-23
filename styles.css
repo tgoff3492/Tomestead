@@ -1928,3 +1928,16 @@ html.room-mode .topbar .brand h1 { font-size: clamp(1.5rem, 6vw, 1.9rem); }
 html.room-mode .stats { font-size: .95rem; margin-top: 1px; }
 html.room-mode .stats .streak-link { font-size: inherit; }
 html.room-mode #stage::before { height: calc(env(safe-area-inset-top) + 140px); }
+/* Customize → Room: room size, what your reading has earned, sharing with family */
+.size-tiles .tile.locked { opacity: .55; }
+.size-tiles .tile.locked .tile-art { filter: grayscale(.7) brightness(.8); }
+.size-tiles .tile-label small { display: block; font-size: .7rem; opacity: .85; margin-top: 2px; }
+.size-art { display: grid; place-items: center; }
+.earned-list { list-style: none; margin: 4px 0 14px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 14px; }
+.earned-list li { display: grid; grid-template-columns: 1.2em 1fr auto; gap: 6px; align-items: baseline; font-size: .9rem; padding: 3px 0; border-bottom: 1px solid rgba(42,30,22,.1); }
+.earned-list li.not { opacity: .55; }
+.earned-list .mark { color: #a77a26; }
+.earned-list small { font-size: .74rem; color: var(--ink-soft); }
+.cz-check { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: .95rem; }
+.cz-field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: .85rem; color: var(--ink-soft); }
+.cz-field input { font: inherit; font-size: 1rem; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(42,30,22,.25); background: rgba(255,255,255,.6); color: var(--ink); max-width: 260px; }

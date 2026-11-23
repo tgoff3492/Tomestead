@@ -232,6 +232,7 @@
     hide();
     listen();
     loadFamily();
+    loadFamilyShelves();
   }
 
   async function onGateSubmit(e) {
@@ -316,6 +317,7 @@
       if (ready || !(force || (booksSeen && settingsSeen))) return;
       ready = true;
       flush();
+      publishShelf();
       flushNotes();
       hooks.onReady && hooks.onReady();
     };
@@ -372,6 +374,7 @@
     saveState();
     if (upserts.length || removes.length) hooks.applyBooks({ upserts, removes });
     if (ready) schedule();
+    if (ready) publishShelf();
   }
 
   function settingsNow() { return plain(hooks.settings()); }
@@ -401,6 +404,7 @@
   function schedule() {
     clearTimeout(timer);
     timer = setTimeout(flush, 700);
+    publishShelf();
   }
   function flush() {
     clearTimeout(timer);
@@ -538,6 +542,75 @@
     keepFamily(famList.filter((x) => x.id !== id));
   }
 
+  // ---------- family shelves (the reading room's family room) ----------
+  // Each family reader publishes a small summary of their shelves to familyShelves/<uid>: titles,
+  // authors, stars, status, spine colour, pages and the Open Library key for a cover. Never reviews,
+  // notes, quotes or reading logs. Only family accounts can read them (see the rules); anyone can
+  // turn theirs off in Customize → Room, which removes it.
+  const SHELF_KEY = 'tomestead.famshelves' + (uid ? ':' + uid : '');
+  let famShelves = (() => { try { const a = JSON.parse(ls.get(SHELF_KEY)); return Array.isArray(a) ? a : []; } catch { return []; } })();
+  let shelfSent = null, shelfTimer = null;
+  function myName() {
+    const f = (hooks.family && hooks.family()) || {};
+    if (f.name) return f.name;
+    const dn = user && user.displayName ? String(user.displayName).trim().split(/\s+/)[0] : '';
+    return dn || (user && user.email ? user.email.split('@')[0] : 'Me');
+  }
+  function shelfSummary() {
+    const list = (hooks.books() || []).filter((b) => b && b.title).slice(0, 1200).map((b) => {
+      const o = { t: String(b.title).slice(0, 140), a: String(b.author || '').slice(0, 80), s: ['read', 'reading', 'want', 'dnf'].includes(b.status) ? b.status : 'read' };
+      if (Number(b.rating) > 0) o.r = Math.round(Number(b.rating) * 2) / 2;
+      if (b.color) o.c = String(b.color).slice(0, 9);
+      if (Number(b.pages) > 0) o.p = Math.min(5000, Math.round(Number(b.pages)));
+      if (b.format === 'audio' && Number(b.hours) > 0) o.h = Math.round(Number(b.hours));
+      const ol = b.olKey || (b.art && b.art.olKey);
+      if (ol && /^\/works\/OL\w+$/.test(ol)) o.k = ol;
+      const cid = b.art && Array.isArray(b.art.ids) ? b.art.ids[b.art.i || 0] : null;
+      if (Number(cid) > 0) o.cv = Number(cid);
+      const fin = [b.finished, ...(b.rereads || [])].filter(Boolean).sort().pop();
+      if (fin) o.f = String(fin).slice(0, 10);
+      if (b.addedAt) o.d = Number(b.addedAt) || 0;
+      return o;
+    });
+    return list;
+  }
+  function publishShelf(now) {
+    clearTimeout(shelfTimer);
+    if (!now) { shelfTimer = setTimeout(() => publishShelf(true), 6000); return; }
+    if (!user || !fb || !family || !ready) return;
+    const { F } = fb;
+    const f = (hooks.family && hooks.family()) || {};
+    const ref = F.doc(fb.db, 'familyShelves', user.uid);
+    if (f.share === false) {
+      if (shelfSent !== 'off') { shelfSent = 'off'; F.deleteDoc(ref).catch(() => { shelfSent = null; }); }
+      return;
+    }
+    const books = shelfSummary(), name = myName();
+    const fp = fingerprint({ name, books });
+    if (fp === shelfSent) return;
+    shelfSent = fp;
+    F.setDoc(ref, { name, books, sig: fp, at: F.serverTimestamp() }).catch((e) => { shelfSent = null; console.warn('Tomestead: family shelf not shared', e); });
+  }
+  async function loadFamilyShelves() {
+    if (!user || !fb) return famShelves;
+    if (!family) { if (famShelves.length) { famShelves = []; ls.del(SHELF_KEY); window.dispatchEvent(new Event('tomestead:familyshelves')); } return famShelves; }
+    try {
+      const { F } = fb;
+      const snap = await F.getDocs(F.collection(fb.db, 'familyShelves'));
+      famShelves = snap.docs.filter((d) => d.id !== user.uid).map((d) => {
+        const x = d.data() || {};
+        return { uid: d.id, name: String(x.name || 'Family').slice(0, 40), sig: String(x.sig || ''), at: x.at && x.at.toMillis ? x.at.toMillis() : 0,
+          books: Array.isArray(x.books) ? x.books.filter((b) => b && typeof b.t === 'string').slice(0, 1200) : [] };
+      }).filter((x) => x.books.length).sort((a, b) => a.name.localeCompare(b.name));
+      try { ls.set(SHELF_KEY, JSON.stringify(famShelves)); } catch { /* too big for this device: kept in memory */ }
+      window.dispatchEvent(new Event('tomestead:familyshelves'));
+    } catch (e) {
+      if (e && e.code === 'permission-denied') { famShelves = []; ls.del(SHELF_KEY); }
+      else console.warn('Tomestead: family shelves not loaded', e);
+    }
+    return famShelves;
+  }
+
   // ---------- feedback and error reports (for the person running Tomestead) ----------
   // Saved to the 'feedback' and 'errors' collections; readable only in the Firebase console.
   // Anything that can't be sent yet waits on this device and goes with the next sign-in.
@@ -592,6 +665,10 @@
     removeCover,
     isFamily: () => !!user && family,
     familyPaintings: () => famList,
+    familyShelves: () => famShelves,
+    loadFamilyShelves,
+    publishShelf: (now) => publishShelf(now),
+    displayName: () => (user ? myName() : ''),
     addFamilyPainting,
     removeFamilyPainting,
     myUid: () => (user && user.uid) || uid || '',

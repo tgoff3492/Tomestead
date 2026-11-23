@@ -47,6 +47,18 @@ service cloud.firestore {
       allow delete: if family() && resource.data.by == request.auth.uid;
     }
 
+    // Family shelves (the reading room's family room): a summary of each family reader's shelves
+    // (titles, authors, stars, status; never reviews or notes). Family can read them all; each
+    // person writes and removes only their own, and can turn theirs off in Customize → Room.
+    match /familyShelves/{uid} {
+      allow read: if family();
+      allow create, update: if family() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'books', 'sig', 'at'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40
+        && request.resource.data.books is list && request.resource.data.books.size() <= 1200;
+      allow delete: if family() && request.auth.uid == uid;
+    }
+
     // Feedback from inside the app (••• → Send feedback) and automatic error reports.
     // Readers can add them but never read them back; you read them in the Firebase console.
     match /feedback/{id} {

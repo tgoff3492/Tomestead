@@ -51,3 +51,10 @@ Some readers can share paintings for the reading room's frames with each other, 
 3. Each of them signs out and back in once (••• ▸ Sign out), so the app sees the new field.
 
 Then Customize ▸ Paintings shows a **+ Family painting** tile to family members. A painting added there hangs in that person's room and appears as a choice for the rest of the family. Only whoever added a painting can remove it (select it, then **Remove it for everyone**). The pictures live in Storage under `family/` and are listed in the Firestore collection `familyPaintings`; the rules close both to everyone without `family: true`. Removing someone's `family` field (or their invite) takes the paintings away from them.
+
+## The family room (Nov 22, 2026)
+The reading room has a second, smaller room where each family member's shelves stand side by side. It uses the same `family: true` field as the family paintings.
+1. Paste `firestore.rules` into **Firestore ▸ Rules** and click **Publish** (it adds the `familyShelves` collection).
+2. That's it for anyone already marked `family: true`. Their shelves appear once each of them has opened Tomestead with this version.
+
+What's shared: titles, authors, stars, status (read, reading, to read, set aside), spine colour, pages and the cover. Never reviews, notes, saved lines or reading logs. Each person can turn it off in **Customize ▸ Room ▸ Share my shelves with my family** (that deletes their summary) and change the name on their bookcase there. The summaries live in the Firestore collection `familyShelves`, one document per reader, readable only by family accounts.

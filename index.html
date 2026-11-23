@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261122195623">
+  <link rel="stylesheet" href="room/room.css?v=20261122213349">
   <script>/* the reading room is home whenever this device can show it, so the old 2D opening never plays there */ try { var cv = document.createElement('canvas'); if (cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -167,6 +167,7 @@
       <button id="czDone" class="btn btn-brass">Done</button>
     </div>
     <nav id="czTabs" class="cz-tabs" role="tablist" aria-label="What to change">
+      <button type="button" role="tab" data-tab="room">Room</button>
       <button type="button" role="tab" data-tab="paint">Paintings</button>
       <button type="button" role="tab" data-tab="case">Bookcase</button>
       <button type="button" role="tab" data-tab="trinkets">Trinkets</button>
@@ -174,6 +175,20 @@
       <button type="button" role="tab" data-tab="light">Light</button>
     </nav>
     <div class="cz-panel paper-panel">
+      <section class="cz-section" data-pane="room" role="tabpanel">
+        <h3>Room size</h3>
+        <p class="cz-hint" id="czSizeHint"></p>
+        <div id="czSize" class="tiles size-tiles" role="radiogroup" aria-label="Room size"></div>
+        <h3 class="cz-sub">What your reading has earned</h3>
+        <p class="cz-hint">Finishing books adds to the room. Nothing earned is ever taken away.</p>
+        <ul id="czEarned" class="earned-list"></ul>
+        <div id="czFamShare" hidden>
+          <h3 class="cz-sub">The family room</h3>
+          <p class="cz-hint">Your family sees your shelves in their family room: titles, authors, stars and what you’re reading. Never your reviews, notes or saved lines.</p>
+          <label class="cz-check"><input type="checkbox" id="czShareShelf"> Share my shelves with my family</label>
+          <label class="cz-field">Name on my bookcase <input type="text" id="czShelfName" maxlength="40" placeholder="Your name"></label>
+        </div>
+      </section>
       <section class="cz-section" data-pane="paint" id="czPaintSec" role="tabpanel">
         <h3>Paintings</h3>
         <div id="czPaintFor" class="spans cz-befor" role="radiogroup" aria-label="Choose the painting for">
@@ -673,6 +688,7 @@
   <script src="covers.js"></script>
   <script src="table.js"></script>
   <script src="reader.js"></script>
+  <script src="growth.js"></script>
   <script src="recommend.js"></script>
   <script src="importer.js"></script>
   <script src="scan.js"></script>
