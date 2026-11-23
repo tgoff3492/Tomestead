@@ -50323,7 +50323,7 @@ function buildBookcase(M, { cloth, leather }) {
     plate.position.set(0, SILL + 0.0225, ZF + 0.035 / 2 + 0.0185);
     const ORDER = ["reading", "want", "read"];
     const byAdded = (a, b) => (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0);
-    const list = [...lib.books.filter((b) => (b.status || "read") === "reading").sort(byAdded), ...wantOrder(lib.books.filter((b) => b.status === "want")), ...lib.books.filter((b) => (b.status || "read") === "read").sort(byAdded)];
+    const list = [...groupSeries(lib.books.filter((b) => (b.status || "read") === "reading").sort(byAdded)), ...wantOrder(lib.books.filter((b) => b.status === "want")), ...groupSeries(lib.books.filter((b) => (b.status || "read") === "read").sort(byAdded))];
     const counts = {};
     list.forEach((b) => {
       const k2 = b.status || "read";
@@ -51674,6 +51674,7 @@ function shelfPan() {
 }
 var calm = matchMedia("(prefers-reduced-motion: reduce)");
 function go(name, dur = 1.5, { arrive = true } = {}) {
+  if (outBook && outBook.phase === "held") dropOutBook();
   if (outBook) return;
   closeCard();
   if (pulled) {
@@ -51779,7 +51780,7 @@ function welcomeCard() {
 }
 var TOUR = [
   ["Getting around", "Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom to walk over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse."],
-  ["Your bookcase", "Tap a spine and it slides out a little. Tap it again and it comes down to the desk and opens. Drag to slide along the shelves; the magnifier finds any book."],
+  ["Your bookcase", "Tap a spine and it slides out a little. Tap it again and it comes off the shelf into your hands: tap the cover to open it, or anywhere else to put it back. Drag to slide along the shelves; the magnifier finds any book."],
   ["Desk, fire and tome", "The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next."],
   ["Everything else", "Your reading goals stay at the top. + Add is up there too, and the \u2022\u2022\u2022 menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback."]
 ];
@@ -51993,8 +51994,12 @@ function tap(px2, py2) {
   if (customizing) return;
   if (!world) return;
   if (outBook) {
-    if (outBook.phase === "out" || outBook.phase === "open") skipAhead();
-    else if (!HOST && outBook.phase === "desk") closeUp();
+    const ph = outBook.phase;
+    if (ph === "out" || ph === "open") skipAhead();
+    else if (ph === "held") {
+      if (hitsHeld(px2, py2)) openHeld();
+      else putAway();
+    } else if (!HOST && ph === "desk") closeUp();
     return;
   }
   if (where === "family") return famTap(px2, py2);
@@ -52269,6 +52274,14 @@ $("card-body").addEventListener("click", (e) => {
     closeUp();
     return;
   }
+  if (act && act.dataset.act === "hold-open") {
+    openHeld();
+    return;
+  }
+  if (act && act.dataset.act === "hold-read") {
+    readHeld();
+    return;
+  }
   if (act) {
     const a = act.dataset.act;
     if (a === "arrived") {
@@ -52411,28 +52424,7 @@ var DESK_AT = new Vector3(-2.57, 0.758, -0.66);
 var outBook = null;
 var NOMINAL = { t: 0.032, h: 0.24, d: 0.16 };
 var DESK_Q = new Quaternion().setFromEuler(new Euler(0, -0.16, Math.PI / 2, "YXZ"));
-function deskPose(it) {
-  const pos = DESK_AT.clone().add(new Vector3(0, it.t / 2 + 1e-3, 0)).add(new Vector3(0, 0, -it.d / 2).applyQuaternion(DESK_Q));
-  return { pos, q: DESK_Q.clone() };
-}
 var bez = (a, c, b, t) => new Vector3().copy(a).multiplyScalar((1 - t) * (1 - t)).addScaledVector(c, 2 * (1 - t) * t).addScaledVector(b, t * t);
-function flightPose(o, u) {
-  const { home: home2, homeRot } = o.m.userData, obj = o.carry.root;
-  const qHome = new Quaternion().setFromEuler(homeRot);
-  const out = home2.clone().add(new Vector3(0, 0.03, 0.3));
-  const D = deskPose(o.it);
-  const ctrl = out.clone().lerp(D.pos, 0.5).add(new Vector3(0, 0.3, 0.35));
-  const S = 0.24;
-  if (u < S) {
-    const k = ease(u / S);
-    obj.position.lerpVectors(o.p0, out, k);
-    obj.quaternion.slerpQuaternions(o.q0, qHome, k);
-  } else {
-    const k = ease((u - S) / (1 - S));
-    obj.position.copy(bez(out, ctrl, D.pos, k));
-    obj.quaternion.slerpQuaternions(qHome, D.q, k);
-  }
-}
 function buildCarry(b, m) {
   const it = m ? m.userData.it : NOMINAL, { t, h, d } = it;
   const bd = Math.min(35e-4, t * 0.14), ph = h - 6e-3, pd = d - 5e-3;
@@ -52726,8 +52718,28 @@ function pageCanvas(b, side, aspect2) {
   }
   return c;
 }
-function readingView(o) {
-  const vw = innerWidth, vh = innerHeight, narrow = vw < 720;
+var sped = (s) => calm.matches ? Math.min(s, 0.4) : s;
+function camBasis() {
+  camera.updateMatrixWorld();
+  const R = new Vector3(), U = new Vector3(), B = new Vector3();
+  camera.matrixWorld.extractBasis(R, U, B);
+  return { R, U, B, P: new Vector3().setFromMatrixPosition(camera.matrixWorld), vt: Math.tan(MathUtils.degToRad(camera.fov) / 2) };
+}
+function screenPoint(c, sx, sy, D) {
+  const k = 2 * D * c.vt / innerHeight;
+  return c.P.clone().addScaledVector(c.B, -D).addScaledVector(c.R, (sx - innerWidth / 2) * k).addScaledVector(c.U, -(sy - innerHeight / 2) * k);
+}
+var basisQ = (x, y, z) => new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(x, y, z));
+function holdPose(it) {
+  const c = camBasis(), vw = innerWidth, vh = innerHeight;
+  let D = it.h / ((vw < 720 ? 0.4 : 0.46) * 2 * c.vt);
+  D = Math.max(D, it.d / (0.62 * 2 * c.vt * vw / vh));
+  const a = 0.24, U2 = c.U.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.B, -Math.sin(a)), B2 = c.B.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.U, Math.sin(a));
+  const q = new Quaternion().setFromAxisAngle(B2, -0.05).multiply(basisQ(B2, U2, c.R.clone().negate()));
+  return { pos: screenPoint(c, vw / 2, vh * 0.4, D), q, dist: D, U: c.U };
+}
+function readPose(it) {
+  const c = camBasis(), vw = innerWidth, vh = innerHeight, narrow = vw < 720;
   let Wb, Hb;
   if (narrow) {
     Wb = Math.min(vw * 0.9, 440);
@@ -52738,40 +52750,55 @@ function readingView(o) {
     Wb = Hb * 0.68;
   }
   const sx = narrow ? vw * 0.05 + Wb / 2 : vw / 2, sy = vh * (narrow ? 0.45 : 0.47);
-  const { h, d } = o.it, pd = d - 5e-3, ph = h - 6e-3, zp = d / 2 - pd / 2 - 5e-4;
-  const R = o.carry.root;
-  R.updateMatrixWorld(true);
-  const P = new Vector3(0, 0, narrow ? zp : d / 2).applyMatrix4(R.matrixWorld);
-  const n = new Vector3(1, 0, 0).transformDirection(R.matrixWorld);
-  const top = new Vector3(0, 1, 0).transformDirection(R.matrixWorld);
-  const a = 0.2;
-  const dir = n.clone().multiplyScalar(-Math.cos(a)).addScaledVector(top, Math.sin(a)).normalize();
-  const vt = Math.tan(MathUtils.degToRad(camera.fov) / 2);
-  const D = Math.max(ph / Hb, pd / (Wb * 1.08)) * vh / (2 * vt);
-  const up = new Vector3(0, 1, 0).addScaledVector(dir, -dir.y).normalize();
-  const right = new Vector3().crossVectors(dir, up).normalize();
-  const k = 2 * D * vt / vh;
-  const T = P.clone().addScaledVector(right, -(sx - vw / 2) * k).addScaledVector(up, (sy - vh / 2) * k);
-  return { pos: T.clone().addScaledVector(dir, -D), dir, dist: D };
+  const { h, d } = it, pd = d - 5e-3, ph = h - 6e-3, zp = d / 2 - pd / 2 - 5e-4;
+  const D = Math.max(ph / Hb, pd / (Wb * 1.08)) * vh / (2 * c.vt);
+  const q = basisQ(c.B, c.U, c.R.clone().negate());
+  const pos = screenPoint(c, sx, sy, D).sub(new Vector3(0, 0, narrow ? zp : d / 2).applyQuaternion(q));
+  return { pos, q };
 }
-function zoomTo(to, dur) {
-  if (calm.matches) dur = Math.min(dur, 0.35);
-  cam.yaw = 0;
-  cam.pitch = 0;
-  cam.vyaw = 0;
-  cam.vpitch = 0;
-  tween = { t: 0, dur, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
+function setPose(obj, P) {
+  obj.position.copy(P.pos);
+  obj.quaternion.copy(P.q);
 }
-var T_OUT = 1.45;
-var T_OPEN = 0.8;
-var T_ZOOM = 1;
-var T_CLOSE = 0.65;
-var T_BACK = 1.45;
-var sped = (s) => calm.matches ? Math.min(s, 0.4) : s;
+function mixPose(A, B, k) {
+  return { pos: A.pos.clone().lerp(B.pos, k), q: A.q.clone().slerp(B.q, k) };
+}
+function handFlight(o, u) {
+  const H = holdPose(o.it), obj = o.carry.root;
+  if (!o.shelf) {
+    const k2 = ease(u);
+    obj.position.copy(H.pos).addScaledVector(H.U, -(1 - k2) * 0.5 * H.dist);
+    obj.quaternion.copy(H.q);
+    return;
+  }
+  const { home: home2, homeRot } = o.m.userData;
+  const qHome = new Quaternion().setFromEuler(homeRot);
+  const out = home2.clone().add(new Vector3(0, 0.03, 0.22));
+  const S = 0.3;
+  if (u < S) {
+    const k2 = ease(u / S);
+    obj.position.lerpVectors(o.p0, out, k2);
+    obj.quaternion.slerpQuaternions(o.q0, qHome, k2);
+    return;
+  }
+  const k = ease((u - S) / (1 - S));
+  const ctrl = out.clone().lerp(H.pos, 0.5).add(new Vector3(0, 0.1, 0));
+  obj.position.copy(bez(out, ctrl, H.pos, k));
+  obj.quaternion.slerpQuaternions(qHome, H.q, k);
+}
+var T_HAND = 1.1;
+var T_LIFT = 0.85;
+var T_SHUT = 0.6;
+var T_HOME = 1;
+var T_STOW = 0.45;
 function openOnDesk(id) {
   if (!world) return;
   if (outBook) {
     if (outBook.phase === "back") outBook.pending = id;
+    else if (outBook.phase === "held" && outBook.id !== id) {
+      outBook.pending = id;
+      putAway();
+    }
     return;
   }
   const b = lib.books.find((x) => x.id === id);
@@ -52782,85 +52809,108 @@ function openOnDesk(id) {
   if (pulled && pulled !== m) pulled.userData.anim = -1;
   pulled = null;
   const carry = buildCarry(b, m);
-  const o = { id, b, m, it: carry.it, carry, from: station, phase: "out", t: 0, dur: sped(T_OUT), camGo: false, zoomGo: false, p0: null, q0: null, pending: null };
+  const o = { id, b, m, it: carry.it, carry, from: station, shelf: !!m && station === "shelf", phase: "out", t: 0, dur: sped(T_HAND), p0: null, q0: null, pending: null };
   if (m) {
     delete m.userData.anim;
     m.userData.p = 0;
     if (m.userData.glow) m.userData.glow.material.opacity = 0;
-    carry.root.position.copy(m.position);
-    carry.root.quaternion.copy(m.quaternion);
     o.p0 = m.position.clone();
     o.q0 = m.quaternion.clone();
     m.visible = false;
     browseIdx = Math.max(0, indexOfMesh(m));
-  } else {
-    const D = deskPose(o.it);
-    carry.root.position.copy(D.pos);
-    carry.root.quaternion.copy(D.q);
-    carry.root.visible = false;
   }
   outBook = o;
-  world.desk.openBook.visible = false;
+  handFlight(o, 0);
   if (world.tome) world.tome.rest();
   shelfTools();
   kick(4e3);
 }
 function stepDesk(dt) {
   const o = outBook;
-  if (!o || o.phase === "desk") return;
+  if (!o) return;
   o.t += dt;
+  const R = o.carry.root;
   if (o.phase === "out") {
     const u = Math.min(1, o.t / o.dur);
-    if (!o.camGo && u >= 0.12) {
-      o.camGo = true;
-      glide("desk", o.dur * 0.92, false);
-    }
-    if (o.m) flightPose(o, u);
-    if (u >= 1 && o.camGo && !tween) {
-      o.carry.root.visible = true;
-      o.phase = "open";
-      o.t = 0;
-    }
+    handFlight(o, u);
+    if (u >= 1) toHands();
+  } else if (o.phase === "held") {
+    setPose(R, holdPose(o.it));
+    return;
   } else if (o.phase === "open") {
-    const k = Math.min(1, o.t / sped(T_OPEN));
-    o.carry.setOpen(ease(k));
-    if (!o.zoomGo && k >= 0.3) {
-      o.zoomGo = true;
-      zoomTo(readingView(o), T_ZOOM);
-    }
-    if (k >= 1 && o.zoomGo && !tween) handOff();
+    const k = Math.min(1, o.t / sped(T_LIFT)), e = ease(k);
+    setPose(R, mixPose(holdPose(o.it), readPose(o.it), e));
+    o.carry.setOpen(ease(Math.min(1, Math.max(0, (k - 0.15) / 0.85))));
+    if (k >= 1) handOff();
+  } else if (o.phase === "desk") {
+    setPose(R, readPose(o.it));
+    return;
   } else if (o.phase === "close") {
-    const k = Math.min(1, Math.max(0, (o.t - sped(0.3)) / sped(T_CLOSE)));
-    o.carry.setOpen(1 - ease(k));
-    if (k >= 1 && !tween) startBack();
+    const k = Math.min(1, o.t / sped(T_SHUT)), e = ease(k);
+    o.carry.setOpen(1 - ease(Math.min(1, k / 0.8)));
+    setPose(R, mixPose(readPose(o.it), holdPose(o.it), e));
+    if (k >= 1) {
+      o.carry.setOpen(0);
+      toHands();
+    }
+  } else if (o.phase === "stow") {
+    const k = Math.min(1, o.t / sped(T_STOW)), H = holdPose(o.it);
+    R.position.copy(H.pos).addScaledVector(H.U, -ease(k) * 0.6 * H.dist);
+    R.quaternion.copy(H.q);
+    if (k >= 1) {
+      const id = o.id;
+      homeAgain();
+      if (HOST && HOST.startTimer) HOST.startTimer(id);
+    }
   } else if (o.phase === "back") {
     const u = Math.min(1, o.t / o.dur);
-    if (o.m) flightPose(o, 1 - u);
+    handFlight(o, 1 - u);
     if (u >= 1) homeAgain();
   }
   renderer.shadowMap.needsUpdate = true;
   kick(300);
 }
+function toHands() {
+  const o = outBook;
+  o.phase = "held";
+  o.t = 0;
+  setPose(o.carry.root, holdPose(o.it));
+  renderer.shadowMap.needsUpdate = true;
+  heldCard(o.b);
+  kick();
+}
+function heldCard(b) {
+  const st = stOf(b), t = HOST && HOST.timer && HOST.timer();
+  const going = t && t.id === b.id;
+  const canRead = HOST && HOST.startTimer && (st === "reading" || st === "want" || going);
+  openCard(`<h2>${esc(b.title)}</h2>${b.author ? `<div class="by">${esc(b.author)}</div>` : ""}
+    <div class="acts"><button type="button" data-act="hold-open">Open it</button>${canRead ? `<button type="button" class="quiet" data-act="hold-read">${going ? "Back to reading" : "Start reading"}</button>` : ""}</div>
+    <div class="note">Tap the cover to open it, or anywhere else to put it back.</div>`, "held");
+}
 function skipAhead() {
   const o = outBook;
-  if (!o || o.phase !== "out" && o.phase !== "open") return;
-  const D = deskPose(o.it);
-  o.carry.root.position.copy(D.pos);
-  o.carry.root.quaternion.copy(D.q);
-  o.carry.root.visible = true;
-  o.carry.setOpen(1);
-  station = "desk";
-  document.querySelectorAll(".stations button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.go === "desk")));
-  const v = readingView(o);
-  tween = null;
-  cam.pos.copy(v.pos);
-  cam.dir.copy(v.dir);
-  cam.dist = v.dist;
-  cam.yaw = 0;
-  cam.pitch = 0;
-  o.camGo = o.zoomGo = true;
-  renderer.shadowMap.needsUpdate = true;
-  handOff();
+  if (!o) return;
+  if (o.phase === "out") toHands();
+  else if (o.phase === "open") {
+    o.carry.setOpen(1);
+    setPose(o.carry.root, readPose(o.it));
+    handOff();
+  }
+}
+function openHeld() {
+  const o = outBook;
+  if (!o || o.phase !== "held") return;
+  closeCard();
+  o.phase = "open";
+  o.t = 0;
+  kick(2e3);
+}
+function hitsHeld(px2, py2) {
+  const o = outBook;
+  if (!o) return false;
+  ndc.set(px2 / innerWidth * 2 - 1, -(py2 / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  return ray.intersectObject(o.carry.root, true).length > 0;
 }
 function handOff() {
   const o = outBook;
@@ -52882,33 +52932,38 @@ function closeUp() {
   if (cardKind === "book") closeCard();
   o.phase = "close";
   o.t = 0;
-  zoomTo(framing("desk"), 0.9);
-  kick(2500);
+  kick(1500);
 }
-function startBack() {
+function putAway() {
   const o = outBook;
+  if (!o || o.phase !== "held") return;
+  closeCard();
   o.phase = "back";
   o.t = 0;
-  o.dur = sped(T_BACK);
-  if (o.m) {
-    const P = o.from === "shelf" ? pulledPose(o.m) : { pos: o.m.userData.home.clone(), q: new Quaternion().setFromEuler(o.m.userData.homeRot) };
+  o.dur = sped(T_HOME);
+  if (o.m && o.shelf) {
+    const P = station === "shelf" ? pulledPose(o.m) : { pos: o.m.userData.home.clone(), q: new Quaternion().setFromEuler(o.m.userData.homeRot) };
     o.p0 = P.pos;
     o.q0 = P.q;
-    browseIdx = Math.max(0, indexOfMesh(o.m));
-  } else o.carry.root.visible = false;
-  const to = o.from || home();
-  glide(to, 1.4, !o.pending && (to === "desk" || to === "hearth" || to === "tome"));
+  }
   kick(2e3);
+}
+function readHeld() {
+  const o = outBook;
+  if (!o || o.phase !== "held") return;
+  closeCard();
+  o.phase = "stow";
+  o.t = 0;
+  kick(1e3);
 }
 function homeAgain() {
   const o = outBook;
   outBook = null;
   o.carry.dispose();
-  world.desk.openBook.visible = true;
   const m = o.m;
   if (m) {
     m.visible = true;
-    if (o.from === "shelf" && station === "shelf") {
+    if (o.shelf && station === "shelf" && o.phase === "back") {
       pulled = m;
       m.userData.anim = 0;
       m.userData.p = 1;
@@ -52979,7 +53034,7 @@ function bookCard(b) {
     ${r && (b.status || "read") === "read" ? `<div class="stars">${starText(r)}</div>` : ""}
     <div class="meta">${esc(meta)}</div>
     ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ""}
-    <div class="note">In the app, the book opens here on the desk to your review.</div>${sampleNote()}
+    <div class="note">In the app, the book opens here to your review.</div>${sampleNote()}
     <div class="acts"><button type="button" data-act="putback">Put it back</button></div>`, "book");
 }
 function trophyCard(y) {
@@ -53073,7 +53128,8 @@ function clockText(ms) {
 $("card").querySelector(".card-x").addEventListener("click", () => {
   if (cardKind === "tour") markTour();
   if (outBook) {
-    closeUp();
+    if (outBook.phase === "held") putAway();
+    else closeUp();
     return;
   }
   if (cardKind !== "search") putBack();
@@ -53154,6 +53210,10 @@ addEventListener("keydown", (e) => {
   }
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") go(order[(Math.max(0, order.indexOf(isHome(station) ? home() : station)) + (e.key === "ArrowRight" ? 1 : 4)) % 5]);
   if (e.key === "Escape") {
+    if (outBook && outBook.phase === "held") {
+      putAway();
+      return;
+    }
     if (station === "walk") go(home());
     putBack();
     closeCard();
@@ -53653,7 +53713,7 @@ function resize() {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
   if (world && !tween && station !== "walk") {
-    const f = outBook && outBook.phase === "desk" ? readingView(outBook) : framing(station);
+    const f = framing(station);
     cam.pos.copy(f.pos);
     cam.dir.copy(f.dir);
     cam.dist = f.dist;
@@ -53665,7 +53725,7 @@ var active = true;
 function frame(now) {
   requestAnimationFrame(frame);
   if (!active) return;
-  const busy = !!tween || !!drag || !!turning || outBook && outBook.phase !== "desk" || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
+  const busy = !!tween || !!drag || !!turning || outBook && outBook.phase !== "desk" && outBook.phase !== "held" || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
   if (!busy && now - lastRender < (settled ? 66 : 32)) return;
   const dt = Math.min(0.1, (now - last) / 1e3);
   last = now;
@@ -54013,6 +54073,33 @@ function setActive(on) {
     }
   });
 })();
+function groupSeries(list) {
+  const key = (b) => String(b.series || "").trim().toLowerCase();
+  const no = (b) => {
+    const n = Number(b.seriesNo);
+    return b.seriesNo === "" || b.seriesNo == null || !Number.isFinite(n) ? Infinity : n;
+  };
+  const by = /* @__PURE__ */ new Map();
+  list.forEach((b, i) => {
+    const k = key(b);
+    if (k) {
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push([b, i]);
+    }
+  });
+  const out = [], done = /* @__PURE__ */ new Set();
+  for (const b of list) {
+    const k = key(b);
+    if (!k || by.get(k).length < 2) {
+      out.push(b);
+      continue;
+    }
+    if (done.has(k)) continue;
+    done.add(k);
+    by.get(k).sort((x, y) => no(x[0]) - no(y[0]) || x[1] - y[1]).forEach(([m]) => out.push(m));
+  }
+  return out;
+}
 /*! Bundled license information:
 
 three/build/three.core.js:

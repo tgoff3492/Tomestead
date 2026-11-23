@@ -377,6 +377,22 @@
     return BOOKEND_PICKS[sec].find(k => !taken.includes(k)) || t.bookend;
   }
 
+  // books in the same series stand together, in series order, where the first of them would stand
+  function groupSeries(list) {
+    const key = (b) => String(b.series || '').trim().toLowerCase();
+    const no = (b) => { const n = Number(b.seriesNo); return b.seriesNo === '' || b.seriesNo == null || !Number.isFinite(n) ? Infinity : n; };
+    const by = new Map();
+    list.forEach((b, i) => { const k = key(b); if (k) { if (!by.has(k)) by.set(k, []); by.get(k).push([b, i]); } });
+    const out = [], done = new Set();
+    for (const b of list) {
+      const k = key(b);
+      if (!k || by.get(k).length < 2) { out.push(b); continue; }
+      if (done.has(k)) continue;
+      done.add(k);
+      by.get(k).sort((x, y) => no(x[0]) - no(y[0]) || x[1] - y[1]).forEach(([m]) => out.push(m));
+    }
+    return out;
+  }
   function visibleBooks() {
     const q = query.trim().toLowerCase();
     const has = (v) => String(v || '').toLowerCase().includes(q);
@@ -391,7 +407,8 @@
       case 'finished': list.sort((a, b) => (b.finished || '').localeCompare(a.finished || '')); break;
       // each series together, in order; books outside a series after them, by author
       case 'series': list.sort((a, b) => (!a.series - !b.series) || byStr('series')(a, b) || ((Number(a.seriesNo) || 0) - (Number(b.seriesNo) || 0)) || surname(a.author).localeCompare(surname(b.author)) || byStr('title')(a, b)); break;
-      default: list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+      // newest first, but books in the same series stand together, in order, where the first of them would
+      default: list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)); list = groupSeries(list);
     }
     // sections keep their order; the chosen sort applies within each one
     if (sectioned()) list.sort((a, b) => SECTION_ORDER[statusOf(a)] - SECTION_ORDER[statusOf(b)]);
@@ -3286,7 +3303,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261123031845').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261123032337').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

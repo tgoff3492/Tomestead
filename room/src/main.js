@@ -1021,7 +1021,7 @@ function buildBookcase(M, { cloth, leather }) {
   // ---- books, in the app's order: Reading now → To read → Read
   const ORDER = ['reading', 'want', 'read'];
   const byAdded = (a, b) => (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0);
-  const list = [...lib.books.filter((b) => (b.status || 'read') === 'reading').sort(byAdded), ...wantOrder(lib.books.filter((b) => b.status === 'want')), ...lib.books.filter((b) => (b.status || 'read') === 'read').sort(byAdded)];
+  const list = [...groupSeries(lib.books.filter((b) => (b.status || 'read') === 'reading').sort(byAdded)), ...wantOrder(lib.books.filter((b) => b.status === 'want')), ...groupSeries(lib.books.filter((b) => (b.status || 'read') === 'read').sort(byAdded))];
   const counts = {}; list.forEach((b) => { const k2 = b.status || 'read'; counts[k2] = (counts[k2] || 0) + 1; });
   const labelled = Object.keys(counts).length > 1;
   const PICKS = { reading: ['owl', 'stones', 'oak', 'marble', 'brass'], want: ['oak', 'marble', 'stones', 'owl', 'brass'] };
@@ -2034,7 +2034,8 @@ function shelfPan() {
 // people who ask their phone for less motion get short, flat moves and no flicks
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 function go(name, dur = 1.5, { arrive = true } = {}) {
-  if (outBook) return;              // a book is out on the desk: closing it brings you back
+  if (outBook && outBook.phase === 'held') dropOutBook();     // going somewhere else: the book you're holding goes home
+  if (outBook) return;              // the book is open: closing it brings you back
   closeCard();
   if (pulled) { pulled.userData.anim = -1; pulled = null; }
   glide(name, dur, arrive);
@@ -2111,7 +2112,7 @@ function welcomeCard() {
 }
 const TOUR = [
   ['Getting around', 'Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom to walk over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse.'],
-  ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes down to the desk and opens. Drag to slide along the shelves; the magnifier finds any book.'],
+  ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes off the shelf into your hands: tap the cover to open it, or anywhere else to put it back. Drag to slide along the shelves; the magnifier finds any book.'],
   ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next.'],
   ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback.'],
 ];
@@ -2274,7 +2275,13 @@ canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.r
 function tap(px, py) {
   if (customizing) return;
   if (!world) return;
-  if (outBook) { if (outBook.phase === 'out' || outBook.phase === 'open') skipAhead(); else if (!HOST && outBook.phase === 'desk') closeUp(); return; }
+  if (outBook) {
+    const ph = outBook.phase;
+    if (ph === 'out' || ph === 'open') skipAhead();
+    else if (ph === 'held') { if (hitsHeld(px, py)) openHeld(); else putAway(); }
+    else if (!HOST && ph === 'desk') closeUp();
+    return;
+  }
   if (where === 'family') return famTap(px, py);
   if (station === 'shelf') {
     if (searching) return closeSearch();
@@ -2491,6 +2498,8 @@ $('card-body').addEventListener('click', (e) => {
   }
   const act = e.target.closest('[data-act]');
   if (act && act.dataset.act === 'putback') { closeUp(); return; }
+  if (act && act.dataset.act === 'hold-open') { openHeld(); return; }
+  if (act && act.dataset.act === 'hold-read') { readHeld(); return; }
   if (act) {
     const a = act.dataset.act;
     if (a === 'arrived') { closeCard(); setTimeout(playArrival, 300); return; }
@@ -2818,9 +2827,74 @@ function zoomTo(to, dur) {
 const T_OUT = 1.45, T_OPEN = 0.8, T_ZOOM = 1.0, T_CLOSE = 0.65, T_BACK = 1.45;
 const sped = (s) => (calm.matches ? Math.min(s, 0.4) : s);
 
+// ---- holding the book: the second tap on a spine brings it off the shelf and down into your hands,
+// closed, cover toward you. Tap the cover and it falls open where the app's open book is drawn, and
+// that takes over; closing it brings it back to your hands. Tap anywhere else and it goes home.
+// "Start reading" lowers it and settles you into the armchair with the timer running.
+function camBasis() {
+  camera.updateMatrixWorld();
+  const R = new THREE.Vector3(), U = new THREE.Vector3(), B = new THREE.Vector3();
+  camera.matrixWorld.extractBasis(R, U, B);
+  return { R, U, B, P: new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld), vt: Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) };
+}
+// the point in the room that shows at screen pixel (sx, sy), D metres from the eye
+function screenPoint(c, sx, sy, D) {
+  const k = 2 * D * c.vt / innerHeight;
+  return c.P.clone().addScaledVector(c.B, -D).addScaledVector(c.R, (sx - innerWidth / 2) * k).addScaledVector(c.U, -(sy - innerHeight / 2) * k);
+}
+const basisQ = (x, y, z) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+// held closed: cover toward you, spine on your left, its top tipped away a little, a touch low on screen
+function holdPose(it) {
+  const c = camBasis(), vw = innerWidth, vh = innerHeight;
+  let D = it.h / ((vw < 720 ? 0.4 : 0.46) * 2 * c.vt);
+  D = Math.max(D, it.d / (0.62 * 2 * c.vt * vw / vh));
+  const a = 0.24, U2 = c.U.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.B, -Math.sin(a)), B2 = c.B.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.U, Math.sin(a));
+  const q = new THREE.Quaternion().setFromAxisAngle(B2, -0.05).multiply(basisQ(B2, U2, c.R.clone().negate()));
+  return { pos: screenPoint(c, vw / 2, vh * 0.4, D), q, dist: D, U: c.U };
+}
+// open, facing you, its pages exactly where the app draws its open book (reader.js geo(): one page
+// on a phone, the whole spread on a wider screen)
+function readPose(it) {
+  const c = camBasis(), vw = innerWidth, vh = innerHeight, narrow = vw < 720;
+  let Wb, Hb;
+  if (narrow) { Wb = Math.min(vw * 0.9, 440); Hb = Math.min(Wb / 0.68, vh * 0.72); Wb = Hb * 0.68; }
+  else { Hb = Math.min(vh * 0.78, 660, (vw * 0.92 / 2) / 0.68); Wb = Hb * 0.68; }
+  const sx = narrow ? vw * 0.05 + Wb / 2 : vw / 2, sy = vh * (narrow ? 0.45 : 0.47);
+  const { h, d } = it, pd = d - 0.005, ph = h - 0.006, zp = d / 2 - pd / 2 - 0.0005;
+  const D = Math.max(ph / Hb, pd / (Wb * 1.08)) * vh / (2 * c.vt);
+  const q = basisQ(c.B, c.U, c.R.clone().negate());
+  const pos = screenPoint(c, sx, sy, D).sub(new THREE.Vector3(0, 0, narrow ? zp : d / 2).applyQuaternion(q));
+  return { pos, q };
+}
+function setPose(obj, P) { obj.position.copy(P.pos); obj.quaternion.copy(P.q); }
+function mixPose(A, B, k) { return { pos: A.pos.clone().lerp(B.pos, k), q: A.q.clone().slerp(B.q, k) }; }
+// u = 0 on the shelf … 1 in your hands. From the bookcase it slides out of its slot and comes down to
+// you; from anywhere else (the display case, search) it simply rises into view
+function handFlight(o, u) {
+  const H = holdPose(o.it), obj = o.carry.root;
+  if (!o.shelf) {
+    const k = ease(u);
+    obj.position.copy(H.pos).addScaledVector(H.U, -(1 - k) * 0.5 * H.dist); obj.quaternion.copy(H.q);
+    return;
+  }
+  const { home, homeRot } = o.m.userData;
+  const qHome = new THREE.Quaternion().setFromEuler(homeRot);
+  const out = home.clone().add(new THREE.Vector3(0, 0.03, 0.22));
+  const S = 0.3;
+  if (u < S) { const k = ease(u / S); obj.position.lerpVectors(o.p0, out, k); obj.quaternion.slerpQuaternions(o.q0, qHome, k); return; }
+  const k = ease((u - S) / (1 - S));
+  const ctrl = out.clone().lerp(H.pos, 0.5).add(new THREE.Vector3(0, 0.1, 0));
+  obj.position.copy(bez(out, ctrl, H.pos, k)); obj.quaternion.slerpQuaternions(qHome, H.q, k);
+}
+const T_HAND = 1.1, T_LIFT = 0.85, T_SHUT = 0.6, T_HOME = 1.0, T_STOW = 0.45;
+
 function openOnDesk(id) {
   if (!world) return;
-  if (outBook) { if (outBook.phase === 'back') outBook.pending = id; return; }
+  if (outBook) {
+    if (outBook.phase === 'back') outBook.pending = id;
+    else if (outBook.phase === 'held' && outBook.id !== id) { outBook.pending = id; putAway(); }
+    return;
+  }
   const b = lib.books.find((x) => x.id === id);
   if (!b) return;
   closeCard(); cam.vx = 0;
@@ -2828,67 +2902,91 @@ function openOnDesk(id) {
   if (pulled && pulled !== m) pulled.userData.anim = -1;
   pulled = null;
   const carry = buildCarry(b, m);
-  const o = { id, b, m, it: carry.it, carry, from: station, phase: 'out', t: 0, dur: sped(T_OUT), camGo: false, zoomGo: false, p0: null, q0: null, pending: null };
+  const o = { id, b, m, it: carry.it, carry, from: station, shelf: !!m && station === 'shelf', phase: 'out', t: 0, dur: sped(T_HAND), p0: null, q0: null, pending: null };
   if (m) {
-    // the carried copy takes the shelf book's place, exactly where it is now (in its slot or slid out)
     delete m.userData.anim; m.userData.p = 0;
     if (m.userData.glow) m.userData.glow.material.opacity = 0;
-    carry.root.position.copy(m.position); carry.root.quaternion.copy(m.quaternion);
     o.p0 = m.position.clone(); o.q0 = m.quaternion.clone();
     m.visible = false;
     browseIdx = Math.max(0, indexOfMesh(m));
-  } else {
-    // (not on this bookcase, e.g. set aside: it's simply waiting on the desk)
-    const D = deskPose(o.it); carry.root.position.copy(D.pos); carry.root.quaternion.copy(D.q); carry.root.visible = false;
   }
   outBook = o;
-  world.desk.openBook.visible = false;      // the desk's own open book makes room
+  handFlight(o, 0);
   if (world.tome) world.tome.rest();
   shelfTools();
   kick(4000);
 }
 function stepDesk(dt) {
   const o = outBook;
-  if (!o || o.phase === 'desk') return;
+  if (!o) return;
   o.t += dt;
+  const R = o.carry.root;
   if (o.phase === 'out') {
     const u = Math.min(1, o.t / o.dur);
-    if (!o.camGo && u >= 0.12) { o.camGo = true; glide('desk', o.dur * 0.92, false); }
-    if (o.m) flightPose(o, u);
-    if (u >= 1 && o.camGo && !tween) { o.carry.root.visible = true; o.phase = 'open'; o.t = 0; }
+    handFlight(o, u);
+    if (u >= 1) toHands();
+  } else if (o.phase === 'held') {
+    setPose(R, holdPose(o.it));             // (it stays in your hands if the view moves)
+    return;
   } else if (o.phase === 'open') {
-    // it falls open, and the camera leans in as it does
-    const k = Math.min(1, o.t / sped(T_OPEN));
-    o.carry.setOpen(ease(k));
-    if (!o.zoomGo && k >= 0.3) { o.zoomGo = true; zoomTo(readingView(o), T_ZOOM); }
-    if (k >= 1 && o.zoomGo && !tween) handOff();
+    const k = Math.min(1, o.t / sped(T_LIFT)), e = ease(k);
+    setPose(R, mixPose(holdPose(o.it), readPose(o.it), e));
+    o.carry.setOpen(ease(Math.min(1, Math.max(0, (k - 0.15) / 0.85))));
+    if (k >= 1) handOff();
+  } else if (o.phase === 'desk') {
+    setPose(R, readPose(o.it));
+    return;
   } else if (o.phase === 'close') {
-    // the camera pulls back while the cover swings shut
-    const k = Math.min(1, Math.max(0, (o.t - sped(0.3)) / sped(T_CLOSE)));
-    o.carry.setOpen(1 - ease(k));
-    if (k >= 1 && !tween) startBack();
+    const k = Math.min(1, o.t / sped(T_SHUT)), e = ease(k);
+    o.carry.setOpen(1 - ease(Math.min(1, k / 0.8)));
+    setPose(R, mixPose(readPose(o.it), holdPose(o.it), e));
+    if (k >= 1) { o.carry.setOpen(0); toHands(); }
+  } else if (o.phase === 'stow') {
+    // lowered out of sight on the way to the armchair
+    const k = Math.min(1, o.t / sped(T_STOW)), H = holdPose(o.it);
+    R.position.copy(H.pos).addScaledVector(H.U, -ease(k) * 0.6 * H.dist); R.quaternion.copy(H.q);
+    if (k >= 1) { const id = o.id; homeAgain(); if (HOST && HOST.startTimer) HOST.startTimer(id); }
   } else if (o.phase === 'back') {
     const u = Math.min(1, o.t / o.dur);
-    if (o.m) flightPose(o, 1 - u);
+    handFlight(o, 1 - u);
     if (u >= 1) homeAgain();
   }
   renderer.shadowMap.needsUpdate = true;
   kick(300);
 }
-// a tap while the book is on its way: straight to the open book
-function skipAhead() {
+function toHands() {
   const o = outBook;
-  if (!o || (o.phase !== 'out' && o.phase !== 'open')) return;
-  const D = deskPose(o.it);
-  o.carry.root.position.copy(D.pos); o.carry.root.quaternion.copy(D.q); o.carry.root.visible = true;
-  o.carry.setOpen(1);
-  station = 'desk';
-  document.querySelectorAll('.stations button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === 'desk')));
-  const v = readingView(o);
-  tween = null; cam.pos.copy(v.pos); cam.dir.copy(v.dir); cam.dist = v.dist; cam.yaw = 0; cam.pitch = 0;
-  o.camGo = o.zoomGo = true;
+  o.phase = 'held'; o.t = 0;
+  setPose(o.carry.root, holdPose(o.it));
   renderer.shadowMap.needsUpdate = true;
-  handOff();
+  heldCard(o.b);
+  kick();
+}
+function heldCard(b) {
+  const st = stOf(b), t = HOST && HOST.timer && HOST.timer();
+  const going = t && t.id === b.id;
+  const canRead = HOST && HOST.startTimer && (st === 'reading' || st === 'want' || going);
+  openCard(`<h2>${esc(b.title)}</h2>${b.author ? `<div class="by">${esc(b.author)}</div>` : ''}
+    <div class="acts"><button type="button" data-act="hold-open">Open it</button>${canRead ? `<button type="button" class="quiet" data-act="hold-read">${going ? 'Back to reading' : 'Start reading'}</button>` : ''}</div>
+    <div class="note">Tap the cover to open it, or anywhere else to put it back.</div>`, 'held');
+}
+// a tap while it's moving: skip ahead (to your hands, or to the open book)
+function skipAhead() {
+  const o = outBook; if (!o) return;
+  if (o.phase === 'out') toHands();
+  else if (o.phase === 'open') { o.carry.setOpen(1); setPose(o.carry.root, readPose(o.it)); handOff(); }
+}
+function openHeld() {
+  const o = outBook; if (!o || o.phase !== 'held') return;
+  closeCard();
+  o.phase = 'open'; o.t = 0;
+  kick(2000);
+}
+function hitsHeld(px, py) {
+  const o = outBook; if (!o) return false;
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  return ray.intersectObject(o.carry.root, true).length > 0;
 }
 // the app's open book takes over, right where the room's lies
 function handOff() {
@@ -2903,36 +3001,40 @@ function handOff() {
   }
   bookCard(o.b);
 }
+// closing the app's book: it shuts and comes back to your hands
 function closeUp() {
   const o = outBook;
   if (!o || o.phase !== 'desk') return;
   if (cardKind === 'book') closeCard();
   o.phase = 'close'; o.t = 0;
-  zoomTo(framing('desk'), 0.9);
-  kick(2500);
+  kick(1500);
 }
-function startBack() {
+// back to the shelf (or the display case)
+function putAway() {
   const o = outBook;
-  o.phase = 'back'; o.t = 0; o.dur = sped(T_BACK);
-  if (o.m) {
-    // back to its slot: slid out a little if you came from the shelf, so you can see where it went
-    const P = o.from === 'shelf' ? pulledPose(o.m) : { pos: o.m.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(o.m.userData.homeRot) };
+  if (!o || o.phase !== 'held') return;
+  closeCard();
+  o.phase = 'back'; o.t = 0; o.dur = sped(T_HOME);
+  if (o.m && o.shelf) {
+    const P = station === 'shelf' ? pulledPose(o.m) : { pos: o.m.userData.home.clone(), q: new THREE.Quaternion().setFromEuler(o.m.userData.homeRot) };
     o.p0 = P.pos; o.q0 = P.q;
-    browseIdx = Math.max(0, indexOfMesh(o.m));
-  } else o.carry.root.visible = false;
-  const to = o.from || home();
-  glide(to, 1.4, !o.pending && (to === 'desk' || to === 'hearth' || to === 'tome'));
+  }
   kick(2000);
+}
+function readHeld() {
+  const o = outBook; if (!o || o.phase !== 'held') return;
+  closeCard();
+  o.phase = 'stow'; o.t = 0;
+  kick(1000);
 }
 function homeAgain() {
   const o = outBook;
   outBook = null;
   o.carry.dispose();
-  world.desk.openBook.visible = true;
   const m = o.m;
   if (m) {
     m.visible = true;
-    if (o.from === 'shelf' && station === 'shelf') { pulled = m; m.userData.anim = 0; m.userData.p = 1; glowFor(m).material.opacity = 0.22; pullPose(m, 1); }
+    if (o.shelf && station === 'shelf' && o.phase === 'back') { pulled = m; m.userData.anim = 0; m.userData.p = 1; glowFor(m).material.opacity = 0.22; pullPose(m, 1); }
     else { m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot); }
   }
   renderer.shadowMap.needsUpdate = true;
@@ -2979,7 +3081,7 @@ function bookCard(b) {
     ${r && (b.status || 'read') === 'read' ? `<div class="stars">${starText(r)}</div>` : ''}
     <div class="meta">${esc(meta)}</div>
     ${pr ? `<div class="bar"><i style="width:${pr.pct}%"></i></div><div class="meta">${esc(pr.text)}</div>` : ''}
-    <div class="note">In the app, the book opens here on the desk to your review.</div>${sampleNote()}
+    <div class="note">In the app, the book opens here to your review.</div>${sampleNote()}
     <div class="acts"><button type="button" data-act="putback">Put it back</button></div>`, 'book');
 }
 function trophyCard(y) {
@@ -3057,7 +3159,7 @@ function clockText(ms) {
   const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), p2 = (n) => String(n).padStart(2, '0');
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
 }
-$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
+$('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { if (outBook.phase === 'held') putAway(); else closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go === 'room' ? home() : b.dataset.go); kick(); }));
 // the Walk button: once the room is big enough to roam (and while you're in it, not the family room)
 function walkButton() {
@@ -3090,7 +3192,7 @@ addEventListener('keydown', (e) => {
   if (station === 'shelf' && e.key === 'Enter' && pulled) { e.preventDefault(); openOnDesk(pulled.userData.book.id); return; }
   if (station === 'shelf' && (e.key === '/' || (e.key === 'f' && (e.metaKey || e.ctrlKey)))) { e.preventDefault(); openSearch(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(Math.max(0, order.indexOf(isHome(station) ? home() : station)) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
-  if (e.key === 'Escape') { if (station === 'walk') go(home()); putBack(); closeCard(); }
+  if (e.key === 'Escape') { if (outBook && outBook.phase === 'held') { putAway(); return; } if (station === 'walk') go(home()); putBack(); closeCard(); }
   kick();
 });
 
@@ -3465,7 +3567,7 @@ function resize() {
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
-  if (world && !tween && station !== 'walk') { const f = outBook && outBook.phase === 'desk' ? readingView(outBook) : framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
+  if (world && !tween && station !== 'walk') { const f = framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
   kick();
 }
 addEventListener('resize', resize);
@@ -3473,7 +3575,7 @@ let active = true;
 function frame(now) {
   requestAnimationFrame(frame);
   if (!active) return;
-  const busy = !!tween || !!drag || !!turning || (outBook && outBook.phase !== 'desk') || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
+  const busy = !!tween || !!drag || !!turning || (outBook && outBook.phase !== 'desk' && outBook.phase !== 'held') || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
   // when nothing is moving, only the dust and candles drift: 30 frames a second is plenty
   if (!busy && now - lastRender < (settled ? 66 : 32)) return;   // reading mode: the fire still flickers, at 15 fps
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
@@ -3680,3 +3782,20 @@ function setActive(on) {
     if (params.get('perf') === '1') { $('perf').hidden = false; showPerf(); }
   });
 })();
+
+// books in the same series stand together, in series order, where the first of them would stand
+function groupSeries(list) {
+  const key = (b) => String(b.series || '').trim().toLowerCase();
+  const no = (b) => { const n = Number(b.seriesNo); return b.seriesNo === '' || b.seriesNo == null || !Number.isFinite(n) ? Infinity : n; };
+  const by = new Map();
+  list.forEach((b, i) => { const k = key(b); if (k) { if (!by.has(k)) by.set(k, []); by.get(k).push([b, i]); } });
+  const out = [], done = new Set();
+  for (const b of list) {
+    const k = key(b);
+    if (!k || by.get(k).length < 2) { out.push(b); continue; }
+    if (done.has(k)) continue;
+    done.add(k);
+    by.get(k).sort((x, y) => no(x[0]) - no(y[0]) || x[1] - y[1]).forEach(([m]) => out.push(m));
+  }
+  return out;
+}
