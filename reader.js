@@ -115,8 +115,7 @@ window.TomesteadReader = function (api) {
     const about = () => {
       const a = b.about;
       let body;
-      if (a && a.text) body = `<div class="pg-about">${esc(a.text).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, ' ')}</p>`).join('')}</div>
-        <p class="pg-src">Summary from <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.source)}</a></p>`;
+      if (a && a.text) body = `<div class="pg-about">${esc(a.text).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, ' ')}</p>`).join('')}</div>`;
       else if (!b.lookedUp && navigator.onLine !== false) body = `<p class="pg-muted pg-loading">Looking for a summary…</p>`;
       else body = `<p class="pg-muted">No summary found for this one.</p>`;
       return `<section class="pg-sec"><h3 class="pg-h">About the book</h3>${body}</section>`;

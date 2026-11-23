@@ -209,7 +209,7 @@ window.TomesteadRecommend = function (api) {
     const meta = [c.first_publish_year, c.number_of_pages_median ? `${c.number_of_pages_median} pages` : ''].filter(Boolean).join(' · ');
     return `<article class="rec-card" data-i="${i}">
       <p class="rec-genre">${esc(c.genre)}</p>
-      <a class="rec-cover" href="${OL}${esc(c.key)}" target="_blank" rel="noopener" aria-label="${esc(c.title)} on Open Library">${cover}<span class="rec-cover-plain">${esc(c.title)}</span></a>
+      <span class="rec-cover" aria-hidden="true">${cover}<span class="rec-cover-plain">${esc(c.title)}</span></span>
       <div class="rec-info">
         <h3 class="rec-title">${esc(c.title)}</h3>
         <p class="rec-author">by ${esc(c.author || 'unknown author')}</p>
@@ -246,7 +246,7 @@ window.TomesteadRecommend = function (api) {
       return;
     }
     if (navigator.onLine === false) {
-      body.innerHTML = `<p class="rec-empty">Suggestions come from Open Library, so they need an internet connection. Try again once you’re online.</p>`;
+      body.innerHTML = `<p class="rec-empty">Suggestions need an internet connection. Try again once you’re online.</p>`;
       return;
     }
     const key = books.map(b => `${b.id}:${b.rating || 0}:${b.genre || ''}`).join('|') + '#' + (api.recs().dismissed || []).length;
@@ -261,10 +261,10 @@ window.TomesteadRecommend = function (api) {
       list = list.filter(c => { const n = (perAuthor.get(c.author) || 0) + 1; perAuthor.set(c.author, n); return n <= 2; }).slice(0, 60);
       last = []; stamp = key;
       deal();
-      if (!trio.length) { body.innerHTML = `<p class="rec-empty">Open Library didn’t turn up anything new for your shelves this time. Rate a few more books and try again.</p>`; return; }
+      if (!trio.length) { body.innerHTML = `<p class="rec-empty">Nothing new turned up for your shelves this time. Rate a few more books and try again.</p>`; return; }
       show();
     } catch {
-      body.innerHTML = `<p class="rec-empty">Open Library didn’t answer just now. Try again in a moment.</p>`;
+      body.innerHTML = `<p class="rec-empty">The tome couldn’t find suggestions just now. Try again in a moment.</p>`;
     }
   }
 

@@ -1612,7 +1612,7 @@
     findTimer = setTimeout(async () => {
       const seq = ++findSeq;
       const ul = $('#fSuggest');
-      if (ul.hidden) { ul.innerHTML = '<li class="sg-note">Searching Open Library…</li>'; ul.hidden = false; }
+      if (ul.hidden) { ul.innerHTML = '<li class="sg-note">Searching…</li>'; ul.hidden = false; }
       try {
         const res = await Covers.search(q);
         if (seq !== findSeq) return;
@@ -1628,7 +1628,7 @@
       return `<li role="option" id="sg${i}" data-i="${i}" aria-selected="${i === findActive}">
         <span class="sg-cover">${it.cover ? `<img alt="" loading="lazy" src="${Covers.coverURL(it.cover, 'S')}">` : ''}</span>
         <span class="sg-text"><span class="sg-title">${esc(it.title)}</span><span class="sg-by">${by}</span></span></li>`;
-    }).join('') + `<li class="sg-note">${findItems.length ? 'Not here? Keep typing, or fill in the rest yourself.' : 'Nothing found on Open Library. Fill in the rest yourself.'}</li>`;
+    }).join('') + `<li class="sg-note">${findItems.length ? 'Not here? Keep typing, or fill in the rest yourself.' : 'No match found. Fill in the rest yourself.'}</li>`;
     ul.querySelectorAll('img').forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
     ul.hidden = false;
     $('#fTitle').setAttribute('aria-expanded', String(findItems.length > 0));
@@ -1645,7 +1645,7 @@
     const m = $('#fMatch');
     const bits = [it.year ? `first published ${it.year}` : '', it.pages ? `${it.pages} pages` : ''].filter(Boolean).join(', ');
     m.innerHTML = `${it.cover ? `<img alt="" src="${Covers.coverURL(it.cover, 'S')}">` : '<span class="match-tick" aria-hidden="true">✓</span>'}
-      <span class="match-text">Found on Open Library${bits ? ` (${esc(bits)})` : ''}. The cover and summary come with it.</span>
+      <span class="match-text">Found it${bits ? ` (${esc(bits)})` : ''}. The cover and summary come with it.</span>
       <button type="button" class="linkbtn ink" data-unpick>Not this one</button>`;
     m.querySelectorAll('img').forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
     m.hidden = false;
@@ -1667,7 +1667,7 @@
     if (!it) {
       $('#fTitle').value = '';
       pick = { olKey: null, cover: null, isbn: got };
-      toast(`Couldn’t find ISBN ${got} on Open Library. Type the title instead.`);
+      toast(`Couldn’t find ISBN ${got}. Type the title instead.`);
       $('#fTitle').focus();
       return;
     }
