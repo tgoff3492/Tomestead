@@ -1641,7 +1641,7 @@
     $('#fHours').value = b?.hours || '';
     $('#fNarrator').value = b?.narrator || '';
     $('#fWhy').value = b?.stopWhy || '';
-    $('#fGenre').value = b?.genre || '';
+    $('#fGenre').value = b?.genre || prefill?.genre || '';
     $('#fSeries').value = b?.series || '';
     $('#fSeriesNo').value = b && b.seriesNo != null ? b.seriesNo : '';
     $('#fReview').value = b?.review || '';
@@ -1769,7 +1769,7 @@
   function addWant(p) {
     const dup = findDuplicate(p.title, p.author);
     if (dup) { toast(`“${dup.title}” is already in your library.`); return; }
-    const b = { id: uid(), addedAt: Date.now(), title: p.title, author: p.author || '', status: 'want', rating: 0, finished: '', pages: p.pages || null, genre: '', review: '', color: null };
+    const b = { id: uid(), addedAt: Date.now(), title: p.title, author: p.author || '', status: 'want', rating: 0, finished: '', pages: p.pages || null, genre: p.genre || '', review: '', color: null };
     if (p.olKey) b.olKey = p.olKey;
     if (p.cover) b.art = { status: 'found', ids: [p.cover], i: 0, olKey: p.olKey || null };
     books.push(b);
@@ -3119,7 +3119,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261120212156').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261122195623').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

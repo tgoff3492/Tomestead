@@ -1893,7 +1893,7 @@ function tourCard(i) {
 }
 function tomeCard() {
   openCard(`<div class="eyebrow">The magic tome</div><h2>What should I read next?</h2>
-    <div class="meta">The tome reads the books you rate highest and suggests a few you haven’t logged.</div>
+    <div class="meta">The tome reads the books you rate highest and deals three you haven’t logged, each from a different genre.</div>
     <div class="acts"><button type="button" data-act="wake">Wake the tome</button></div>`, 'tome');
 }
 const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);

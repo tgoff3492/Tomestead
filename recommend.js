@@ -18,6 +18,30 @@ window.TomesteadRecommend = function (api) {
   };
   const pretty = (s) => s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
 
+  // ---------- genres: the tome deals three picks, each from a different one ----------
+  // Open Library subject to search for each of the app's genres
+  const GENRE_SUBJ = {
+    'Science fiction': 'science fiction', 'Fantasy': 'fantasy', 'Horror': 'horror', 'Mystery': 'mystery', 'Thriller': 'thriller',
+    'Romance': 'romance', 'Historical fiction': 'historical fiction', 'Graphic novel': 'graphic novels', 'Young adult': 'young adult fiction',
+    'Children’s': 'juvenile fiction', 'Poetry': 'poetry', 'Classics': 'classic literature', 'Memoir': 'autobiography', 'Biography': 'biography',
+    'Self-help': 'self-help', 'Business': 'business', 'Psychology': 'psychology', 'Philosophy': 'philosophy', 'Religion': 'religion',
+    'History': 'history', 'Science': 'science', 'Cooking': 'cooking', 'Literary fiction': 'literary fiction',
+  };
+  // genres next door to each other: a step sideways, not a leap
+  const NEAR = {
+    'Fantasy': ['Science fiction', 'Historical fiction', 'Young adult'], 'Science fiction': ['Fantasy', 'Thriller', 'Literary fiction'],
+    'Mystery': ['Thriller', 'Historical fiction', 'Horror'], 'Thriller': ['Mystery', 'Horror', 'Science fiction'], 'Horror': ['Thriller', 'Fantasy', 'Mystery'],
+    'Romance': ['Historical fiction', 'Literary fiction', 'Fantasy'], 'Historical fiction': ['Literary fiction', 'Mystery', 'History'],
+    'Literary fiction': ['Historical fiction', 'Classics', 'Memoir'], 'Classics': ['Literary fiction', 'Historical fiction', 'Poetry'],
+    'Memoir': ['Biography', 'History', 'Literary fiction'], 'Biography': ['Memoir', 'History', 'Historical fiction'], 'History': ['Biography', 'Historical fiction', 'Science'],
+    'Self-help': ['Psychology', 'Business', 'Memoir'], 'Business': ['Self-help', 'Psychology', 'Biography'], 'Psychology': ['Self-help', 'Science', 'Philosophy'],
+    'Science': ['History', 'Psychology', 'Science fiction'], 'Philosophy': ['Psychology', 'Religion', 'Classics'], 'Religion': ['Philosophy', 'Memoir', 'History'],
+    'Young adult': ['Fantasy', 'Science fiction', 'Romance'], 'Graphic novel': ['Fantasy', 'Science fiction', 'Young adult'], 'Poetry': ['Classics', 'Literary fiction', 'Memoir'],
+    'Children’s': ['Young adult', 'Fantasy', 'Classics'], 'Cooking': ['Memoir', 'Science', 'History'],
+  };
+  const genreOf = (subjects) => (window.TomesteadCovers && window.TomesteadCovers.genreFrom(subjects)) || '';
+  const canon = (g) => Object.keys(GENRE_SUBJ).find(k => k.toLowerCase() === String(g || '').trim().toLowerCase()) || '';
+
   async function getJSON(url) {
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
@@ -64,17 +88,34 @@ window.TomesteadRecommend = function (api) {
       if (b.author && w > 0) A.set(b.author, (A.get(b.author) || 0) + w);
     }
     for (const [s, v] of S) S.set(s, v * (1 + 0.4 * ((count.get(s) || 1) - 1)));
-    return { S, A, books: ranked };
+    // the genres you rate highest (your own genre field first, else one read from the subjects)
+    const G = new Map();
+    for (const b of ranked) {
+      const g = canon(b.genre) || canon(genreOf(b.subj || []));
+      if (g) G.set(g, (G.get(g) || 0) + weightOf(b));
+    }
+    return { S, A, G, books: ranked };
   }
 
   async function candidates(P, shelf) {
     const topSubj = [...P.S].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([s]) => s);
     const topAuth = [...P.A].sort((a, b) => b[1] - a[1]).filter(([, v]) => v >= 3).slice(0, 3).map(([a]) => a);
+    // your favourite genres, plus their neighbours, so there are always several genres to deal from
+    const mine = [...P.G].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const gq = new Map();
+    mine.slice(0, 4).forEach(([g, v]) => gq.set(g, { boost: v, from: '' }));
+    for (const [g, v] of mine.slice(0, 2)) {
+      for (const n of NEAR[g] || []) {
+        if (gq.size >= 7) break;
+        if (!gq.has(n) && !(P.G.get(n) < 0)) gq.set(n, { boost: v * 0.45, from: g });
+      }
+    }
     const queries = [
       ...topSubj.map(s => ({ url: `${OL}/search.json?${new URLSearchParams({ q: `subject:"${s}"`, sort: 'readinglog', limit: '40', fields: FIELDS })}`, via: 'subject' })),
       ...topAuth.map(a => ({ url: `${OL}/search.json?${new URLSearchParams({ author: a, sort: 'readinglog', limit: '15', fields: FIELDS })}`, via: 'author' })),
+      ...[...gq].map(([g, o]) => ({ url: `${OL}/search.json?${new URLSearchParams({ q: `subject:"${GENRE_SUBJ[g]}"`, sort: 'readinglog', limit: '30', fields: FIELDS })}`, via: 'genre', genre: g, boost: o.boost, from: o.from })),
     ];
-    const results = await pool(queries, 4, async (q) => ((await getJSON(q.url)).docs || []).map(d => ({ ...d, via: q.via })));
+    const results = await pool(queries, 4, async (q) => ((await getJSON(q.url)).docs || []).map(d => ({ ...d, via: q.via, qgenre: q.genre || '', boost: q.boost || 0, from: q.from || '' })));
     const seenTitles = new Set(shelf.map(b => norm(b.title)));
     const seenKeys = new Set(shelf.map(b => b.olWork || (b.art && b.art.olKey)).filter(Boolean));
     const dismissed = new Set(api.recs().dismissed || []);
@@ -101,10 +142,15 @@ window.TomesteadRecommend = function (api) {
     const n = c.ratings_count || 0, avg = c.ratings_average || 3.5;
     if (n < 8 && !fav) return null;
     const quality = Math.pow(Math.max(2.5, Math.min(5, avg)) / 5, 2.4) * (0.55 + 0.15 * Math.log10(n + 10));
-    const s = (Math.sqrt(Math.max(0, m)) * 1.4 + fav * 0.9 + (c.hits - 1) * 0.8 + neg * 0.4) * quality;
+    let genre = canon(genreOf(c.subject || []));
+    if ((!genre || genre === 'Literary fiction') && c.qgenre) genre = c.qgenre;
+    if (!genre) return null; // can't tell its genre, so it can't take a genre's place in the three
+    const gw = P.G.get(genre) || c.boost || 0;
+    const s = (Math.sqrt(Math.max(0, m)) * 1.4 + fav * 0.9 + (c.hits - 1) * 0.8 + neg * 0.4 + Math.sqrt(Math.max(0, gw)) * 0.7) * quality;
     if (s <= 0) return null;
     shared.sort((a, b) => b[1] - a[1]);
-    return { ...c, author, score: s, shared: shared.slice(0, 3).map(x => x[0]), fav };
+    const from = !P.G.get(genre) && c.from && c.from !== genre ? c.from : '';
+    return { ...c, author, genre, from, score: s, shared: shared.slice(0, 3).map(x => x[0]), fav };
   }
 
   // the shelf books a pick is most like, for the "because…" line
@@ -123,7 +169,7 @@ window.TomesteadRecommend = function (api) {
   // ---------- the dialog ----------
   const dlg = $('#recDialog');
   const body = $('#recBody');
-  let list = [], at = 0, P = null, stamp = '';
+  let list = [], trio = [], last = [], P = null, stamp = '';
 
   function stars(avg) {
     const r = Math.round((avg || 0) * 2) / 2;
@@ -133,48 +179,61 @@ window.TomesteadRecommend = function (api) {
   }
   function names(arr) { return arr.length > 1 ? `${arr.slice(0, -1).join(', ')} and ${arr[arr.length - 1]}` : arr[0] || ''; }
 
-  function show() {
-    const c = list[at];
-    if (!c) {
-      body.innerHTML = `<p class="rec-empty">That’s every idea for now. Rate a few more books and come back for fresh suggestions.</p>`;
-      return;
-    }
+  // the best remaining pick in a genre none of the others is using; genres the last
+  // three used wait their turn, so each new deal feels fresh
+  function draw(taken, fresh = true) {
+    const used = new Set(taken.map(c => c.genre)), authors = new Set(taken.map(c => c.author));
+    const ok = (c) => !used.has(c.genre) && !authors.has(c.author);
+    return (fresh && list.find(c => ok(c) && !last.includes(c.genre))) || list.find(ok) || null;
+  }
+  function take(c) { list.splice(list.indexOf(c), 1); return c; }
+  function deal() {
+    const out = [];
+    for (let i = 0; i < 3; i++) { const c = draw(out); if (!c) break; out.push(take(c)); }
+    trio = out;
+    last = out.map(c => c.genre);
+  }
+
+  function reason(c) {
     const why = because(c, P);
     const titles = why.books.map(b => `<em>${esc(b.title)}</em>`);
     const rated = why.books.length && why.books.every(b => b.rating === 5) ? 'gave five stars to' : 'enjoyed';
-    let reason;
-    if (why.author && titles.length) reason = `You ${rated} ${names(titles)}, and this is another by ${esc(c.author)}.`;
-    else if (titles.length) reason = `Because you ${rated} ${names(titles)}${c.shared.length ? `. It shares their ${c.shared.length > 1 ? 'mix of' : 'love of'} ${names(c.shared.slice(0, 2).map(s => esc(s)))}` : ''}.`;
-    else reason = `It sits right in the subjects you rate highest${c.shared.length ? `: ${names(c.shared.slice(0, 2).map(s => esc(s)))}` : ''}.`;
-    const meta = [c.first_publish_year, c.number_of_pages_median ? `${c.number_of_pages_median} pages` : ''].filter(Boolean).join(' · ');
+    if (why.author && titles.length) return `You ${rated} ${names(titles)}; this is another by ${esc(c.author)}.`;
+    if (titles.length) return `Because you ${rated} ${names(titles.slice(0, 1))}${c.shared.length ? `: the same ${esc(c.shared[0])}` : ''}.`;
+    if (c.from) return `A step over from the ${esc(c.from.toLowerCase())} you rate highest.`;
+    return `Right in the ${esc(c.genre.toLowerCase())} you rate highest.`;
+  }
+
+  function card(c, i) {
     const cover = c.cover_i ? `<img alt="" src="https://covers.openlibrary.org/b/id/${c.cover_i}-M.jpg?default=false">` : '';
-    const more = list.slice(at + 1, at + 5);
-    body.innerHTML = `
-      <article class="rec-pick">
-        <div class="rec-cover">${cover}<span class="rec-cover-plain">${esc(c.title)}</span></div>
-        <div class="rec-info">
-          <h3 class="rec-title">${esc(c.title)}</h3>
-          <p class="rec-author">by ${esc(c.author || 'unknown author')}</p>
-          ${c.ratings_count ? `<p class="rec-rating"><span class="rec-stars" aria-hidden="true">${stars(c.ratings_average)}</span> ${(c.ratings_average || 0).toFixed(1)} from ${c.ratings_count.toLocaleString()} Open Library readers</p>` : ''}
-          ${meta ? `<p class="rec-meta">${meta}</p>` : ''}
-        </div>
-        <div class="rec-rest">
-          <p class="rec-why">${reason}</p>
-          ${c.shared.length ? `<p class="rec-tags">${c.shared.map(s => `<span>${esc(pretty(s))}</span>`).join('')}</p>` : ''}
-          <div class="rec-actions">
-            <button type="button" class="btn btn-ink" data-rec="next">Another idea</button>
-            <button type="button" class="btn btn-ghost" data-rec="want">Want to read</button>
-            <button type="button" class="btn btn-ghost" data-rec="read">I’ve read it</button>
-            <button type="button" class="btn btn-ghost" data-rec="nope">Not for me</button>
-          </div>
-          <a class="rec-link" href="${OL}${esc(c.key)}" target="_blank" rel="noopener">See it on Open Library</a>
-        </div>
-      </article>
-      ${more.length ? `<h4 class="rec-more-h">More ideas</h4><div class="rec-more">${more.map((m, i) => `
-        <button type="button" class="rec-mini" data-rec-go="${at + 1 + i}">
-          <span class="rec-mini-cover">${esc(m.title)}${m.cover_i ? `<img alt="" loading="lazy" src="https://covers.openlibrary.org/b/id/${m.cover_i}-M.jpg?default=false">` : ''}</span>
-          <span class="rec-mini-t">${esc(m.title)}</span><span class="rec-mini-a">${esc(m.author)}</span>
-        </button>`).join('')}</div>` : ''}`;
+    const meta = [c.first_publish_year, c.number_of_pages_median ? `${c.number_of_pages_median} pages` : ''].filter(Boolean).join(' · ');
+    return `<article class="rec-card" data-i="${i}">
+      <p class="rec-genre">${esc(c.genre)}</p>
+      <a class="rec-cover" href="${OL}${esc(c.key)}" target="_blank" rel="noopener" aria-label="${esc(c.title)} on Open Library">${cover}<span class="rec-cover-plain">${esc(c.title)}</span></a>
+      <div class="rec-info">
+        <h3 class="rec-title">${esc(c.title)}</h3>
+        <p class="rec-author">by ${esc(c.author || 'unknown author')}</p>
+        ${c.ratings_count ? `<p class="rec-rating"><span class="rec-stars" aria-hidden="true">${stars(c.ratings_average)}</span> ${(c.ratings_average || 0).toFixed(1)} · ${c.ratings_count.toLocaleString()} readers</p>` : ''}
+        ${meta ? `<p class="rec-meta">${meta}</p>` : ''}
+        <p class="rec-why">${reason(c)}</p>
+      </div>
+      <div class="rec-actions">
+        <button type="button" class="btn btn-ink" data-rec="want">Want to read</button>
+        <button type="button" class="btn btn-ghost" data-rec="read">I’ve read it</button>
+        <button type="button" class="btn btn-ghost" data-rec="nope">Not for me</button>
+      </div>
+    </article>`;
+  }
+
+  function show() {
+    if (!trio.length) {
+      body.innerHTML = `<p class="rec-empty">That’s every idea for now. Rate a few more books and come back for fresh suggestions.</p>`;
+      return;
+    }
+    const short = trio.length < 3 ? `<p class="rec-note">Only ${trio.length === 1 ? 'one genre' : 'two genres'} turned up this time. Rate books in a few more genres for a fuller three.</p>` : '';
+    body.innerHTML = `<p class="rec-lead">Three picks, three genres.</p>
+      <div class="rec-trio">${trio.map(card).join('')}</div>${short}
+      ${list.length ? `<div class="rec-deal"><button type="button" class="btn btn-ink" data-rec="deal">Three more</button></div>` : ''}`;
     body.querySelectorAll('img').forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
   }
 
@@ -190,8 +249,8 @@ window.TomesteadRecommend = function (api) {
       body.innerHTML = `<p class="rec-empty">Suggestions come from Open Library, so they need an internet connection. Try again once you’re online.</p>`;
       return;
     }
-    const key = books.map(b => `${b.id}:${b.rating || 0}`).join('|') + '#' + (api.recs().dismissed || []).length;
-    if (key === stamp && list.length) { show(); return; }
+    const key = books.map(b => `${b.id}:${b.rating || 0}:${b.genre || ''}`).join('|') + '#' + (api.recs().dismissed || []).length;
+    if (key === stamp && trio.length) { show(); return; }
     body.innerHTML = `<div class="rec-loading"><span class="rec-spinner" aria-hidden="true"></span><p>Looking over your shelves…</p></div>`;
     try {
       P = await profile(books);
@@ -199,43 +258,40 @@ window.TomesteadRecommend = function (api) {
       list = cands.map(c => score(c, P)).filter(Boolean).sort((a, b) => b.score - a.score);
       // don't let one author or one series crowd the list
       const perAuthor = new Map();
-      list = list.filter(c => { const n = (perAuthor.get(c.author) || 0) + 1; perAuthor.set(c.author, n); return n <= 2; }).slice(0, 30);
-      at = 0; stamp = key;
-      if (!list.length) { body.innerHTML = `<p class="rec-empty">Open Library didn’t turn up anything new for your shelves this time. Rate a few more books and try again.</p>`; return; }
+      list = list.filter(c => { const n = (perAuthor.get(c.author) || 0) + 1; perAuthor.set(c.author, n); return n <= 2; }).slice(0, 60);
+      last = []; stamp = key;
+      deal();
+      if (!trio.length) { body.innerHTML = `<p class="rec-empty">Open Library didn’t turn up anything new for your shelves this time. Rate a few more books and try again.</p>`; return; }
       show();
     } catch {
       body.innerHTML = `<p class="rec-empty">Open Library didn’t answer just now. Try again in a moment.</p>`;
     }
   }
 
+  // a pick that's been handled makes way for another from a genre the other two aren't using
+  function replace(i) {
+    const others = trio.filter((_, k) => k !== i);
+    const c = draw(others.concat({ genre: trio[i].genre }), true) || draw(others, false);
+    if (c) trio[i] = take(c); else trio.splice(i, 1);
+  }
+
   body.addEventListener('click', (e) => {
-    const go = e.target.closest('[data-rec-go]');
-    if (go) { const i = +go.dataset.recGo; const [c] = list.splice(i, 1); list.splice(at, 0, c); show(); body.scrollTop = 0; return; }
     const b = e.target.closest('[data-rec]');
     if (!b) return;
-    const c = list[at];
-    if (b.dataset.rec === 'next') { at = (at + 1) % Math.max(1, list.length); show(); body.scrollTop = 0; }
-    if (b.dataset.rec === 'nope' && c) {
-      api.dismiss(c.key);
-      list.splice(at, 1);
-      if (at >= list.length) at = 0;
-      api.toast('Got it. It won’t come up again.');
-      show();
+    if (b.dataset.rec === 'deal') { deal(); show(); body.scrollTop = 0; return; }
+    const el = b.closest('[data-i]');
+    const i = el ? +el.dataset.i : -1, c = trio[i];
+    if (!c) return;
+    api.dismiss(c.key);
+    replace(i);
+    if (b.dataset.rec === 'nope') { api.toast('Got it. It won’t come up again.'); show(); }
+    if (b.dataset.rec === 'want') {
+      api.wantBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null, olKey: c.key || null, cover: c.cover_i || null, genre: c.genre });
+      if (trio.length) show(); else dlg.close();
     }
-    if (b.dataset.rec === 'want' && c) {
-      api.dismiss(c.key);
-      list.splice(at, 1);
-      if (at >= list.length) at = 0;
-      api.wantBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null, olKey: c.key || null, cover: c.cover_i || null });
-      if (list.length) show(); else dlg.close();
-      return;
-    }
-    if (b.dataset.rec === 'read' && c) {
-      api.dismiss(c.key);
-      list.splice(at, 1);
-      if (at >= list.length) at = 0;
+    if (b.dataset.rec === 'read') {
       dlg.close();
-      api.addBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null, olKey: c.key || null, cover: c.cover_i || null });
+      api.addBook({ title: c.title, author: c.author, pages: c.number_of_pages_median || null, olKey: c.key || null, cover: c.cover_i || null, genre: c.genre });
     }
   });
 
