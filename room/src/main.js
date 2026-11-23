@@ -3495,6 +3495,9 @@ function setActive(on) {
   if (!start) { cam.pos.z = Math.min(2.6, cam.pos.z + 0.9); cam.pos.y += 0.3; cam.pitch = -0.12; }
   if (start === 'house') setFov(fovFor('house'));
   if (params.get('yaw')) cam.yaw = Number(params.get('yaw'));
+  // (test page) ?cam=x,y,z,tx,ty,tz puts the camera anywhere, looking at a point
+  const camQ = !HOST && params.get('cam') ? params.get('cam').split(',').map(Number) : null;
+  if (camQ && camQ.length === 6) { cam.pos.set(camQ[0], camQ[1], camQ[2]); cam.dir.set(camQ[3] - camQ[0], camQ[4] - camQ[1], camQ[5] - camQ[2]).normalize(); cam.dist = 1; }
   updateCamera(0);
   renderer.compile(scene, camera);
   requestAnimationFrame(frame);
@@ -3524,7 +3527,8 @@ function setActive(on) {
   requestAnimationFrame(() => {
     veil.classList.add('gone');
     setTimeout(() => veil.remove(), 1400);
-    if (!start && !customizing) go(home(), 2.6);
+    if (camQ && camQ.length === 6) { station = 'walk'; }
+    else if (!start && !customizing) go(home(), 2.6);
     else if (famStation(start)) { crossTo(start, false); }
     else { station = start; pressStation(start); if (start === 'house') setFov(fovFor('house')); shelfTools(); }
     setTimeout(() => { $('hint').classList.add('show'); setTimeout(() => $('hint').classList.remove('show'), 4200); }, start ? 300 : 2600);

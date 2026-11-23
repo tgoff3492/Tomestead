@@ -119,7 +119,7 @@ export function buildShell(K, tier) {
     for (const x of [-2.25, -0.75, 0.75, 2.25]) box(0.18, 0.22, len, M.beam, x, H - 0.11, midZ, true);
   } else if (tier === 'library') {
     // a coffered ceiling: panelled, with a grid of beams
-    box(6.2, 0.1, len + 0.2, mats.panel, 0, H + 0.05, midZ, true);
+    box(6.2, 0.1, len + 0.2, mats.wall, 0, H + 0.05, midZ, true);     // plaster between dark beams (a panelled ceiling read as a black hole from below)
     for (let z = ZB + 1.5; z < zF - 0.5; z += 1.5) box(6, 0.2, 0.16, M.beam, 0, H - 0.1, z, true);
     for (const x of [-1.5, 0, 1.5]) box(0.16, 0.2, len, M.beam, x, H - 0.1, midZ, true);
     box(6, 0.16, 0.2, M.trim, 0, H - 0.08, ZB + 0.1, true); box(6, 0.16, 0.2, M.trim, 0, H - 0.08, zF - 0.1, true);
@@ -134,9 +134,6 @@ export function buildShell(K, tier) {
     for (let z = ZB + 0.15; z <= zF - 0.1; z += 2.0) {
       const pts = []; for (let i = 0; i <= 32; i++) { const a = Math.PI - (i / 32) * Math.PI; pts.push(new THREE.Vector3(Math.cos(a) * (R - 0.04), H + Math.sin(a) * (R - 0.04), z)); }
       mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.07, 8, false), M.trim, true, { cast: false });
-      // a pilaster carries each rib down the wall to the gallery
-      box(0.05, H - 5.62, 0.2, M.trim, -X + 0.03, (H + 5.62) / 2, z);
-      box(0.05, H - 5.62, 0.2, M.trim, X - 0.03, (H + 5.62) / 2, z, true);
     }
     // the cornice along the vault's springing
     box(0.22, 0.14, len, M.trim, -X + 0.11, H - 0.02, midZ);
@@ -156,7 +153,9 @@ export function buildShell(K, tier) {
     const put = (wA, h, wD, a, y, d) => axis === 'x' ? box(wA, h, wD, M.caseSide, a, y, d, isCut) : box(wD, h, wA, M.caseSide, d, y, a, isCut);
     const putM = (mat, wA, h, wD, a, y, d) => axis === 'x' ? box(wA, h, wD, mat, a, y, d, isCut) : box(wD, h, wA, mat, d, y, a, isCut);
     // the back, plinth and cornice
-    putM(M.recessWood || M.recess, along, y1 - y0, 0.02, mid, (y0 + y1) / 2, wall + dir * 0.01);
+    // (the back stands a few centimetres off the wall, clear of the panelling and chair rail, so they
+    // never show through behind the books)
+    putM(M.recessWood || M.recess, along, y1 - y0, 0.02, mid, (y0 + y1) / 2, wall + dir * 0.085);
     putM(M.caseDark, along + 0.02, 0.1, depth + 0.02, mid, y0 + 0.05, cz);
     putM(M.trim, along + 0.06, 0.08, depth + 0.06, mid, y1 - 0.04, cz + dir * 0.02);
     // posts every metre or so
@@ -193,9 +192,11 @@ export function buildShell(K, tier) {
   function gallery(yT, y1Cases) {
     const T = 0.14, yb = yT - T / 2;
     // the walkway: left, back, right, front (right and front lift away)
-    box(GD, T, len, M.beam, -X + GD / 2, yb, midZ);
-    box(6 - 2 * GD, T, GD, M.beam, 0, yb, ZB + GD / 2);
-    box(GD, T, len, M.beam, X - GD / 2, yb, midZ, true);
+    // (the back walkway runs the full width, corners included, so its bookcases stand on something
+    // when the right side lifts away in the dollhouse)
+    box(GD, T, len - GD, M.beam, -X + GD / 2, yb, midZ + GD / 2);
+    box(6, T, GD, M.beam, 0, yb, ZB + GD / 2);
+    box(GD, T, len - GD, M.beam, X - GD / 2, yb, midZ + GD / 2, true);
     box(6 - 2 * GD, T, GD, M.beam, 0, yb, zF - GD / 2, true);
     // a moulded fascia along the edge
     const f = 0.2, fy = yT - f / 2;
@@ -253,7 +254,7 @@ export function buildShell(K, tier) {
 
     // a rolling ladder on a brass rail along the left lower bookcase
     {
-      const zL = 4.3, rx = -X + 0.42;
+      const zL = 3.55, rx = -X + 0.42;
       const rg = new THREE.CylinderGeometry(0.012, 0.012, zF - 3.0, 10).rotateX(Math.PI / 2).translate(rx, 2.62, (zF + 3.0) / 2);
       mesh(rg, M.brass, false, { cast: false });
       const L = new THREE.Group(); G.add(L); L.position.set(rx + 0.02, 0, zL); L.rotation.z = -0.24;
@@ -265,8 +266,9 @@ export function buildShell(K, tier) {
 
     // a spiral stair up to the gallery, in the front-left corner
     {
-      const cx = -X + 0.95, cz = zF - 1.0, r = 0.78, n = 18, rise = 3.12 / n;
-      K.mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.12 + 0.95, 14).translate(cx, (3.12 + 0.95) / 2, cz), M.iron, G);
+      const cx = -X + 1.16, cz = zF - 1.15, r = 0.78, n = 18, rise = 3.12 / n;
+      K.mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.12, 14).translate(cx, 3.12 / 2, cz), M.iron, G);
+      K.mesh(new THREE.SphereGeometry(0.07, 14, 10).translate(cx, 3.16, cz), M.brass, G);
       const pts = [];
       for (let i = 0; i < n; i++) {
         const a = -Math.PI * 0.5 + i * (Math.PI * 1.75 / n);

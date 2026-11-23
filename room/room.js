@@ -47612,7 +47612,7 @@ function buildShell(K, tier) {
     box2(6.2, 0.1, len + 0.2, M.beam, 0, H + 0.05, midZ, true);
     for (const x of [-2.25, -0.75, 0.75, 2.25]) box2(0.18, 0.22, len, M.beam, x, H - 0.11, midZ, true);
   } else if (tier === "library") {
-    box2(6.2, 0.1, len + 0.2, mats.panel, 0, H + 0.05, midZ, true);
+    box2(6.2, 0.1, len + 0.2, mats.wall, 0, H + 0.05, midZ, true);
     for (let z = ZB + 1.5; z < zF - 0.5; z += 1.5) box2(6, 0.2, 0.16, M.beam, 0, H - 0.1, z, true);
     for (const x of [-1.5, 0, 1.5]) box2(0.16, 0.2, len, M.beam, x, H - 0.1, midZ, true);
     box2(6, 0.16, 0.2, M.trim, 0, H - 0.08, ZB + 0.1, true);
@@ -47633,8 +47633,6 @@ function buildShell(K, tier) {
         pts.push(new THREE.Vector3(Math.cos(a) * (R - 0.04), H + Math.sin(a) * (R - 0.04), z));
       }
       mesh2(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.07, 8, false), M.trim, true, { cast: false });
-      box2(0.05, H - 5.62, 0.2, M.trim, -X + 0.03, (H + 5.62) / 2, z);
-      box2(0.05, H - 5.62, 0.2, M.trim, X - 0.03, (H + 5.62) / 2, z, true);
     }
     box2(0.22, 0.14, len, M.trim, -X + 0.11, H - 0.02, midZ);
     box2(0.22, 0.14, len, M.trim, X - 0.11, H - 0.02, midZ, true);
@@ -47645,7 +47643,7 @@ function buildShell(K, tier) {
     const along = a1 - a0, mid = (a0 + a1) / 2, front = wall + dir * depth, cz = wall + dir * depth / 2;
     const put = (wA, h, wD, a, y, d) => axis === "x" ? box2(wA, h, wD, M.caseSide, a, y, d, isCut) : box2(wD, h, wA, M.caseSide, d, y, a, isCut);
     const putM = (mat, wA, h, wD, a, y, d) => axis === "x" ? box2(wA, h, wD, mat, a, y, d, isCut) : box2(wD, h, wA, mat, d, y, a, isCut);
-    putM(M.recessWood || M.recess, along, y1 - y0, 0.02, mid, (y0 + y1) / 2, wall + dir * 0.01);
+    putM(M.recessWood || M.recess, along, y1 - y0, 0.02, mid, (y0 + y1) / 2, wall + dir * 0.085);
     putM(M.caseDark, along + 0.02, 0.1, depth + 0.02, mid, y0 + 0.05, cz);
     putM(M.trim, along + 0.06, 0.08, depth + 0.06, mid, y1 - 0.04, cz + dir * 0.02);
     const bays = Math.max(1, Math.round(along / 0.95));
@@ -47679,9 +47677,9 @@ function buildShell(K, tier) {
   const balusters = { keep: [], cut: [] };
   function gallery(yT, y1Cases) {
     const T = 0.14, yb = yT - T / 2;
-    box2(GD, T, len, M.beam, -X + GD / 2, yb, midZ);
-    box2(6 - 2 * GD, T, GD, M.beam, 0, yb, ZB + GD / 2);
-    box2(GD, T, len, M.beam, X - GD / 2, yb, midZ, true);
+    box2(GD, T, len - GD, M.beam, -X + GD / 2, yb, midZ + GD / 2);
+    box2(6, T, GD, M.beam, 0, yb, ZB + GD / 2);
+    box2(GD, T, len - GD, M.beam, X - GD / 2, yb, midZ + GD / 2, true);
     box2(6 - 2 * GD, T, GD, M.beam, 0, yb, zF - GD / 2, true);
     const f = 0.2, fy = yT - f / 2;
     box2(0.05, f, len - 2 * GD, rail, -X + GD, fy, midZ);
@@ -47740,7 +47738,7 @@ function buildShell(K, tier) {
     }
     box2(0.02, DH - DW / 2, 0.035, M.trim, 0, (DH - DW / 2) / 2, zF - 0.05, true);
     {
-      const zL = 4.3, rx = -X + 0.42;
+      const zL = 3.55, rx = -X + 0.42;
       const rg = new THREE.CylinderGeometry(0.012, 0.012, zF - 3, 10).rotateX(Math.PI / 2).translate(rx, 2.62, (zF + 3) / 2);
       mesh2(rg, M.brass, false, { cast: false });
       const L = new THREE.Group();
@@ -47763,8 +47761,9 @@ function buildShell(K, tier) {
       L.updateMatrixWorld(true);
     }
     {
-      const cx = -X + 0.95, cz = zF - 1, r = 0.78, n = 18, rise = 3.12 / n;
-      K.mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.12 + 0.95, 14).translate(cx, (3.12 + 0.95) / 2, cz), M.iron, G);
+      const cx = -X + 1.16, cz = zF - 1.15, r = 0.78, n = 18, rise = 3.12 / n;
+      K.mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.12, 14).translate(cx, 3.12 / 2, cz), M.iron, G);
+      K.mesh(new THREE.SphereGeometry(0.07, 14, 10).translate(cx, 3.16, cz), M.brass, G);
       const pts = [];
       for (let i = 0; i < n; i++) {
         const a = -Math.PI * 0.5 + i * (Math.PI * 1.75 / n);
@@ -53499,6 +53498,12 @@ function setActive(on) {
   }
   if (start === "house") setFov(fovFor("house"));
   if (params.get("yaw")) cam.yaw = Number(params.get("yaw"));
+  const camQ = !HOST && params.get("cam") ? params.get("cam").split(",").map(Number) : null;
+  if (camQ && camQ.length === 6) {
+    cam.pos.set(camQ[0], camQ[1], camQ[2]);
+    cam.dir.set(camQ[3] - camQ[0], camQ[4] - camQ[1], camQ[5] - camQ[2]).normalize();
+    cam.dist = 1;
+  }
   updateCamera(0);
   renderer.compile(scene, camera);
   requestAnimationFrame(frame);
@@ -53557,7 +53562,9 @@ function setActive(on) {
   requestAnimationFrame(() => {
     veil.classList.add("gone");
     setTimeout(() => veil.remove(), 1400);
-    if (!start && !customizing) go(home(), 2.6);
+    if (camQ && camQ.length === 6) {
+      station = "walk";
+    } else if (!start && !customizing) go(home(), 2.6);
     else if (famStation(start)) {
       crossTo(start, false);
     } else {
