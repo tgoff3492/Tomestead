@@ -47696,7 +47696,8 @@ function buildShell(K, tier) {
       mesh2(g2, iron, isCut, { cast: false });
     };
     const xl = -X + GD, xr = X - GD, zb = ZB + GD, zf = zF - GD;
-    edge(xl, zb, xl, zf, false);
+    if (yT < 3.5) edge(xl, zb, xl, zF - 1.75, false);
+    else edge(xl, zb, xl, zf, false);
     edge(xl, zb, xr, zb, false);
     edge(xr, zb, xr, zf, true);
     edge(xl, zf, xr, zf, true);
@@ -47743,8 +47744,8 @@ function buildShell(K, tier) {
       mesh2(rg, M.brass, false, { cast: false });
       const L = new THREE.Group();
       G.add(L);
-      L.position.set(rx + 0.02, 0, zL);
-      L.rotation.z = -0.24;
+      L.position.set(rx + 0.03 + 2.72 * Math.sin(0.24), 0, zL);
+      L.rotation.z = 0.24;
       for (const sz of [-1, 1]) {
         const s = K.box(0.04, 2.72, 0.05, M.caseSide, 0, 1.36, sz * 0.22, L);
         s.castShadow = true;
@@ -47757,7 +47758,6 @@ function buildShell(K, tier) {
         const w = K.mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 14).rotateZ(Math.PI / 2), M.brass, L);
         w.position.set(0, 0.03, sz * 0.22);
       }
-      L.position.x += 0.3;
       L.updateMatrixWorld(true);
     }
     {
@@ -48513,7 +48513,90 @@ function damaskTex(K) {
 // src/walk.js
 function createWalker({ THREE, root, kick: kick2 }) {
   const EYE = 1.6, SPEED = 1.7, TURN = 1.9, R = 0.28;
-  const st = { on: false, pos: new THREE.Vector3(), yaw: 0, pitch: -0.05, vel: new THREE.Vector2(), turnV: 0, keys: /* @__PURE__ */ new Set(), stick: { x: 0, y: 0 }, bounds: null, obstacles: [] };
+  const st = {
+    on: false,
+    pos: new THREE.Vector3(),
+    yaw: 0,
+    pitch: -0.05,
+    vel: new THREE.Vector2(),
+    turnV: 0,
+    keys: /* @__PURE__ */ new Set(),
+    stick: { x: 0, y: 0 },
+    bounds: null,
+    obstacles: [],
+    level: 0,
+    upper: null,
+    stair: null,
+    climb: null,
+    near: null
+  };
+  const climbBtn = document.createElement("button");
+  climbBtn.type = "button";
+  climbBtn.className = "walk-climb";
+  climbBtn.hidden = true;
+  root.appendChild(climbBtn);
+  climbBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    startClimb();
+  });
+  climbBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const lerp2 = THREE.MathUtils.lerp;
+  function pathAt(s) {
+    const S = st.stair, phi = S.a0 + 0.12 + s * (S.span - 0.24), rho = 0.45;
+    return new THREE.Vector3(S.cx + Math.cos(phi) * rho, S.top * s + EYE, S.cz - Math.sin(phi) * rho);
+  }
+  function yawAlong(s, up) {
+    const S = st.stair, phi = S.a0 + 0.12 + s * (S.span - 0.24);
+    let dx = -Math.sin(phi), dz = -Math.cos(phi);
+    if (!up) {
+      dx = -dx;
+      dz = -dz;
+    }
+    return Math.atan2(-dx, -dz);
+  }
+  function startClimb() {
+    if (!st.on || st.climb || !st.near) return;
+    const up = st.near === "up";
+    st.climb = { up, t: 0, dur: 5.2, from: st.pos.clone(), to: up ? new THREE.Vector3(st.stair.land[0], st.stair.top + EYE, st.stair.land[1]) : new THREE.Vector3(st.stair.foot[0], EYE, st.stair.foot[1]) };
+    st.vel.set(0, 0);
+    st.turnV = 0;
+    climbBtn.hidden = true;
+    st.near = null;
+    kick2(6e3);
+  }
+  function stepClimb(dt) {
+    const c = st.climb;
+    c.t += dt;
+    const k = Math.min(1, c.t / c.dur), A = 0.14, B = 0.86;
+    let ty, tp;
+    if (k < A) {
+      const e = k / A, P = pathAt(c.up ? 0 : 1);
+      st.pos.lerpVectors(c.from, P, e * e * (3 - 2 * e));
+      ty = yawAlong(c.up ? 0 : 1, c.up);
+      tp = 0;
+    } else if (k < B) {
+      let e = (k - A) / (B - A);
+      e = e * e * (3 - 2 * e);
+      const s = c.up ? e : 1 - e;
+      st.pos.copy(pathAt(s));
+      ty = yawAlong(s, c.up);
+      tp = c.up ? 0.22 : -0.38;
+    } else {
+      const e = (k - B) / (1 - B);
+      st.pos.lerpVectors(pathAt(c.up ? 1 : 0), c.to, e * e * (3 - 2 * e));
+      const y0 = yawAlong(c.up ? 1 : 0, c.up);
+      ty = y0 + Math.atan2(Math.sin(0 - y0), Math.cos(0 - y0)) * e;
+      tp = c.up ? -0.12 : 0;
+    }
+    const w = 1 - Math.exp(-dt * 4);
+    st.yaw += Math.atan2(Math.sin(ty - st.yaw), Math.cos(ty - st.yaw)) * w;
+    st.pitch += (tp - st.pitch) * w;
+    if (k >= 1) {
+      st.level = c.up ? 1 : 0;
+      st.pos.copy(c.to);
+      st.climb = null;
+    }
+  }
   const pad = document.createElement("div");
   pad.className = "walk-pad";
   pad.hidden = true;
@@ -48557,6 +48640,12 @@ function createWalker({ THREE, root, kick: kick2 }) {
   const KEYS = { w: "f", arrowup: "f", s: "b", arrowdown: "b", a: "l", d: "r", arrowleft: "tl", arrowright: "tr", q: "tl", e: "tr" };
   addEventListener("keydown", (e) => {
     if (!st.on || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName || "")) return;
+    if ((e.key === "Enter" || e.key === " ") && st.near && !st.climb) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      startClimb();
+      return;
+    }
     const k = KEYS[e.key.toLowerCase()];
     if (!k) return;
     st.keys.add(k);
@@ -48569,7 +48658,24 @@ function createWalker({ THREE, root, kick: kick2 }) {
     if (k) st.keys.delete(k);
   });
   addEventListener("blur", () => st.keys.clear());
+  function collideUpper(p) {
+    const rs = st.upper.rects;
+    let best = null, bd = Infinity;
+    for (const r of rs) {
+      const x = THREE.MathUtils.clamp(p.x, r.x0, r.x1), z = THREE.MathUtils.clamp(p.z, r.z0, r.z1), d = Math.hypot(p.x - x, p.z - z);
+      if (d < bd) {
+        bd = d;
+        best = [x, z];
+      }
+    }
+    if (best) {
+      p.x = best[0];
+      p.z = best[1];
+    }
+    return p;
+  }
   function collide(p) {
+    if (st.level === 1 && st.upper) return collideUpper(p);
     const b = st.bounds;
     if (b) {
       for (const z of b.zones) {
@@ -48612,12 +48718,17 @@ function createWalker({ THREE, root, kick: kick2 }) {
       return st.on;
     },
     // where you can walk (from the room's size) and what's in the way
-    setWorld(bounds, obstacles) {
+    setWorld(bounds, obstacles, more = {}) {
       st.bounds = bounds;
       st.obstacles = obstacles;
+      st.upper = more.upper || null;
+      st.stair = more.stair || null;
+      if (!st.stair) st.level = 0;
     },
     start(fromPos, fromDir) {
       st.on = true;
+      st.level = 0;
+      st.climb = null;
       st.pos.set(fromPos.x, EYE, fromPos.z);
       collide(st.pos);
       st.yaw = Math.atan2(-fromDir.x, -fromDir.z);
@@ -48633,8 +48744,22 @@ function createWalker({ THREE, root, kick: kick2 }) {
       pad.hidden = true;
       st.keys.clear();
       setStick(0, 0);
+      st.climb = null;
+      st.level = 0;
+      st.near = null;
+      climbBtn.hidden = true;
     },
+    get level() {
+      return st.level;
+    },
+    place(x, z) {
+      st.pos.x = x;
+      st.pos.z = z;
+      kick2(600);
+    },
+    // (the test page)
     look(dx, dy) {
+      if (st.climb) return;
       st.yaw += dx * 42e-4;
       st.pitch = THREE.MathUtils.clamp(st.pitch + dy * 34e-4, -0.9, 0.7);
       kick2(300);
@@ -48642,6 +48767,13 @@ function createWalker({ THREE, root, kick: kick2 }) {
     // drag the view, as everywhere else in the room
     // one frame: ease the velocity toward what the stick and keys ask for, move, slide off obstacles
     step(dt, camPos, camDir) {
+      if (st.climb) {
+        stepClimb(dt);
+        camPos.copy(st.pos);
+        camDir.set(-Math.sin(st.yaw) * Math.cos(st.pitch), Math.sin(st.pitch), -Math.cos(st.yaw) * Math.cos(st.pitch));
+        kick2(250);
+        return true;
+      }
       const k = st.keys;
       let fx = st.stick.x + (k.has("r") ? 1 : 0) - (k.has("l") ? 1 : 0);
       let fz = st.stick.y + (k.has("b") ? 1 : 0) - (k.has("f") ? 1 : 0);
@@ -48661,7 +48793,19 @@ function createWalker({ THREE, root, kick: kick2 }) {
       st.pos.x += dxw * dt;
       st.pos.z += dzw * dt;
       collide(st.pos);
-      st.pos.y += (EYE - st.pos.y) * (1 - Math.exp(-dt * 4));
+      const floorY = st.level === 1 && st.stair ? st.stair.top : 0;
+      st.pos.y += (floorY + EYE - st.pos.y) * (1 - Math.exp(-dt * 4));
+      let near = null;
+      if (st.stair) {
+        const S = st.stair;
+        if (st.level === 0 && Math.hypot(st.pos.x - S.foot[0], st.pos.z - S.foot[1]) < 0.85) near = "up";
+        if (st.level === 1 && Math.hypot(st.pos.x - S.land[0], st.pos.z - S.land[1]) < 0.7) near = "down";
+      }
+      if (near !== st.near) {
+        st.near = near;
+        climbBtn.hidden = !near;
+        climbBtn.textContent = near === "up" ? "Climb the stair" : "Go down the stair";
+      }
       camPos.copy(st.pos);
       camDir.set(-Math.sin(st.yaw) * Math.cos(st.pitch), Math.sin(st.pitch), -Math.cos(st.yaw) * Math.cos(st.pitch));
       const moving = st.vel.lengthSq() > 1e-4 || Math.abs(st.turnV) > 1e-3 || Math.abs(EYE - st.pos.y) > 1e-3;
@@ -51626,7 +51770,15 @@ function walkWorld(T) {
   }
   if (T !== "study") ob.push({ x: -1.84, z: zF - 1.15, r: 0.85 });
   if (T === "hall") ob.push({ x0: -0.95, x1: 0.95, z0: 6, z1: 9 });
-  return { bounds: { zones, zMin: -2.7, zMax: T === "study" ? 2.7 : zF - 0.36 }, obstacles: ob };
+  let more = {};
+  if (T !== "study") {
+    const cx = -3 + 1.16, cz = zF - 1.15, GD = 0.85, ru = 0.15, w0 = 3 - 0.36 - ru, w1 = 3 - GD - ru, zb0 = -2.7 + 0.36 + ru, zb1 = -2.7 + GD - ru, zf0 = zF - GD + ru, zf1 = zF - 0.36 - ru;
+    more = {
+      stair: { cx, cz, top: 3.12, a0: -Math.PI / 2, span: Math.PI * 1.75, foot: [cx + 1.2, cz + 0.15], land: [-w0 + 0.08, zf1 - 0.08] },
+      upper: { rects: [{ x0: -w0, x1: -w1, z0: zb0, z1: zf1 }, { x0: w1, x1: w0, z0: zb0, z1: zf1 }, { x0: -w0, x1: w0, z0: zb0, z1: zb1 }, { x0: -w0, x1: w0, z0: zf0, z1: zf1 }] }
+    };
+  }
+  return { bounds: { zones, zMin: -2.7, zMax: T === "study" ? 2.7 : zF - 0.36 }, obstacles: ob, more };
 }
 var walker = null;
 function startWalk() {
@@ -51641,7 +51793,7 @@ function startWalk() {
     isOut = true;
   }
   const w = walkWorld(world.shell.tier);
-  walker.setWorld(w.bounds, w.obstacles);
+  walker.setWorld(w.bounds, w.obstacles, w.more);
   tween = null;
   station = "walk";
   pressStation("walk");
@@ -53436,7 +53588,7 @@ function rebuildShell(tier) {
   buildPortraitsNow();
   if (walker && walker.on) {
     const w = walkWorld(tier);
-    walker.setWorld(w.bounds, w.obstacles);
+    walker.setWorld(w.bounds, w.obstacles, w.more);
   }
   setTimeout(walkButton, 0);
   buildDisplayNow();
@@ -54133,7 +54285,11 @@ function setActive(on) {
   window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => {
     if (HOST) lib = fromHost();
     queueArrivals();
-  }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => {
+  }, go: (st) => go(st), openBook: (id) => openOnDesk(id), walk: (x, z) => {
+    if (HOST) return;
+    if (!walker.on) startWalk();
+    if (x != null) walker.place(x, z);
+  }, tour: () => {
     go(home(), 1.5, { arrive: false });
     tourCard(0);
     kick();

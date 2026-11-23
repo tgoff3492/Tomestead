@@ -1984,7 +1984,17 @@ function walkWorld(T) {
   }
   if (T !== 'study') ob.push({ x: -1.84, z: zF - 1.15, r: 0.85 });                              // the spiral stair
   if (T === 'hall') ob.push({ x0: -0.95, x1: 0.95, z0: 6.0, z1: 9.0 });                          // the reading table and chairs
-  return { bounds: { zones, zMin: -2.7, zMax: T === 'study' ? 2.7 : zF - 0.36 }, obstacles: ob };
+  // the spiral stair up to the gallery (shell.js), and the gallery's walkway: a strip along each wall,
+  // between the bookcases and the railing
+  let more = {};
+  if (T !== 'study') {
+    const cx = -3 + 1.16, cz = zF - 1.15, GD = 0.85, ru = 0.15, w0 = 3 - 0.36 - ru, w1 = 3 - GD - ru, zb0 = -2.7 + 0.36 + ru, zb1 = -2.7 + GD - ru, zf0 = zF - GD + ru, zf1 = zF - 0.36 - ru;
+    more = {
+      stair: { cx, cz, top: 3.12, a0: -Math.PI / 2, span: Math.PI * 1.75, foot: [cx + 1.2, cz + 0.15], land: [-w0 + 0.08, zf1 - 0.08] },
+      upper: { rects: [{ x0: -w0, x1: -w1, z0: zb0, z1: zf1 }, { x0: w1, x1: w0, z0: zb0, z1: zf1 }, { x0: -w0, x1: w0, z0: zb0, z1: zb1 }, { x0: -w0, x1: w0, z0: zf0, z1: zf1 }] },
+    };
+  }
+  return { bounds: { zones, zMin: -2.7, zMax: T === 'study' ? 2.7 : zF - 0.36 }, obstacles: ob, more };
 }
 let walker = null;
 function startWalk() {
@@ -1993,7 +2003,7 @@ function startWalk() {
   let p = cam.pos.clone(), d = lookDir();
   if (station === 'house') { const f = framing('room'); p = f.pos; d = f.dir; isOut = true; }
   const w = walkWorld(world.shell.tier);
-  walker.setWorld(w.bounds, w.obstacles);
+  walker.setWorld(w.bounds, w.obstacles, w.more);
   tween = null; station = 'walk'; pressStation('walk');
   cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
   setFov(baseFov());
@@ -3357,7 +3367,7 @@ function rebuildShell(tier) {
   world.shell = sh;
   applyTierStations(sh);
   buildPortraitsNow();
-  if (walker && walker.on) { const w = walkWorld(tier); walker.setWorld(w.bounds, w.obstacles); }
+  if (walker && walker.on) { const w = walkWorld(tier); walker.setWorld(w.bounds, w.obstacles, w.more); }
   setTimeout(walkButton, 0);
   buildDisplayNow();
   world.applyLook();
@@ -3836,7 +3846,7 @@ function setActive(on) {
     resize(); shelfTools();
   };
   const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
-  window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
+  window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), walk: (x, z) => { if (HOST) return; if (!walker.on) startWalk(); if (x != null) walker.place(x, z); }, tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // something earned while a dialog was open (or the room was busy) arrives once things are quiet
   setInterval(() => { if (pendingArrive.length) playArrival(); }, 2500);

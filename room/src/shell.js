@@ -215,7 +215,9 @@ export function buildShell(K, tier) {
       mesh(g2, iron, isCut, { cast: false });
     };
     const xl = -X + GD, xr = X - GD, zb = ZB + GD, zf = zF - GD;
-    edge(xl, zb, xl, zf, false); edge(xl, zb, xr, zb, false); edge(xr, zb, xr, zf, true); edge(xl, zf, xr, zf, true);
+    // (on the lower gallery the railing stops where the spiral stair comes up, in the front-left corner)
+    if (yT < 3.5) edge(xl, zb, xl, zF - 1.75, false); else edge(xl, zb, xl, zf, false);
+    edge(xl, zb, xr, zb, false); edge(xr, zb, xr, zf, true); edge(xl, zf, xr, zf, true);
     // bookcases along the walls up here
     const leftRuns = [];
     let z0 = ZB + 0.36;
@@ -257,11 +259,12 @@ export function buildShell(K, tier) {
       const zL = 3.55, rx = -X + 0.42;
       const rg = new THREE.CylinderGeometry(0.012, 0.012, zF - 3.0, 10).rotateX(Math.PI / 2).translate(rx, 2.62, (zF + 3.0) / 2);
       mesh(rg, M.brass, false, { cast: false });
-      const L = new THREE.Group(); G.add(L); L.position.set(rx + 0.02, 0, zL); L.rotation.z = -0.24;
+      // (leaning back against the rail: its top hooks over the rail, its feet out on the floor)
+      const L = new THREE.Group(); G.add(L); L.position.set(rx + 0.03 + 2.72 * Math.sin(0.24), 0, zL); L.rotation.z = 0.24;
       for (const sz of [-1, 1]) { const s = K.box(0.04, 2.72, 0.05, M.caseSide, 0.0, 1.36, sz * 0.22, L); s.castShadow = true; }
       for (let y = 0.28; y < 2.6; y += 0.29) { const r = K.box(0.05, 0.03, 0.44, M.caseShelf, 0.0, y, 0, L); r.castShadow = true; }
       for (const sz of [-1, 1]) { const w = K.mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 14).rotateZ(Math.PI / 2), M.brass, L); w.position.set(0, 0.03, sz * 0.22); }
-      L.position.x += 0.3; L.updateMatrixWorld(true);
+      L.updateMatrixWorld(true);
     }
 
     // a spiral stair up to the gallery, in the front-left corner

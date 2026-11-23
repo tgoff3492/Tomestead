@@ -5,7 +5,59 @@
    dead. Tapping a thing in the room still walks you to it (and leaves walk mode). */
 export function createWalker({ THREE, root, kick }) {
   const EYE = 1.6, SPEED = 1.7, TURN = 1.9, R = 0.28;
-  const st = { on: false, pos: new THREE.Vector3(), yaw: 0, pitch: -0.05, vel: new THREE.Vector2(), turnV: 0, keys: new Set(), stick: { x: 0, y: 0 }, bounds: null, obstacles: [] };
+  const st = { on: false, pos: new THREE.Vector3(), yaw: 0, pitch: -0.05, vel: new THREE.Vector2(), turnV: 0, keys: new Set(), stick: { x: 0, y: 0 }, bounds: null, obstacles: [],
+    level: 0, upper: null, stair: null, climb: null, near: null };
+
+  // ---- the spiral stair: a button appears at its foot (and at its head, up on the gallery); it
+  // takes you round and up (or down) the stair, and up there you walk the gallery
+  const climbBtn = document.createElement('button');
+  climbBtn.type = 'button'; climbBtn.className = 'walk-climb'; climbBtn.hidden = true;
+  root.appendChild(climbBtn);
+  climbBtn.addEventListener('click', (e) => { e.stopPropagation(); startClimb(); });
+  climbBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+  const lerp = THREE.MathUtils.lerp;
+  // s = 0 at the foot of the stair … 1 at its head: the middle of the treads, eye height above them
+  function pathAt(s) {
+    const S = st.stair, phi = S.a0 + 0.12 + s * (S.span - 0.24), rho = 0.45;
+    return new THREE.Vector3(S.cx + Math.cos(phi) * rho, S.top * s + EYE, S.cz - Math.sin(phi) * rho);
+  }
+  function yawAlong(s, up) {
+    const S = st.stair, phi = S.a0 + 0.12 + s * (S.span - 0.24);
+    let dx = -Math.sin(phi), dz = -Math.cos(phi); if (!up) { dx = -dx; dz = -dz; }
+    return Math.atan2(-dx, -dz);
+  }
+  function startClimb() {
+    if (!st.on || st.climb || !st.near) return;
+    const up = st.near === 'up';
+    st.climb = { up, t: 0, dur: 5.2, from: st.pos.clone(), to: up ? new THREE.Vector3(st.stair.land[0], st.stair.top + EYE, st.stair.land[1]) : new THREE.Vector3(st.stair.foot[0], EYE, st.stair.foot[1]) };
+    st.vel.set(0, 0); st.turnV = 0;
+    climbBtn.hidden = true; st.near = null;
+    kick(6000);
+  }
+  function stepClimb(dt) {
+    const c = st.climb; c.t += dt;
+    const k = Math.min(1, c.t / c.dur), A = 0.14, B = 0.86;
+    let ty, tp;
+    if (k < A) {
+      const e = k / A, P = pathAt(c.up ? 0 : 1);
+      st.pos.lerpVectors(c.from, P, e * e * (3 - 2 * e));
+      ty = yawAlong(c.up ? 0 : 1, c.up); tp = 0;
+    } else if (k < B) {
+      let e = (k - A) / (B - A); e = e * e * (3 - 2 * e);
+      const s = c.up ? e : 1 - e;
+      st.pos.copy(pathAt(s));
+      ty = yawAlong(s, c.up); tp = c.up ? 0.22 : -0.38;
+    } else {
+      const e = (k - B) / (1 - B);
+      st.pos.lerpVectors(pathAt(c.up ? 1 : 0), c.to, e * e * (3 - 2 * e));
+      // step off and turn to look down the length of the room (along the gallery, up there)
+      const y0 = yawAlong(c.up ? 1 : 0, c.up); ty = y0 + Math.atan2(Math.sin(0 - y0), Math.cos(0 - y0)) * e; tp = c.up ? -0.12 : 0;
+    }
+    const w = 1 - Math.exp(-dt * 4);
+    st.yaw += Math.atan2(Math.sin(ty - st.yaw), Math.cos(ty - st.yaw)) * w;
+    st.pitch += (tp - st.pitch) * w;
+    if (k >= 1) { st.level = c.up ? 1 : 0; st.pos.copy(c.to); st.climb = null; }
+  }
 
   // ---- the thumbstick
   const pad = document.createElement('div');
@@ -40,6 +92,7 @@ export function createWalker({ THREE, root, kick }) {
   const KEYS = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: 'tr' };
   addEventListener('keydown', (e) => {
     if (!st.on || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && st.near && !st.climb) { e.preventDefault(); e.stopImmediatePropagation(); startClimb(); return; }
     const k = KEYS[e.key.toLowerCase()]; if (!k) return;
     st.keys.add(k); e.preventDefault(); e.stopImmediatePropagation(); kick(400);
   }, true);
@@ -48,7 +101,19 @@ export function createWalker({ THREE, root, kick }) {
 
   // keep the walker inside the room and out of the furniture: push out of each obstacle, so you
   // slide along it
+  // up on the gallery: you stay on the walkway (a ring of strips along the walls)
+  function collideUpper(p) {
+    const rs = st.upper.rects;
+    let best = null, bd = Infinity;
+    for (const r of rs) {
+      const x = THREE.MathUtils.clamp(p.x, r.x0, r.x1), z = THREE.MathUtils.clamp(p.z, r.z0, r.z1), d = Math.hypot(p.x - x, p.z - z);
+      if (d < bd) { bd = d; best = [x, z]; }
+    }
+    if (best) { p.x = best[0]; p.z = best[1]; }
+    return p;
+  }
   function collide(p) {
+    if (st.level === 1 && st.upper) return collideUpper(p);
     const b = st.bounds;
     if (b) {
       for (const z of b.zones) {
@@ -78,19 +143,28 @@ export function createWalker({ THREE, root, kick }) {
   return {
     get on() { return st.on; },
     // where you can walk (from the room's size) and what's in the way
-    setWorld(bounds, obstacles) { st.bounds = bounds; st.obstacles = obstacles; },
+    setWorld(bounds, obstacles, more = {}) { st.bounds = bounds; st.obstacles = obstacles; st.upper = more.upper || null; st.stair = more.stair || null; if (!st.stair) st.level = 0; },
     start(fromPos, fromDir) {
-      st.on = true;
+      st.on = true; st.level = 0; st.climb = null;
       st.pos.set(fromPos.x, EYE, fromPos.z); collide(st.pos);
       st.yaw = Math.atan2(-fromDir.x, -fromDir.z); st.pitch = -0.05;
       st.vel.set(0, 0); st.turnV = 0; st.keys.clear();
       pad.hidden = !matchMedia('(pointer: coarse)').matches;
       kick(600);
     },
-    stop() { st.on = false; pad.hidden = true; st.keys.clear(); setStick(0, 0); },
-    look(dx, dy) { st.yaw += dx * 0.0042; st.pitch = THREE.MathUtils.clamp(st.pitch + dy * 0.0034, -0.9, 0.7); kick(300); },   // drag the view, as everywhere else in the room
+    stop() { st.on = false; pad.hidden = true; st.keys.clear(); setStick(0, 0); st.climb = null; st.level = 0; st.near = null; climbBtn.hidden = true; },
+    get level() { return st.level; },
+    place(x, z) { st.pos.x = x; st.pos.z = z; kick(600); },   // (the test page)
+    look(dx, dy) { if (st.climb) return; st.yaw += dx * 0.0042; st.pitch = THREE.MathUtils.clamp(st.pitch + dy * 0.0034, -0.9, 0.7); kick(300); },   // drag the view, as everywhere else in the room
     // one frame: ease the velocity toward what the stick and keys ask for, move, slide off obstacles
     step(dt, camPos, camDir) {
+      if (st.climb) {
+        stepClimb(dt);
+        camPos.copy(st.pos);
+        camDir.set(-Math.sin(st.yaw) * Math.cos(st.pitch), Math.sin(st.pitch), -Math.cos(st.yaw) * Math.cos(st.pitch));
+        kick(250);
+        return true;
+      }
       const k = st.keys;
       let fx = st.stick.x + (k.has('r') ? 1 : 0) - (k.has('l') ? 1 : 0);
       let fz = st.stick.y + (k.has('b') ? 1 : 0) - (k.has('f') ? 1 : 0);
@@ -107,7 +181,16 @@ export function createWalker({ THREE, root, kick }) {
       st.pos.x += dxw * dt; st.pos.z += dzw * dt;
       collide(st.pos);
       // the eye settles at standing height (after a glide from somewhere higher or lower)
-      st.pos.y += (EYE - st.pos.y) * (1 - Math.exp(-dt * 4));
+      const floorY = st.level === 1 && st.stair ? st.stair.top : 0;
+      st.pos.y += (floorY + EYE - st.pos.y) * (1 - Math.exp(-dt * 4));
+      // near the foot of the stair (or its head): offer the way up (or down)
+      let near = null;
+      if (st.stair) {
+        const S = st.stair;
+        if (st.level === 0 && Math.hypot(st.pos.x - S.foot[0], st.pos.z - S.foot[1]) < 0.85) near = 'up';
+        if (st.level === 1 && Math.hypot(st.pos.x - S.land[0], st.pos.z - S.land[1]) < 0.7) near = 'down';
+      }
+      if (near !== st.near) { st.near = near; climbBtn.hidden = !near; climbBtn.textContent = near === 'up' ? 'Climb the stair' : 'Go down the stair'; }
       camPos.copy(st.pos);
       camDir.set(-Math.sin(st.yaw) * Math.cos(st.pitch), Math.sin(st.pitch), -Math.cos(st.yaw) * Math.cos(st.pitch));
       const moving = st.vel.lengthSq() > 1e-4 || Math.abs(st.turnV) > 1e-3 || Math.abs(EYE - st.pos.y) > 1e-3;

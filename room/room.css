@@ -194,3 +194,5 @@ html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-s
 .rm .card .author-bio { font-family: var(--serif); font-size: 1rem; line-height: 1.45; margin: 8px 0; max-height: 34vh; overflow-y: auto; }
 .rm .card .author-books { font-size: .85rem; }
 .rm .card .note a { color: #7a5520; }
+.walk-climb { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 150px); padding: 10px 20px; border-radius: 999px; border: 1.5px solid rgba(230,200,134,.7); background: rgba(30,18,9,.72); color: #f3dfb0; font: 600 1rem var(--serif, Georgia, serif); box-shadow: 0 6px 20px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); cursor: pointer; }
+.walk-climb[hidden] { display: none; }
