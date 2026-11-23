@@ -98,7 +98,7 @@ function sampleLibrary() {
 }
 function fromHost() {
   const d = HOST.data();
-  return { books: (d.books || []).filter((b) => b && b.id && b.title), theme: d.theme || {}, trophies: d.trophies || {}, earned: d.earned || {}, sample: false };
+  return { books: (d.books || []).filter((b) => b && b.id && b.title), theme: d.theme || {}, trophies: d.trophies || {}, earned: d.earned || {}, showcase: Array.isArray(d.showcase) ? d.showcase : null, showcaseChosen: !!d.showcaseChosen, sample: false };
 }
 let lib = HOST ? fromHost() : (() => { const l = loadLibrary(); return l.books.length && params.get('sample') !== '1' ? l : Object.assign(sampleLibrary(), { theme: l.theme }); })();
 const wood = WOODS[lib.theme.wood] || WOODS.oak;
@@ -2091,8 +2091,10 @@ function updateCamera(dt) {
     }
   }
   const orbit = station === 'house' && !tween;
-  const yl = orbit ? 0.55 : portrait() ? 0.7 : 0.5;
-  cam.yaw = THREE.MathUtils.clamp(cam.yaw, -yl, yl);
+  // standing in the room you can turn all the way round (the display case and the portraits are behind
+  // you there); elsewhere the view only sways a little around what you came to see
+  const yl = orbit ? 0.55 : station === 'room' ? Math.PI : portrait() ? 0.7 : 0.5;
+  cam.yaw = station === 'room' && !orbit ? Math.atan2(Math.sin(cam.yaw), Math.cos(cam.yaw)) : THREE.MathUtils.clamp(cam.yaw, -yl, yl);
   cam.pitch = THREE.MathUtils.clamp(cam.pitch, orbit ? -0.12 : -0.3, orbit ? 0.22 : 0.3);
   if (orbit) {
     // in the dollhouse, dragging turns the little room on its plinth (the camera circles it)
@@ -2428,6 +2430,7 @@ $('card-body').addEventListener('click', (e) => {
     else if (a === 'tour-next') tourCard(Number(act.dataset.i));
     else if (a === 'tour-done') { markTour(); closeCard(); }
     else if (a === 'wake') { closeCard(); magic(); }
+    else if (a === 'choose-showcase') { closeCard(); HOST.chooseShowcase(); }
     else if (a === 'room-size') { closeCard(); if (HOST.openCustomize) HOST.openCustomize('room'); }
     else if (a === 'open-mine') { closeCard(); crossTo(home(), false); setTimeout(() => openOnDesk(id), 900); }
     else if (a === 'fam-want' && famPick && HOST.wantBook) { HOST.wantBook({ title: famPick.t, author: famPick.a, pages: famPick.p || null, olKey: famPick.k || null, cover: famPick.cv || null }); closeCard(); }
@@ -3009,6 +3012,7 @@ addEventListener('keydown', (e) => {
 // a bare wall over the mantel and in the reading corner, no ottoman or tea, no vine, a sleeping tome,
 // no display case. (Everything useful works from the first minute; this only changes how it looks.)
 function favourites() {
+  if (Array.isArray(lib.showcase)) return lib.showcase.map((id) => lib.books.find((b) => b.id === id)).filter(Boolean).slice(0, 5);
   if (Grow) return Grow.favourites(lib.books);
   return lib.books.filter((b) => (b.status || 'read') === 'read' && Number(b.rating) > 0).sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 5);
 }
@@ -3170,11 +3174,12 @@ function growIntro() {
 // ---------------------------------------------------------------- the display case
 function displayCard() {
   const favs = favourites();
-  if (!favs.length) return openCard(`<div class="eyebrow">Your favourites</div><h2>An empty case, for now</h2><div class="meta">Give your best books their stars and your top five stand here, behind glass.</div>`, 'display');
+  const choose = HOST && HOST.chooseShowcase ? `<div class="acts"><button type="button" data-act="choose-showcase">${lib.showcaseChosen ? 'Change what’s on display' : 'Choose what’s on display'}</button></div>` : '';
+  if (!favs.length) return openCard(`<div class="eyebrow">Your display case</div><h2>An empty case, for now</h2><div class="meta">Choose up to five books to stand here, behind glass. Your family sees them in the family room.</div>${choose}`, 'display');
   const stars = (r) => '★'.repeat(Math.round(Number(r) || 0));
-  openCard(`<div class="eyebrow">Your five favourites</div><h2>On display</h2>
+  openCard(`<div class="eyebrow">Your display case</div><h2>On display</h2>
     <ol class="fav-list">${favs.map((b) => `<li><button type="button" data-act="open-fav" data-id="${esc(b.id)}"><span class="fav-t">${esc(b.title)}</span><span class="fav-a">${esc(b.author || '')}</span><span class="fav-s">${stars(b.rating)}</span></button></li>`).join('')}</ol>
-    <div class="meta">${favs.length < 5 ? `Rate ${5 - favs.length} more ${5 - favs.length === 1 ? 'book' : 'books'} to fill the case. ` : ''}Highest rated first; the most recently finished among equals.</div>`, 'display');
+    <div class="meta">${lib.showcaseChosen ? 'Chosen by you, in your order.' : 'Tomestead picked your highest rated. Choose your own and your family sees them too.'}</div>${choose}`, 'display');
 }
 
 // ---------------------------------------------------------------- the family room
@@ -3190,7 +3195,7 @@ function familyData() {
 }
 function sampleFamily() {
   const names = ['Kathryn', 'Ryder', 'Grandma'];
-  return names.map((name, k) => ({ uid: 'u' + k, name, sig: 's', books: SAMPLE.slice(k * 3).concat(SAMPLE, SAMPLE).slice(0, 26 + k * 12).map(([title, author], i) => ({ t: title, a: author, s: i % 7 === 0 ? 'reading' : i % 5 === 0 ? 'want' : 'read', r: (i % 5) + 1, c: PALETTE[(i + k) % PALETTE.length][0], p: 200 + i * 13 })) }));
+  return names.map((name, k) => ({ uid: 'u' + k, name, sig: 's', books: SAMPLE.slice(k * 3).concat(SAMPLE, SAMPLE).slice(0, 26 + k * 12).map(([title, author], i) => ({ t: title, a: author, s: i % 7 === 0 ? 'reading' : i % 5 === 0 ? 'want' : 'read', r: (i % 5) + 1, c: PALETTE[(i + k) % PALETTE.length][0], p: 200 + i * 13, x: i < 3 + k ? i + 1 : undefined })) }));
 }
 function ensureFamily() {
   const d = familyData();
@@ -3236,7 +3241,7 @@ function famBookCard(b, who) {
   const mine = lib.books.find((x) => String(x.title).trim().toLowerCase() === String(b.t).trim().toLowerCase());
   famPick = b;
   openCard(`<div class="eyebrow">${esc(who)}’s shelf</div><h2>${esc(b.t)}</h2><div class="meta">${esc(b.a || '')}</div>
-    <div class="meta">${esc(st)}${stars ? ' · ' + stars : ''}${b.f ? ' · ' + esc(fmtDate(b.f)) : ''}</div>
+    <div class="meta">${esc(st)}${stars ? ' · ' + stars : ''}${b.f ? ' · ' + esc(fmtDate(b.f)) : ''}</div>${b.x ? `<div class="meta next-up">✦ In ${esc(who)}’s display case</div>` : ''}
     <div class="acts">${mine ? `<button type="button" class="quiet" data-act="open-mine" data-id="${esc(mine.id)}">On your shelves too</button>` : HOST ? '<button type="button" data-act="fam-want">Add to my to-read pile</button>' : ''}</div>`, 'fambook');
 }
 let famPick = null;
@@ -3244,6 +3249,8 @@ function famTap(px, py) {
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(world.fam.scene.children, true);
+  const sh = hits.find((h) => h.object.userData.famShow);
+  if (sh) { const u = sh.object.userData; if (station !== 'fam' + u.slot) return go('fam' + u.slot); return famBookCard(u.famShow, u.member); }
   const bk = hits.find((h) => h.object.userData.famBooks);
   const cs = hits.find((h) => h.object.userData.famCase !== undefined);
   if (bk && (!cs || bk.distance < cs.distance + 0.5)) {

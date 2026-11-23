@@ -557,6 +557,7 @@
     return dn || (user && user.email ? user.email.split('@')[0] : 'Me');
   }
   function shelfSummary() {
+    const show = hooks.showcase ? hooks.showcase() : [];
     const list = (hooks.books() || []).filter((b) => b && b.title).slice(0, 1200).map((b) => {
       const o = { t: String(b.title).slice(0, 140), a: String(b.author || '').slice(0, 80), s: ['read', 'reading', 'want', 'dnf'].includes(b.status) ? b.status : 'read' };
       if (Number(b.rating) > 0) o.r = Math.round(Number(b.rating) * 2) / 2;
@@ -566,7 +567,11 @@
       const ol = b.olKey || (b.art && b.art.olKey);
       if (ol && /^\/works\/OL\w+$/.test(ol)) o.k = ol;
       const cid = b.art && Array.isArray(b.art.ids) ? b.art.ids[b.art.i || 0] : null;
-      if (Number(cid) > 0) o.cv = Number(cid);
+      if (typeof cid === 'number' && cid > 0) o.cv = cid;
+      else if (typeof cid === 'string' && /^https:\/\//.test(cid)) o.cv = cid.slice(0, 400);
+      else if (b.art && b.art.status === 'upload' && typeof b.art.url === 'string' && /^https:\/\/firebasestorage/.test(b.art.url)) o.cv = b.art.url.slice(0, 400);
+      const rank = show.indexOf(b.id);
+      if (rank >= 0) o.x = rank + 1;
       const fin = [b.finished, ...(b.rereads || [])].filter(Boolean).sort().pop();
       if (fin) o.f = String(fin).slice(0, 10);
       if (b.addedAt) o.d = Number(b.addedAt) || 0;

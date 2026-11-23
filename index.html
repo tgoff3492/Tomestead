@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261122221619">
+  <link rel="stylesheet" href="room/room.css?v=20261123030659">
   <script>/* the reading room is home whenever this device can show it, so the old 2D opening never plays there */ try { var cv = document.createElement('canvas'); if (cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -576,6 +576,22 @@
   </dialog>
 
   <!-- What to read next -->
+  <dialog id="showcaseDialog" class="paper sc-dialog" aria-labelledby="scTitle">
+    <div class="rec-head">
+      <h2 id="scTitle">Your display case</h2>
+      <button type="button" class="rec-x" data-close aria-label="Close">×</button>
+    </div>
+    <div class="sc-body">
+      <p class="sc-hint">Choose up to five books to stand behind the glass. They stand in the order you pick them, and your family sees them in the family room.</p>
+      <input type="search" id="scSearch" placeholder="Find a book" autocomplete="off">
+      <p class="sc-count" id="scCount"></p>
+      <ul id="scList" class="sc-list"></ul>
+    </div>
+    <div class="sc-foot">
+      <button type="button" class="btn btn-ghost" id="scAuto">Let Tomestead choose</button>
+      <button type="button" class="btn btn-ink" id="scSave">Save</button>
+    </div>
+  </dialog>
   <dialog id="recDialog" class="paper rec-dialog" aria-labelledby="recTitle">
     <div class="rec-head">
       <h2 id="recTitle">What to read next</h2>

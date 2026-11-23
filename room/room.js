@@ -48077,7 +48077,7 @@ function buildDisplay(K, tier, favs) {
     }
     const gap = (w - 0.12) / 5, sc = Math.min(1.12, gap / (W + 0.025));
     favs.forEach((b, i) => {
-      const x = (i - 2) * gap;
+      const x = (i - (favs.length - 1) / 2) * gap;
       book(b, C, x, y0 + 0.012, d * 0.18, -1.2, 0, sc);
       plate(C, i, b, x, th - 0.085, d / 2 + 2e-3);
     });
@@ -48105,7 +48105,7 @@ function buildDisplay(K, tier, favs) {
     G.add(C);
     C.position.set(0, 0, 4.4);
     favs.forEach((b, i) => {
-      const x = (i - 2) * 0.82, z = Math.abs(i - 2) * 0.18;
+      const c = (favs.length - 1) / 2, x = (i - c) * 0.82, z = Math.abs(i - c) * 0.18;
       const P = new THREE.Group();
       C.add(P);
       P.position.set(x, 0, z);
@@ -48258,7 +48258,7 @@ function buildFamilyRoom(K, shelves, page = 0) {
     C.rotation.y = s.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
     box2(CW + 0.04, 0.1, CD + 0.02, M.caseDark, 0, 0.05, CD / 2, C);
     for (const sx of [-1, 1]) box2(0.05, CH - 0.1, CD, M.caseSide, sx * (CW / 2 - 0.025), 0.1 + (CH - 0.1) / 2, CD / 2, C);
-    box2(CW - 0.1, CH - 0.1, 0.02, M.recessWood || M.recess, 0, 0.1 + (CH - 0.1) / 2, 0.01, C);
+    box2(CW - 0.1, CH - 0.1, 0.02, M.recessWood || M.recess, 0, 0.1 + (CH - 0.1) / 2, 0.075, C);
     box2(CW + 0.08, 0.1, CD + 0.06, M.trim, 0, CH + 0.05, CD / 2 + 0.01, C);
     const rowH = (CH - 0.2) / ROWS, rows = [];
     for (let r = 0; r <= ROWS; r++) {
@@ -48270,9 +48270,25 @@ function buildFamilyRoom(K, shelves, page = 0) {
     const pl = mesh2(new THREE.PlaneGeometry(0.42, 0.07), K.std({ map: K.canvasTex(K.plateTex(`${mem.name} \xB7 ${nRead} read`, 768, 128), { repeat: false }), roughness: 0.35, metalness: 0.6 }), C, { cast: false });
     pl.position.set(0, CH + 0.05, CD + 0.042);
     const order = { reading: 0, want: 1, read: 2, dnf: 3 };
-    const list = [...mem.books].filter((b) => b.s !== "dnf").sort((a, b) => order[a.s] - order[b.s] || (b.d || 0) - (a.d || 0));
+    const show = mem.books.filter((b) => b.x).sort((a, b) => a.x - b.x).slice(0, 5);
+    show.forEach((b, k) => {
+      const W = 0.15, Hc = 0.225, T = 0.026, gap = (CW - 0.2) / 5;
+      const g = new THREE.Group();
+      C.add(g);
+      g.position.set((k - (show.length - 1) / 2) * gap, rows[ROWS - 1] + 5e-3, CD - 0.1);
+      g.rotation.x = -0.16;
+      const pseudo = { id: "fam:" + mem.uid + ":" + b.t, title: b.t, author: b.a, color: b.c, art: b.cv ? { status: "found", ids: [b.cv], i: 0 } : { status: "none" } };
+      const [bg] = K.colorOf(pseudo);
+      const cloth = K.std({ color: bg, roughness: 0.7 }), pages = K.std({ color: "#e7dabb", roughness: 0.95 });
+      const m = K.mesh(new THREE.BoxGeometry(W, Hc, T), [pages, cloth, cloth, cloth, K.coverMaterial(pseudo, W / Hc), cloth], g);
+      m.position.y = Hc / 2;
+      m.userData = { famShow: b, member: mem.name, slot: i };
+      box2(6e-3, 0.16, 6e-3, M.brass, 0, 0.08, -0.04, g).rotation.x = 0.3;
+    });
+    const showKeys = new Set(show.map((b) => b.t + "|" + b.a));
+    const list = [...mem.books].filter((b) => b.s !== "dnf" && !showKeys.has(b.t + "|" + b.a)).sort((a, b) => order[a.s] - order[b.s] || (b.d || 0) - (a.d || 0));
     const placed = [];
-    let row = ROWS - 1, x = -CW / 2 + 0.07;
+    let row = show.length ? ROWS - 2 : ROWS - 1, x = -CW / 2 + 0.07;
     for (const b of list) {
       const h0 = K.hash(b.t + "|" + b.a), pages = b.h ? b.h * 30 : b.p || 0;
       const t2 = (pages > 0 ? Math.min(60, Math.max(22, 18 + pages / 16)) : 24 + (h0 >>> 5) % 26) * 82e-5;
@@ -48312,7 +48328,7 @@ function buildFamilyRoom(K, shelves, page = 0) {
     hit.userData.famCase = i;
     C.add(hit);
     const t = new THREE.Vector3(s.x + s.dir * 0.1, 1.15, s.z), p = new THREE.Vector3(s.x + s.dir * 1.6, 1.4, s.z);
-    cases.push({ name: mem.name, more, count: list.length, station: { p: p.toArray(), t: t.toArray(), w: CW + 0.15, h: CH - 0.2, max: 2.6 }, pin: [s.x + s.dir * 0.2, CH + 0.28, s.z] });
+    cases.push({ name: mem.name, more, count: list.length + show.length, show: show.length, station: { p: p.toArray(), t: t.toArray(), w: CW + 0.15, h: CH - 0.2, max: 2.6 }, pin: [s.x + s.dir * 0.2, CH + 0.28, s.z] });
   });
   for (let i = members.length; i < 4; i++) {
     const s = SLOTS[i];
@@ -48959,7 +48975,7 @@ function sampleLibrary() {
 }
 function fromHost() {
   const d = HOST.data();
-  return { books: (d.books || []).filter((b) => b && b.id && b.title), theme: d.theme || {}, trophies: d.trophies || {}, earned: d.earned || {}, sample: false };
+  return { books: (d.books || []).filter((b) => b && b.id && b.title), theme: d.theme || {}, trophies: d.trophies || {}, earned: d.earned || {}, showcase: Array.isArray(d.showcase) ? d.showcase : null, showcaseChosen: !!d.showcaseChosen, sample: false };
 }
 var lib = HOST ? fromHost() : (() => {
   const l = loadLibrary();
@@ -51706,8 +51722,8 @@ function updateCamera(dt) {
     }
   }
   const orbit = station === "house" && !tween;
-  const yl = orbit ? 0.55 : portrait() ? 0.7 : 0.5;
-  cam.yaw = MathUtils.clamp(cam.yaw, -yl, yl);
+  const yl = orbit ? 0.55 : station === "room" ? Math.PI : portrait() ? 0.7 : 0.5;
+  cam.yaw = station === "room" && !orbit ? Math.atan2(Math.sin(cam.yaw), Math.cos(cam.yaw)) : MathUtils.clamp(cam.yaw, -yl, yl);
   cam.pitch = MathUtils.clamp(cam.pitch, orbit ? -0.12 : -0.3, orbit ? 0.22 : 0.3);
   if (orbit) {
     const tgt = cam.pos.clone().addScaledVector(cam.dir, cam.dist);
@@ -52179,6 +52195,9 @@ $("card-body").addEventListener("click", (e) => {
     } else if (a === "wake") {
       closeCard();
       magic();
+    } else if (a === "choose-showcase") {
+      closeCard();
+      HOST.chooseShowcase();
     } else if (a === "room-size") {
       closeCard();
       if (HOST.openCustomize) HOST.openCustomize("room");
@@ -52999,6 +53018,7 @@ addEventListener("keydown", (e) => {
   kick();
 });
 function favourites() {
+  if (Array.isArray(lib.showcase)) return lib.showcase.map((id) => lib.books.find((b) => b.id === id)).filter(Boolean).slice(0, 5);
   if (Grow) return Grow.favourites(lib.books);
   return lib.books.filter((b) => (b.status || "read") === "read" && Number(b.rating) > 0).sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 5);
 }
@@ -53244,11 +53264,12 @@ function growIntro() {
 }
 function displayCard() {
   const favs = favourites();
-  if (!favs.length) return openCard(`<div class="eyebrow">Your favourites</div><h2>An empty case, for now</h2><div class="meta">Give your best books their stars and your top five stand here, behind glass.</div>`, "display");
+  const choose = HOST && HOST.chooseShowcase ? `<div class="acts"><button type="button" data-act="choose-showcase">${lib.showcaseChosen ? "Change what\u2019s on display" : "Choose what\u2019s on display"}</button></div>` : "";
+  if (!favs.length) return openCard(`<div class="eyebrow">Your display case</div><h2>An empty case, for now</h2><div class="meta">Choose up to five books to stand here, behind glass. Your family sees them in the family room.</div>${choose}`, "display");
   const stars = (r) => "\u2605".repeat(Math.round(Number(r) || 0));
-  openCard(`<div class="eyebrow">Your five favourites</div><h2>On display</h2>
+  openCard(`<div class="eyebrow">Your display case</div><h2>On display</h2>
     <ol class="fav-list">${favs.map((b) => `<li><button type="button" data-act="open-fav" data-id="${esc(b.id)}"><span class="fav-t">${esc(b.title)}</span><span class="fav-a">${esc(b.author || "")}</span><span class="fav-s">${stars(b.rating)}</span></button></li>`).join("")}</ol>
-    <div class="meta">${favs.length < 5 ? `Rate ${5 - favs.length} more ${5 - favs.length === 1 ? "book" : "books"} to fill the case. ` : ""}Highest rated first; the most recently finished among equals.</div>`, "display");
+    <div class="meta">${lib.showcaseChosen ? "Chosen by you, in your order." : "Tomestead picked your highest rated. Choose your own and your family sees them too."}</div>${choose}`, "display");
 }
 var where = "main";
 var famStation = (n) => n === "family" || /^fam\d$/.test(n);
@@ -53261,7 +53282,7 @@ function familyData() {
 }
 function sampleFamily() {
   const names = ["Kathryn", "Ryder", "Grandma"];
-  return names.map((name, k) => ({ uid: "u" + k, name, sig: "s", books: SAMPLE.slice(k * 3).concat(SAMPLE, SAMPLE).slice(0, 26 + k * 12).map(([title, author], i) => ({ t: title, a: author, s: i % 7 === 0 ? "reading" : i % 5 === 0 ? "want" : "read", r: i % 5 + 1, c: PALETTE[(i + k) % PALETTE.length][0], p: 200 + i * 13 })) }));
+  return names.map((name, k) => ({ uid: "u" + k, name, sig: "s", books: SAMPLE.slice(k * 3).concat(SAMPLE, SAMPLE).slice(0, 26 + k * 12).map(([title, author], i) => ({ t: title, a: author, s: i % 7 === 0 ? "reading" : i % 5 === 0 ? "want" : "read", r: i % 5 + 1, c: PALETTE[(i + k) % PALETTE.length][0], p: 200 + i * 13, x: i < 3 + k ? i + 1 : void 0 })) }));
 }
 function ensureFamily() {
   const d = familyData();
@@ -53324,7 +53345,7 @@ function famBookCard(b, who) {
   const mine = lib.books.find((x) => String(x.title).trim().toLowerCase() === String(b.t).trim().toLowerCase());
   famPick = b;
   openCard(`<div class="eyebrow">${esc(who)}\u2019s shelf</div><h2>${esc(b.t)}</h2><div class="meta">${esc(b.a || "")}</div>
-    <div class="meta">${esc(st)}${stars ? " \xB7 " + stars : ""}${b.f ? " \xB7 " + esc(fmtDate(b.f)) : ""}</div>
+    <div class="meta">${esc(st)}${stars ? " \xB7 " + stars : ""}${b.f ? " \xB7 " + esc(fmtDate(b.f)) : ""}</div>${b.x ? `<div class="meta next-up">\u2726 In ${esc(who)}\u2019s display case</div>` : ""}
     <div class="acts">${mine ? `<button type="button" class="quiet" data-act="open-mine" data-id="${esc(mine.id)}">On your shelves too</button>` : HOST ? '<button type="button" data-act="fam-want">Add to my to-read pile</button>' : ""}</div>`, "fambook");
 }
 var famPick = null;
@@ -53332,6 +53353,12 @@ function famTap(px2, py2) {
   ndc.set(px2 / innerWidth * 2 - 1, -(py2 / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(world.fam.scene.children, true);
+  const sh = hits.find((h) => h.object.userData.famShow);
+  if (sh) {
+    const u = sh.object.userData;
+    if (station !== "fam" + u.slot) return go("fam" + u.slot);
+    return famBookCard(u.famShow, u.member);
+  }
   const bk = hits.find((h) => h.object.userData.famBooks);
   const cs = hits.find((h) => h.object.userData.famCase !== void 0);
   if (bk && (!cs || bk.distance < cs.distance + 0.5)) {

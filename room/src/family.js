@@ -65,7 +65,7 @@ export function buildFamilyRoom(K, shelves, page = 0) {
     // frame
     box(CW + 0.04, 0.1, CD + 0.02, M.caseDark, 0, 0.05, CD / 2, C);
     for (const sx of [-1, 1]) box(0.05, CH - 0.1, CD, M.caseSide, sx * (CW / 2 - 0.025), 0.1 + (CH - 0.1) / 2, CD / 2, C);
-    box(CW - 0.1, CH - 0.1, 0.02, M.recessWood || M.recess, 0, 0.1 + (CH - 0.1) / 2, 0.01, C);
+    box(CW - 0.1, CH - 0.1, 0.02, M.recessWood || M.recess, 0, 0.1 + (CH - 0.1) / 2, 0.075, C);   // in front of the panelling and chair rail
     box(CW + 0.08, 0.1, CD + 0.06, M.trim, 0, CH + 0.05, CD / 2 + 0.01, C);
     const rowH = (CH - 0.2) / ROWS, rows = [];
     for (let r = 0; r <= ROWS; r++) { const y = 0.1 + r * rowH; box(CW - 0.1, 0.025, CD - 0.02, M.caseShelf, 0, y, CD / 2, C); if (r < ROWS) rows.push(y + 0.0125); }
@@ -75,9 +75,25 @@ export function buildFamilyRoom(K, shelves, page = 0) {
     pl.position.set(0, CH + 0.05, CD + 0.042);
     // their books: reading now, then to read, then read (newest first), as many as fit
     const order = { reading: 0, want: 1, read: 2, dnf: 3 };
-    const list = [...mem.books].filter((b) => b.s !== 'dnf').sort((a, b) => (order[a.s] - order[b.s]) || ((b.d || 0) - (a.d || 0)));
+    // their display case: the books they chose stand face out on the top shelf
+    const show = mem.books.filter((b) => b.x).sort((a, b) => a.x - b.x).slice(0, 5);
+    show.forEach((b, k) => {
+      const W = 0.15, Hc = 0.225, T = 0.026, gap = (CW - 0.2) / 5;
+      const g = new THREE.Group(); C.add(g);
+      g.position.set((k - (show.length - 1) / 2) * gap, rows[ROWS - 1] + 0.005, CD - 0.1); g.rotation.x = -0.16;
+      const pseudo = { id: 'fam:' + mem.uid + ':' + b.t, title: b.t, author: b.a, color: b.c, art: b.cv ? { status: 'found', ids: [b.cv], i: 0 } : { status: 'none' } };
+      const [bg] = K.colorOf(pseudo);
+      const cloth = K.std({ color: bg, roughness: 0.7 }), pages = K.std({ color: '#e7dabb', roughness: 0.95 });
+      const m = K.mesh(new THREE.BoxGeometry(W, Hc, T), [pages, cloth, cloth, cloth, K.coverMaterial(pseudo, W / Hc), cloth], g);
+      m.position.y = Hc / 2;
+      m.userData = { famShow: b, member: mem.name, slot: i };
+      // a small brass stand behind it
+      box(0.006, 0.16, 0.006, M.brass, 0, 0.08, -0.04, g).rotation.x = 0.3;
+    });
+    const showKeys = new Set(show.map((b) => b.t + '|' + b.a));
+    const list = [...mem.books].filter((b) => b.s !== 'dnf' && !showKeys.has(b.t + '|' + b.a)).sort((a, b) => (order[a.s] - order[b.s]) || ((b.d || 0) - (a.d || 0)));
     const placed = [];
-    let row = ROWS - 1, x = -CW / 2 + 0.07;
+    let row = show.length ? ROWS - 2 : ROWS - 1, x = -CW / 2 + 0.07;
     for (const b of list) {
       const h0 = K.hash(b.t + '|' + b.a), pages = b.h ? b.h * 30 : b.p || 0;
       const t = (pages > 0 ? Math.min(60, Math.max(22, 18 + pages / 16)) : 24 + ((h0 >>> 5) % 26)) * 0.00082;
@@ -114,7 +130,7 @@ export function buildFamilyRoom(K, shelves, page = 0) {
     hit.position.set(0, CH / 2, CD / 2); hit.userData.famCase = i; C.add(hit);
     // where the camera stands to read this case (in the room's own coordinates)
     const t = new THREE.Vector3(s.x + s.dir * 0.1, 1.15, s.z), p = new THREE.Vector3(s.x + s.dir * 1.6, 1.4, s.z);
-    cases.push({ name: mem.name, more, count: list.length, station: { p: p.toArray(), t: t.toArray(), w: CW + 0.15, h: CH - 0.2, max: 2.6 }, pin: [s.x + s.dir * 0.2, CH + 0.28, s.z] });
+    cases.push({ name: mem.name, more, count: list.length + show.length, show: show.length, station: { p: p.toArray(), t: t.toArray(), w: CW + 0.15, h: CH - 0.2, max: 2.6 }, pin: [s.x + s.dir * 0.2, CH + 0.28, s.z] });
   });
   // an empty slot shows a bare case with a note
   for (let i = members.length; i < 4; i++) {

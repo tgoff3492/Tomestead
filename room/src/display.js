@@ -70,7 +70,7 @@ export function buildDisplay(K, tier, favs) {
     }
     const gap = (w - 0.12) / 5, sc = Math.min(1.12, gap / (W + 0.025));
     favs.forEach((b, i) => {
-      const x = (i - 2) * gap;
+      const x = (i - (favs.length - 1) / 2) * gap;
       book(b, C, x, y0 + 0.012, d * 0.18, -1.2, 0, sc);
       plate(C, i, b, x, th - 0.085, d / 2 + 0.002);
     });
@@ -94,7 +94,7 @@ export function buildDisplay(K, tier, favs) {
     // ---- five pedestals across the nave, each with its own glass case
     const C = new THREE.Group(); G.add(C); C.position.set(0, 0, 4.4);
     favs.forEach((b, i) => {
-      const x = (i - 2) * 0.82, z = Math.abs(i - 2) * 0.18;
+      const c = (favs.length - 1) / 2, x = (i - c) * 0.82, z = Math.abs(i - c) * 0.18;
       const P = new THREE.Group(); C.add(P); P.position.set(x, 0, z);
       // a marble column with a gilt capital
       box(0.4, 0.08, 0.4, M.stoneSurround, 0, 0.04, 0, P);

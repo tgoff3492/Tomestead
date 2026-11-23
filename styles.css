@@ -1941,3 +1941,20 @@ html.room-mode #stage::before { height: calc(env(safe-area-inset-top) + 140px); 
 .cz-check { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: .95rem; }
 .cz-field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: .85rem; color: var(--ink-soft); }
 .cz-field input { font: inherit; font-size: 1rem; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(42,30,22,.25); background: rgba(255,255,255,.6); color: var(--ink); max-width: 260px; }
+/* the display case picker */
+dialog.paper.sc-dialog { width: min(560px, calc(100vw - 24px)); padding: 0; }
+.sc-body { padding: 4px 22px 0; }
+.sc-hint { margin: 0 0 10px; color: var(--ink-soft); font-size: .92rem; }
+#scSearch { width: 100%; font: inherit; font-size: 1rem; padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(42,30,22,.25); background: rgba(255,255,255,.6); color: var(--ink); }
+.sc-count { margin: 8px 0 6px; font-size: .82rem; color: #7a5520; }
+.sc-list { list-style: none; margin: 0; padding: 0; max-height: min(52vh, 440px); overflow-y: auto; }
+.sc-row { display: grid; grid-template-columns: 34px 1fr 2.2em; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 7px 6px; border: 0; border-bottom: 1px solid rgba(42,30,22,.1); background: none; color: var(--ink); font: inherit; cursor: pointer; border-radius: 8px; }
+.sc-row .thumb, .sc-row .chip { width: 34px; height: 50px; object-fit: cover; border-radius: 2px 4px 4px 2px; display: block; }
+.sc-row .chip { background: var(--bg); }
+.sc-t { font-family: var(--serif); font-size: 1.02rem; line-height: 1.2; }
+.sc-t small { display: block; font-family: var(--sans); font-size: .78rem; color: var(--ink-soft); margin-top: 2px; }
+.sc-n { justify-self: end; width: 2em; height: 2em; border-radius: 50%; display: grid; place-items: center; font-family: var(--serif); font-size: .85rem; border: 1.5px solid rgba(167,122,38,.45); color: #7a5520; }
+.sc-row.on { background: rgba(201,161,91,.18); }
+.sc-row.on .sc-n { background: linear-gradient(#e6c886, #b8904a); color: #2a1a0e; border-color: #a77a26; }
+.sc-empty { padding: 14px 4px; color: var(--ink-soft); }
+.sc-foot { display: flex; justify-content: space-between; gap: 10px; padding: 14px 22px 18px; }

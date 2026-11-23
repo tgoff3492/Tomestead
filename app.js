@@ -2681,6 +2681,7 @@
     });
 
     document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => btn.closest('dialog').close()));
+    wireShowcasePicker();
     document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
     $('#bookForm').addEventListener('submit', submitEditor);
     // the add / edit form
@@ -2984,7 +2985,7 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null, earned: prefs.earned || null, family: prefs.family || null };
+    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null, earned: prefs.earned || null, family: prefs.family || null, showcase: Array.isArray(prefs.showcase) ? prefs.showcase : null };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
@@ -3005,6 +3006,7 @@
     // what the room has earned is kept forever: join both sides rather than replace
     if (s.earned && typeof s.earned === 'object') prefs.earned = Object.assign({}, s.earned, prefs.earned || {});
     if (s.family && typeof s.family === 'object') prefs.family = cleanFamily(s.family);
+    if ('showcase' in s) prefs.showcase = Array.isArray(s.showcase) ? s.showcase.filter(x => typeof x === 'string').slice(0, 5) : null;
     savePrefsHere();
     renderTimer();
     if (calendar) calendar.refresh();
@@ -3088,6 +3090,7 @@
       applySettings,
       onReady: () => { offerLegacy(); syncCovers(); syncEarned(); },
       family: () => prefs.family,
+      showcase: () => showcaseIds(),
     });
     // the family's shelves arrived: the family room restocks
     window.addEventListener('tomestead:familyshelves', () => roomRefresh());
@@ -3105,6 +3108,66 @@
       .sort((p, q) => Number(p.seriesNo) - Number(q.seriesNo));
     if (later.length) return { book: later[0] };
     return { no: Math.floor(no) + 1 };
+  }
+  // ---------- the display case: up to five books you choose (or, until you do, your five highest rated) ----------
+  const SHOW_MAX = 5;
+  const chosenShowcase = () => Array.isArray(prefs.showcase);
+  function showcaseIds() {
+    if (chosenShowcase()) return prefs.showcase.filter(id => books.some(b => b.id === id)).slice(0, SHOW_MAX);
+    return (Grow ? Grow.favourites(books, SHOW_MAX) : []).map(b => b.id);
+  }
+  function setShowcase(ids) {
+    prefs.showcase = ids === null ? null : [...new Set(ids)].slice(0, SHOW_MAX);
+    savePrefs(); render();
+    if (reader && reader.currentId()) reader.refresh();
+    if (Sync.publishShelf) Sync.publishShelf();
+  }
+  function toggleShowcase(b) {
+    const ids = showcaseIds();
+    if (ids.includes(b.id)) { setShowcase(ids.filter(x => x !== b.id)); toast(`“${b.title}” is out of your display case.`); return; }
+    if (ids.length >= SHOW_MAX) { openShowcasePicker(b.id); return; }
+    setShowcase([...ids, b.id]);
+    toast(`“${b.title}” is in your display case.`);
+  }
+  // the picker: your books, highest rated first; tick up to five (they stand in the order ticked)
+  let showPick = [];
+  function openShowcasePicker(add) {
+    const dlg = $('#showcaseDialog');
+    showPick = showcaseIds();
+    if (add && !showPick.includes(add)) { if (showPick.length >= SHOW_MAX) toast('Your case holds five. Untick one to make room.'); else showPick.push(add); }
+    $('#scSearch').value = '';
+    paintShowcasePicker(add);
+    if (!dlg.open) dlg.showModal();
+  }
+  function paintShowcasePicker(focus) {
+    const q = $('#scSearch').value.trim().toLowerCase();
+    const last = (b) => [b.finished, ...(b.rereads || [])].filter(Boolean).sort().pop() || '';
+    const order = { read: 0, reading: 1, dnf: 2, want: 3 };
+    const list = books.filter(b => !q || `${b.title} ${b.author || ''}`.toLowerCase().includes(q))
+      .sort((a, b) => (showPick.includes(b.id) - showPick.includes(a.id)) || (order[statusOf(a)] - order[statusOf(b)]) || ((b.rating || 0) - (a.rating || 0)) || last(b).localeCompare(last(a)));
+    $('#scCount').textContent = `${showPick.length} of ${SHOW_MAX} chosen${chosenShowcase() ? '' : ' (right now Tomestead picks your highest rated)'}`;
+    $('#scList').innerHTML = list.slice(0, 200).map(b => {
+      const n = showPick.indexOf(b.id) + 1;
+      const stars = b.rating ? '★'.repeat(Math.floor(b.rating)) + (b.rating % 1 ? '½' : '') : '';
+      return `<li><button type="button" class="sc-row${n ? ' on' : ''}" data-sc="${esc(b.id)}" aria-pressed="${!!n}">
+        ${thumbHTML(b)}<span class="sc-t">${esc(b.title)}<small>${esc(b.author || '')}${stars ? ' · ' + stars : ''}</small></span>
+        <span class="sc-n" aria-hidden="true">${n ? ['I', 'II', 'III', 'IV', 'V'][n - 1] : ''}</span></button></li>`;
+    }).join('') || '<li class="sc-empty">No books match.</li>';
+    wireThumbs($('#scList'));
+    if (focus) { const el = $('#scList').querySelector(`[data-sc="${CSS.escape(focus)}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }
+  }
+  function wireShowcasePicker() {
+    $('#scSearch').addEventListener('input', () => paintShowcasePicker());
+    $('#scList').addEventListener('click', e => {
+      const r = e.target.closest('[data-sc]'); if (!r) return;
+      const id = r.dataset.sc;
+      if (showPick.includes(id)) showPick = showPick.filter(x => x !== id);
+      else if (showPick.length >= SHOW_MAX) { toast('Your case holds five. Untick one to make room.'); return; }
+      else showPick.push(id);
+      paintShowcasePicker();
+    });
+    $('#scAuto').addEventListener('click', () => { setShowcase(null); $('#showcaseDialog').close(); toast('Tomestead will show your five highest rated.'); });
+    $('#scSave').addEventListener('click', () => { setShowcase(showPick); $('#showcaseDialog').close(); toast(showPick.length ? 'Your display case is set.' : 'Your display case is empty for now.'); });
   }
   function toggleUpNext(b) {
     b.upNext = b.upNext ? null : Date.now();
@@ -3135,6 +3198,7 @@
     } else {
       d.action = { rd: 'again', label: 'Read it again', quiet: true };
     }
+    if (st === 'read' || st === 'dnf' || st === 'reading') (d.links = d.links || []).push({ rd: 'showcase', label: showcaseIds().includes(b.id) ? 'Take it out of my display case' : 'Put it in my display case' });
     if (dates.length > 1) d.reads = `Read ${dates.length} times: ${dates.map(x => fmtDate(x)).join(', ')}`;
     else if (dates.length) d.reads = `Finished ${fmtDate(dates[0])}${b.started && st === 'read' && b.started <= dates[0] ? ` · started ${fmtDate(b.started)}` : ''}`;
     else if (b.started && st !== 'want') d.reads = `Started ${fmtDate(b.started)}`;
@@ -3161,7 +3225,8 @@
     return el;
   }
   window.TomesteadRoomHost = {
-    data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies, earned: prefs.earned || {} }),
+    data: () => ({ books, theme: prefs.theme, trophies: prefs.trophies, earned: prefs.earned || {}, showcase: showcaseIds(), showcaseChosen: chosenShowcase() }),
+    chooseShowcase: () => openShowcasePicker(),
     arrivals: () => { const q = loadJSON(ARRIVE_KEY, []); return Array.isArray(q) ? q : []; },
     arrived: (key) => { const q = loadJSON(ARRIVE_KEY, []); try { localStorage.setItem(ARRIVE_KEY, JSON.stringify((Array.isArray(q) ? q : []).filter(k => k !== key))); } catch {} },
     nextUnlock: () => (Grow ? Grow.next(books, prefs.earned || {}) : null),
@@ -3202,7 +3267,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261122221619').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261123030659').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
@@ -3222,6 +3287,7 @@
       else if (act === 'quote-add') openQuote(id);
       else if (act === 'quote') openQuote(id, el.dataset.q);
       else if (act === 'upnext') toggleUpNext(b);
+      else if (act === 'showcase') toggleShowcase(b);
       else if (act === 'dnf') setAside(b);
       else if (act === 'goto' && el.dataset.id) reader.putBack().then(() => openDetail(el.dataset.id, null));
       else if (act === 'series-next') {
