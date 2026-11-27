@@ -1,5 +1,5 @@
 /* Tomestead service worker: always fresh when online, still works offline */
-const VERSION = 'tomestead-v53';
+const VERSION = 'tomestead-v54';
 const SHELL = [
   './',
   'index.html',
@@ -49,12 +49,16 @@ const SHELL = [
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
 ];
+const ROOM = ['room/room.js', 'room/room.css'];
 const FIREBASE = ['app', 'auth', 'firestore', 'storage'].map((n) => `https://www.gstatic.com/firebasejs/13.3.0/firebase-${n}.js`);
 
 self.addEventListener('install', (event) => {
   // the sign-in code is cached too, so a signed-in reader can open the app offline (not fatal if it fails)
   event.waitUntil(caches.open(VERSION)
-    .then((c) => c.addAll(SHELL).then(() => c.addAll(FIREBASE).catch(() => {})))
+    .then((c) => c.addAll(SHELL)
+      // the reading room too (kept under its plain address), so a weak signal can't keep it from opening
+      .then(() => c.addAll(ROOM).catch(() => {}))
+      .then(() => c.addAll(FIREBASE).catch(() => {})))
     .then(() => self.skipWaiting()));
 });
 
@@ -86,7 +90,9 @@ self.addEventListener('fetch', (event) => {
       // App files: get the newest copy when online, fall back to the saved copy offline.
       try {
         const res = await fetch(req);
-        if (res && (res.ok || (res.type === 'opaque' && !isCover))) cache.put(key, res.clone());
+        if (res && (res.ok || (res.type === 'opaque' && !isCover))) { cache.put(key, res.clone()); return res; }
+        // a server error (e.g. mid-deploy) shouldn't beat a good saved copy
+        if (res && res.status >= 500 && cached) return cached;
         return res;
       } catch {
         return cached || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());

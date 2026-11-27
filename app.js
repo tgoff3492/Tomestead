@@ -92,7 +92,10 @@
   let canRoom = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext && c.getContext('webgl2')); } catch { return false; } })();
   // the reading room is home: the app always opens there (Room · Classic · List still switches any time)
   if (canRoom) prefs.view = 'room';
-  const viewNow = () => (prefs.view === 'room' && !canRoom ? 'shelf' : prefs.view);
+  // set when the room's code couldn't be loaded this time (a weak signal, a deploy in progress):
+  // the classic shelf stands in until the room loads, and tapping Room tries again
+  let roomBroken = false;
+  const viewNow = () => (prefs.view === 'room' && (!canRoom || roomBroken) ? 'shelf' : prefs.view);
   prefs.recs = prefs.recs || { dismissed: [] };
   // days marked as reading days by hand (the reading calendar), and a reading session in progress
   const cleanMarks = (a) => (Array.isArray(a) ? [...new Set(a.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(String(d))))].sort().slice(-3000) : []);
@@ -2663,6 +2666,7 @@
 
     $('#addBtn').addEventListener('click', () => openEditor());
     document.querySelectorAll('.viewtoggle button').forEach(btn => btn.addEventListener('click', () => {
+      if (btn.dataset.view === 'room') roomBroken = false;
       prefs.view = btn.dataset.view; savePrefs(); render();
     }));
     $('#sort').addEventListener('change', e => { prefs.sort = e.target.value; savePrefs(); caseIndex = 0; render(); });
@@ -2893,7 +2897,7 @@
     $('#feedbackBtn').addEventListener('click', () => { more.open = false; openFeedback(); });
     $('#tourBtn').addEventListener('click', () => {
       more.open = false;
-      if (viewNow() !== 'room') { prefs.view = 'room'; savePrefs(); render(); }
+      if (viewNow() !== 'room') { roomBroken = false; prefs.view = 'room'; savePrefs(); render(); }
       const go = () => (window.TomesteadRoom ? window.TomesteadRoom.tour() : setTimeout(go, 300));
       go();
     });
@@ -3329,7 +3333,24 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261127111236').catch(() => window.TomesteadRoomHost.unavailable());
+    loadRoom(0);
+  }
+  // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
+  // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
+  // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
+  const ROOM_SRC = './room/room.js?v=20261127111236';
+  function loadRoom(attempt) {
+    // a failed import can be remembered for its exact address, so each retry asks with a fresh one
+    import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {
+      if (window.TomesteadRoom || !canRoom) return;   // it got going after all, or there's no WebGL
+      if (attempt < 3) { setTimeout(() => loadRoom(attempt + 1), [1500, 3000, 6000][attempt]); return; }
+      roomLoading = false;
+      roomBroken = true;
+      reportErr('Reading room failed to load: ' + (err && err.message ? err.message : String(err)), ROOM_SRC, err && err.stack);
+      document.documentElement.classList.remove('room-mode');
+      render();
+      toast('Couldn’t open the reading room just now. Tap Room to try again.');
+    });
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');
