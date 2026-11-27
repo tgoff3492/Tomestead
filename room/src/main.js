@@ -11,7 +11,6 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { buildShell } from './shell.js';
 import { buildDisplay } from './display.js';
 import { buildFamilyRoom } from './family.js';
-import { createWalker } from './walk.js';
 import { buildPortraits } from './portraits.js';
 
 // When the room runs inside the Tomestead app, the app hands over its books and its screens
@@ -1962,55 +1961,6 @@ function applyTierStations(sh) {
     : T === 'library' ? { p: [1.45, 1.7, 5.95], t: [-0.45, 2.35, -1.6], w: 4.4, h: 2.6, max: 9.6 }
     : { p: [1.0, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 });
 }
-// ---------------------------------------------------------------- walking (walk.js)
-// Where you can walk in each size of room, and what's in the way (outlines on the floor, metres)
-function walkWorld(T) {
-  const zF = T === 'hall' ? 10.3 : T === 'library' ? 6.3 : 2.7;
-  const zones = [{ z0: -99, z1: 2.9, x0: -3, x1: 3 }, { z0: 2.9, z1: 99, x0: T === 'study' ? -3 : -2.66, x1: T === 'study' ? 3 : 2.66 }];
-  const ob = [
-    { x0: -3, x1: -2.05, z0: -1.4, z1: 0.2 },       // the desk
-    { x: -1.95, z: -0.55, r: 0.3 },                 // its chair
-    { x0: -3, x1: -2.25, z0: 0.75, z1: 2.6 },       // the fireplace and hearth
-    { x0: -0.9, x1: 0.9, z0: -2.7, z1: -2.2 },      // the bookcase
-    { x: -1.6, z: -2.45, r: 0.3 }, { x: -2.5, z: -2.2, r: 0.42 },   // the clock, the big plant
-    { x: 1.75, z: -2.0, r: 0.5 }, { x: 2.55, z: -2.38, r: 0.32 },   // the armchair, the side table
-    { x: 2.25, z: 0.1, r: 0.45 },                   // the tome on its branches
-  ];
-  if (shown('ottoman')) ob.push({ x: 1.2, z: -1.2, r: 0.35 });
-  if (shown('display')) {
-    if (T === 'study') ob.push({ x0: 2.35, x1: 3, z0: 1.3, z1: 2.4 });
-    if (T === 'library') ob.push({ x0: -0.72, x1: 0.72, z0: 3.9, z1: 4.6 });
-    if (T === 'hall') for (let i = 0; i < 5; i++) ob.push({ x: (i - 2) * 0.82, z: 4.4 + Math.abs(i - 2) * 0.18, r: 0.24 });
-  }
-  if (T !== 'study') ob.push({ x: -1.84, z: zF - 1.15, r: 0.85 });                              // the spiral stair
-  if (T === 'hall') ob.push({ x0: -0.95, x1: 0.95, z0: 6.0, z1: 9.0 });                          // the reading table and chairs
-  // the spiral stair up to the gallery (shell.js), and the gallery's walkway: a strip along each wall,
-  // between the bookcases and the railing
-  let more = {};
-  if (T !== 'study') {
-    const cx = -3 + 1.16, cz = zF - 1.15, GD = 0.85, ru = 0.15, w0 = 3 - 0.36 - ru, w1 = 3 - GD - ru, zb0 = -2.7 + 0.36 + ru, zb1 = -2.7 + GD - ru, zf0 = zF - GD + ru, zf1 = zF - 0.36 - ru;
-    more = {
-      stair: { cx, cz, top: 3.12, a0: -Math.PI / 2, span: Math.PI * 1.75, foot: [cx + 1.2, cz + 0.15], land: [-w0 + 0.08, zf1 - 0.08] },
-      upper: { rects: [{ x0: -w0, x1: -w1, z0: zb0, z1: zf1 }, { x0: w1, x1: w0, z0: zb0, z1: zf1 }, { x0: -w0, x1: w0, z0: zb0, z1: zb1 }, { x0: -w0, x1: w0, z0: zf0, z1: zf1 }] },
-    };
-  }
-  return { bounds: { zones, zMin: -2.7, zMax: T === 'study' ? 2.7 : zF - 0.36 }, obstacles: ob, more };
-}
-let walker = null;
-function startWalk() {
-  if (!world || where !== 'main' || outBook) return;
-  putBack(); closeCard();
-  let p = cam.pos.clone(), d = lookDir();
-  if (station === 'house') { const f = framing('room'); p = f.pos; d = f.dir; isOut = true; }
-  const w = walkWorld(world.shell.tier);
-  walker.setWorld(w.bounds, w.obstacles, w.more);
-  tween = null; station = 'walk'; pressStation('walk');
-  cam.yaw = 0; cam.pitch = 0; cam.vyaw = 0; cam.vpitch = 0;
-  setFov(baseFov());
-  walker.start(p, d);
-  shelfTools();
-  showHint(isPhone ? 'Thumbstick to walk · drag to look around' : 'W A S D to walk · Q E to turn · drag to look · Esc to stop', 4200, 200);
-}
 // a cover for the display case: the plain cloth one at once, the real picture once it loads
 function coverMaterial(b, aspect) {
   const mat = std({ map: canvasTex(plainCover(b, aspect), { repeat: false }), roughness: 0.5 });
@@ -2131,7 +2081,6 @@ function go(name, dur = 1.5, { arrive = true } = {}) {
 }
 // just the camera move
 function glide(name, dur, arrive) {
-  if (walker && walker.on && name !== 'walk') walker.stop();
   if ((famStation(name) ? 'family' : 'main') !== where) { crossTo(name, arrive); return; }
   if (calm.matches) dur = Math.min(dur, 0.35);
   if (station === 'house' && !tween) bakeOrbit();
@@ -2197,7 +2146,7 @@ function welcomeCard() {
     <div class="acts"><button type="button" data-act="add">Add your first book</button><button type="button" class="quiet" data-act="import">Import from Goodreads or StoryGraph</button><button type="button" class="quiet" data-act="tour">Show me around</button></div>`, 'welcome');
 }
 const TOUR = [
-  ['Getting around', 'Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom to walk over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse.'],
+  ['Getting around', 'Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom and the view glides over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse.'],
   ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes off the shelf into your hands: tap the cover to open it, or anywhere else to put it back. Drag to slide along the shelves; the magnifier finds any book.'],
   ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next.'],
   ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback.'],
@@ -2220,8 +2169,8 @@ function lookDir() {
   return d;
 }
 function updateCamera(dt) {
-  if (station === 'walk' && !tween && walker && walker.on) {
-    walker.step(dt, cam.pos, cam.dir);
+  // (test page ?cam=…) the camera held wherever it was put
+  if (station === 'free' && !tween) {
     cam.dist = 1; cam.yaw = 0; cam.pitch = 0;
     camera.position.copy(cam.pos);
     camera.lookAt(cam.pos.clone().add(cam.dir));
@@ -2325,7 +2274,6 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
   if (drag.moved < 6 || outBook) return;
-  if (station === 'walk' && walker.on) { walker.look(dx, dy); return; }
   if (station === 'shelf' && !searching) {
     // at the bookcase, dragging slides the view along the shelves (like the classic bookcase scrolls)
     const lim = shelfPan();
@@ -3247,18 +3195,6 @@ function clockText(ms) {
 }
 $('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { if (outBook.phase === 'held') putAway(); else closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go === 'room' ? home() : b.dataset.go); kick(); }));
-// the Walk button: once the room is big enough to roam (and while you're in it, not the family room)
-function walkButton() {
-  const bar = document.querySelector('.stations'); if (!bar || !world) return;
-  let b = bar.querySelector('[data-go="walk"]');
-  const on = world.shell.tier !== 'study' && where === 'main';
-  if (!on) { if (b) b.remove(); if (station === 'walk') go(home()); return; }
-  if (b) return;
-  b = document.createElement('button'); b.type = 'button'; b.dataset.go = 'walk'; b.textContent = 'Walk'; b.setAttribute('aria-pressed', String(station === 'walk'));
-  b.addEventListener('click', () => { if (station === 'walk') go(home()); else startWalk(); kick(); });
-  const fam = bar.querySelector('[data-go="family"]');
-  bar.insertBefore(b, fam || null);
-}
 // the Family button: for family accounts, beside the others
 function familyButton() {
   const bar = document.querySelector('.stations'); if (!bar) return;
@@ -3280,7 +3216,7 @@ addEventListener('keydown', (e) => {
   if (station === 'shelf' && e.key === 'Enter' && pulled) { e.preventDefault(); openOnDesk(pulled.userData.book.id); return; }
   if (station === 'shelf' && (e.key === '/' || (e.key === 'f' && (e.metaKey || e.ctrlKey)))) { e.preventDefault(); openSearch(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') go(order[(Math.max(0, order.indexOf(isHome(station) ? home() : station)) + (e.key === 'ArrowRight' ? 1 : 4)) % 5]);
-  if (e.key === 'Escape') { if (outBook && outBook.phase === 'held') { putAway(); return; } if (station === 'walk') go(home()); putBack(); closeCard(); }
+  if (e.key === 'Escape') { if (outBook && outBook.phase === 'held') { putAway(); return; } putBack(); closeCard(); }
   kick();
 });
 
@@ -3367,8 +3303,6 @@ function rebuildShell(tier) {
   world.shell = sh;
   applyTierStations(sh);
   buildPortraitsNow();
-  if (walker && walker.on) { const w = walkWorld(tier); walker.setWorld(w.bounds, w.obstacles, w.more); }
-  setTimeout(walkButton, 0);
   buildDisplayNow();
   world.applyLook();
   sh.group.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
@@ -3507,7 +3441,7 @@ function crossTo(name, arrive) {
     const f = framing(name); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist;
     renderer.shadowMap.needsUpdate = true;
     updateCamera(0);
-  }).then(() => { if (arrive) arrived(name); shelfTools(); walkButton(); });
+  }).then(() => { if (arrive) arrived(name); shelfTools(); });
 }
 function familyCard() {
   const d = familyData(), fam = world.fam;
@@ -3657,7 +3591,7 @@ function resize() {
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
-  if (world && !tween && station !== 'walk') { const f = framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
+  if (world && !tween && station !== 'free') { const f = framing(station); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
   kick();
 }
 addEventListener('resize', resize);
@@ -3775,7 +3709,7 @@ function refresh() {
     ensureFamily();
     if (world.fam !== before && !STATIONS[station]) { station = 'family'; const f = framing('family'); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
   }
-  familyButton(); walkButton();
+  familyButton();
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
   if (!$('card').hidden && cardKind === 'hearth') hearthCard();
@@ -3813,7 +3747,6 @@ function setActive(on) {
 
 (async () => {
   resize();
-  walker = createWalker({ THREE, root: canvas.parentElement, kick });
   world = await build();
   lastSig = libSig();
   lastPaint = paintSig(); hangPaintings();
@@ -3824,7 +3757,7 @@ function setActive(on) {
   if (HOST && HOST.arrivals) pendingArrive = HOST.arrivals().filter((k) => earnedNow()[k]);
   lastEarned = ''; syncShown();
   if (world.shell.tier !== tierNow()) rebuildShell(tierNow());
-  familyButton(); walkButton();
+  familyButton();
   frameShelf();
   const start = params.get('st') && (STATIONS[params.get('st')] || famStation(params.get('st')) || params.get('st') === 'display') ? params.get('st') : null;
   const f = framing(start && STATIONS[start] && !famStation(start) ? start : 'room');
@@ -3846,7 +3779,7 @@ function setActive(on) {
     resize(); shelfTools();
   };
   const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
-  window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), walk: (x, z) => { if (HOST) return; if (!walker.on) startWalk(); if (x != null) walker.place(x, z); }, tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
+  window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // something earned while a dialog was open (or the room was busy) arrives once things are quiet
   setInterval(() => { if (pendingArrive.length) playArrival(); }, 2500);
@@ -3864,7 +3797,7 @@ function setActive(on) {
   requestAnimationFrame(() => {
     veil.classList.add('gone');
     setTimeout(() => veil.remove(), 1400);
-    if (camQ && camQ.length === 6) { station = 'walk'; }
+    if (camQ && camQ.length === 6) { station = 'free'; }
     else if (!start && !customizing) go(home(), 2.6);
     else if (famStation(start)) { crossTo(start, false); }
     else { station = start; pressStation(start); if (start === 'house') setFov(fovFor('house')); shelfTools(); }

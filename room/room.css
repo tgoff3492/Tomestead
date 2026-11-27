@@ -178,12 +178,7 @@ html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-s
 .rm .card .fam-who small { font-family: var(--sans); font-size: .74rem; color: var(--ink-soft); }
 /* the fireside's one quiet line about what comes next */
 .rm .card .next-up { color: #7a5520; font-style: italic; }
-/* walking: a thumbstick at the bottom left (phones and tablets) */
-.walk-pad { position: fixed; z-index: 11; left: calc(18px + env(safe-area-inset-left)); bottom: calc(env(safe-area-inset-bottom) + 84px); touch-action: none; }
-.walk-pad .walk-ring { display: grid; place-items: center; width: 112px; height: 112px; border-radius: 50%; background: radial-gradient(circle, rgba(20,12,6,.28), rgba(20,12,6,.5)); border: 1.5px solid rgba(230,200,134,.55); box-shadow: 0 6px 20px rgba(0,0,0,.35), inset 0 0 18px rgba(0,0,0,.35); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-.walk-pad .walk-knob { width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f1d89c, #b8904a 70%, #8a6a32); box-shadow: 0 3px 10px rgba(0,0,0,.45); transition: transform .12s ease-out; }
-.walk-pad.held .walk-knob { transition: none; }
-/* six or seven stations (Walk, Family) on a narrow phone: tighter, and the bar scrolls sideways if it must */
+/* six or seven stations (Favourites, Family) on a narrow phone: tighter, and the bar scrolls sideways if it must */
 .rm .stations { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
 .rm .stations::-webkit-scrollbar { display: none; }
 @media (max-width: 520px) {
@@ -194,5 +189,3 @@ html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-s
 .rm .card .author-bio { font-family: var(--serif); font-size: 1rem; line-height: 1.45; margin: 8px 0; max-height: 34vh; overflow-y: auto; }
 .rm .card .author-books { font-size: .85rem; }
 .rm .card .note a { color: #7a5520; }
-.walk-climb { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 150px); padding: 10px 20px; border-radius: 999px; border: 1.5px solid rgba(230,200,134,.7); background: rgba(30,18,9,.72); color: #f3dfb0; font: 600 1rem var(--serif, Georgia, serif); box-shadow: 0 6px 20px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); cursor: pointer; }
-.walk-climb[hidden] { display: none; }

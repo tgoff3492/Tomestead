@@ -4,7 +4,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// ../../node_modules/three/build/three.module.js
+// ../../nm/node_modules/three/build/three.module.js
 var three_module_exports = {};
 __export(three_module_exports, {
   ACESFilmicToneMapping: () => ACESFilmicToneMapping,
@@ -452,7 +452,7 @@ __export(three_module_exports, {
   warnOnce: () => warnOnce
 });
 
-// ../../node_modules/three/build/three.core.js
+// ../../nm/node_modules/three/build/three.core.js
 var REVISION = "187";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -32735,7 +32735,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// ../../node_modules/three/build/three.module.js
+// ../../nm/node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -44121,7 +44121,7 @@ var WebGLRenderer = class {
   }
 };
 
-// ../../node_modules/three/examples/jsm/environments/RoomEnvironment.js
+// ../../nm/node_modules/three/examples/jsm/environments/RoomEnvironment.js
 var RoomEnvironment = class extends Scene {
   constructor() {
     super();
@@ -44222,7 +44222,7 @@ function createAreaLightMaterial(intensity) {
   return material;
 }
 
-// ../../node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js
+// ../../nm/node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js
 var _tempNormal = new Vector3();
 function getUv(faceDirVector, normal, uvAxis, projectionAxis, radius, sideLength) {
   const totArcLength = 2 * Math.PI * radius / 4;
@@ -44343,7 +44343,7 @@ var RoundedBoxGeometry = class _RoundedBoxGeometry extends BoxGeometry {
   }
 };
 
-// ../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../nm/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -44557,7 +44557,7 @@ function toTrianglesDrawMode(geometry, drawMode) {
   }
 }
 
-// ../../node_modules/three/examples/jsm/utils/SkeletonUtils.js
+// ../../nm/node_modules/three/examples/jsm/utils/SkeletonUtils.js
 function clone(source) {
   const sourceLookup = /* @__PURE__ */ new Map();
   const cloneLookup = /* @__PURE__ */ new Map();
@@ -44587,7 +44587,7 @@ function parallelTraverse(a, b, callback) {
   }
 }
 
-// ../../node_modules/three/examples/jsm/loaders/GLTFLoader.js
+// ../../nm/node_modules/three/examples/jsm/loaders/GLTFLoader.js
 var GLTFLoader = class extends Loader {
   /**
    * Constructs a new glTF loader.
@@ -47203,7 +47203,7 @@ function addPrimitiveAttributes(geometry, primitiveDef, parser) {
   });
 }
 
-// ../../node_modules/three/examples/jsm/libs/meshopt_decoder.module.js
+// ../../nm/node_modules/three/examples/jsm/libs/meshopt_decoder.module.js
 var MeshoptDecoder = (function() {
   var wasm_base = "b9H79Tebbbe8Fv9Gbb9Gvuuuuueu9Giuuub9Geueu9Giuuueuixkbeeeddddillviebeoweuecj:Gdkr;Neqo9TW9T9VV95dbH9F9F939H79T9F9J9H229F9Jt9VV7bb8A9TW79O9V9Wt9F9KW9J9V9KW9wWVtW949c919M9MWVbeY9TW79O9V9Wt9F9KW9J9V9KW69U9KW949c919M9MWVbdE9TW79O9V9Wt9F9KW9J9V9KW69U9KW949tWG91W9U9JWbiL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9p9JtblK9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9r919HtbvL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVT949WboY9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVJ9V29VVbrl79IV9Rbwq:VZkdbk:XYi5ud9:du8Jjjjjbcj;kb9Rgv8Kjjjjbc9:hodnalTmbcuhoaiRbbgrc;WeGc:Ge9hmbarcsGgwce0mbc9:hoalcufadcd4cbawEgDadfgrcKcaawEgqaraq0Egk6mbaicefhxcj;abad9Uc;WFbGcjdadca0EhmaialfgPar9Rgoadfhsavaoadz:jjjjbgzceVhHcbhOdndninaeaO9nmeaPax9RaD6mdamaeaO9RaOamfgoae6EgAcsfglc9WGhCabaOad2fhXaAcethQaxaDfhiaOaeaoaeao6E9RhLalcl4cifcd4hKazcj;cbfaAfhYcbh8AazcjdfhEaHh3incbh5dnawTmbaxa8Acd4fRbbh5kcbh8Eazcj;cbfhqinaih8Fdndndndna5a8Ecet4ciGgoc9:fPdebdkaPa8F9RaA6mrazcj;cbfa8EaA2fa8FaAz:jjjjb8Aa8FaAfhixdkazcj;cbfa8EaA2fcbaAz:kjjjb8Aa8FhixekaPa8F9RaK6mva8FaKfhidnaCTmbaPai9RcK6mbaocdtc:q:G:cjbfcj:G:cjbawEhaczhrcbhlinargoc9Wfghaqfhrdndndndndndnaaa8Fahco4fRbbalcoG4ciGcdtfydbPDbedvivvvlvkar9cb83bwar9cb83bbxlkarcbaiRbdai8Xbb9c:c:qj:bw9:9c:q;c1:I1e:d9c:b:c:e1z9:gg9cjjjjjz:dg8J9qE86bbaqaofgrcGfcbaicdfa8J9c8N1:NfghRbbag9cjjjjjw:dg8J9qE86bbarcVfcbaha8J9c8M1:NfghRbbag9cjjjjjl:dg8J9qE86bbarc7fcbaha8J9c8L1:NfghRbbag9cjjjjjd:dg8J9qE86bbarctfcbaha8J9c8K1:NfghRbbag9cjjjjje:dg8J9qE86bbarc91fcbaha8J9c8J1:NfghRbbag9cjjjj;ab:dg8J9qE86bbarc4fcbaha8J9cg1:NfghRbbag9cjjjja:dg8J9qE86bbarc93fcbaha8J9ch1:NfghRbbag9cjjjjz:dgg9qE86bbarc94fcbahag9ca1:NfghRbbai8Xbe9c:c:qj:bw9:9c:q;c1:I1e:d9c:b:c:e1z9:gg9cjjjjjz:dg8J9qE86bbarc95fcbaha8J9c8N1:NfgiRbbag9cjjjjjw:dg8J9qE86bbarc96fcbaia8J9c8M1:NfgiRbbag9cjjjjjl:dg8J9qE86bbarc97fcbaia8J9c8L1:NfgiRbbag9cjjjjjd:dg8J9qE86bbarc98fcbaia8J9c8K1:NfgiRbbag9cjjjjje:dg8J9qE86bbarc99fcbaia8J9c8J1:NfgiRbbag9cjjjj;ab:dg8J9qE86bbarc9:fcbaia8J9cg1:NfgiRbbag9cjjjja:dg8J9qE86bbarcufcbaia8J9ch1:NfgiRbbag9cjjjjz:dgg9qE86bbaiag9ca1:NfhixikaraiRblaiRbbghco4g8Ka8KciSg8KE86bbaqaofgrcGfaiclfa8Kfg8KRbbahcl4ciGg8La8LciSg8LE86bbarcVfa8Ka8Lfg8KRbbahcd4ciGg8La8LciSg8LE86bbarc7fa8Ka8Lfg8KRbbahciGghahciSghE86bbarctfa8Kahfg8KRbbaiRbeghco4g8La8LciSg8LE86bbarc91fa8Ka8Lfg8KRbbahcl4ciGg8La8LciSg8LE86bbarc4fa8Ka8Lfg8KRbbahcd4ciGg8La8LciSg8LE86bbarc93fa8Ka8Lfg8KRbbahciGghahciSghE86bbarc94fa8Kahfg8KRbbaiRbdghco4g8La8LciSg8LE86bbarc95fa8Ka8Lfg8KRbbahcl4ciGg8La8LciSg8LE86bbarc96fa8Ka8Lfg8KRbbahcd4ciGg8La8LciSg8LE86bbarc97fa8Ka8Lfg8KRbbahciGghahciSghE86bbarc98fa8KahfghRbbaiRbigico4g8Ka8KciSg8KE86bbarc99faha8KfghRbbaicl4ciGg8Ka8KciSg8KE86bbarc9:faha8KfghRbbaicd4ciGg8Ka8KciSg8KE86bbarcufaha8KfgrRbbaiciGgiaiciSgiE86bbaraifhixdkaraiRbwaiRbbghcl4g8Ka8KcsSg8KE86bbaqaofgrcGfaicwfa8Kfg8KRbbahcsGghahcsSghE86bbarcVfa8KahfghRbbaiRbeg8Kcl4g8La8LcsSg8LE86bbarc7faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarctfaha8KfghRbbaiRbdg8Kcl4g8La8LcsSg8LE86bbarc91faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc4faha8KfghRbbaiRbig8Kcl4g8La8LcsSg8LE86bbarc93faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc94faha8KfghRbbaiRblg8Kcl4g8La8LcsSg8LE86bbarc95faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc96faha8KfghRbbaiRbvg8Kcl4g8La8LcsSg8LE86bbarc97faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc98faha8KfghRbbaiRbog8Kcl4g8La8LcsSg8LE86bbarc99faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc9:faha8KfghRbbaiRbrgicl4g8Ka8KcsSg8KE86bbarcufaha8KfgrRbbaicsGgiaicsSgiE86bbaraifhixekarai8Pbw83bwarai8Pbb83bbaiczfhikdnaoaC9pmbalcdfhlaoczfhraPai9RcL0mekkaoaC6moaimexokaCmva8FTmvkaqaAfhqa8Ecefg8Ecl9hmbkdndndndnawTmbasa8Acd4fRbbgociGPlbedrbkaATmdaza8Afh8Fazcj;cbfhhcbh8EaEhaina8FRbbhraahocbhlinaoahalfRbbgqce4cbaqceG9R7arfgr86bbaoadfhoaAalcefgl9hmbkaacefhaa8Fcefh8FahaAfhha8Ecefg8Ecl9hmbxikkaATmeaza8Afhaazcj;cbfhhcbhoceh8EaYh8FinaEaofhlaa8Vbbhrcbhoinala8FaofRbbcwtahaofRbbgqVc;:FiGce4cbaqceG9R7arfgr87bbaladfhlaLaocefgofmbka8FaQfh8FcdhoaacdfhaahaQfhha8EceGhlcbh8EalmbxdkkaATmbaocl4h8Eaza8AfRbbhqcwhoa3hlinalRbbaotaqVhqalcefhlaocwfgoca9hmbkcbhhaEh8FaYhainazcj;cbfahfRbbhrcwhoaahlinalRbbaotarVhralaAfhlaocwfgoca9hmbkara8E94aq7hqcbhoa8Fhlinalaqao486bbalcefhlaocwfgoca9hmbka8Fadfh8FaacefhaahcefghaA9hmbkkaEclfhEa3clfh3a8Aclfg8Aad6mbkaXazcjdfaAad2z:jjjjb8AazazcjdfaAcufad2fadz:jjjjb8AaAaOfhOaihxaimbkc9:hoxdkcbc99aPax9RakSEhoxekc9:hokavcj;kbf8Kjjjjbaok:ysezu8Jjjjjbc;ae9Rgv8Kjjjjbc9:hodnalaeci9UgrcHf6mbcuhoaiRbbgwc;WeGc;Ge9hmbawcsGgDce0mbavc;abfcFecjez:kjjjb8Aav9cu83iUav9cu83i8Wav9cu83iyav9cu83iaav9cu83iKav9cu83izav9cu83iwav9cu83ibaialfc9WfhqaicefgwarfhldnaeTmbcmcsaDceSEhkcbhxcbhmcbhrcbhicbhoindnalaq9nmbc9:hoxikdndnawRbbgDc;Ve0mbavc;abfaoaDcu7gPcl4fcsGcitfgsydlhzasydbhHdndnaDcsGgsak9pmbavaiaPfcsGcdtfydbaxasEhDaxasTgOfhxxekdndnascsSmbcehOasc987asamffcefhDxekalcefhDal8SbbgscFeGhPdndnascu9mmbaDhlxekalcvfhlaPcFbGhPcrhsdninaD8SbbgOcFbGastaPVhPaOcu9kmeaDcefhDascrfgsc8J9hmbxdkkaDcefhlkcehOaPce4cbaPceG9R7amfhDkaDhmkavc;abfaocitfgsaDBdbasazBdlavaicdtfaDBdbavc;abfaocefcsGcitfgsaHBdbasaDBdlaocdfhoaOaifhidnadcd9hmbabarcetfgsaH87ebasclfaD87ebascdfaz87ebxdkabarcdtfgsaHBdbascwfaDBdbasclfazBdbxekdnaDcpe0mbavaiaqaDcsGfRbbgscl4gP9RcsGcdtfydbaxcefgOaPEhDavaias9RcsGcdtfydbaOaPTgzfgOascsGgPEhsaPThPdndnadcd9hmbabarcetfgHax87ebaHclfas87ebaHcdfaD87ebxekabarcdtfgHaxBdbaHcwfasBdbaHclfaDBdbkavaicdtfaxBdbavc;abfaocitfgHaDBdbaHaxBdlavaicefgicsGcdtfaDBdbavc;abfaocefcsGcitfgHasBdbaHaDBdlavaiazfgicsGcdtfasBdbavc;abfaocdfcsGcitfgDaxBdbaDasBdlaocifhoaiaPfhiaOaPfhxxekaxcbalRbbgsEgHaDc;:eSgDfhOascsGhAdndnascl4gCmbaOcefhzxekaOhzavaiaC9RcsGcdtfydbhOkdndnaAmbazcefhxxekazhxavaias9RcsGcdtfydbhzkdndnaDTmbalcefhDxekalcdfhDal8SbegPcFeGhsdnaPcu9kmbalcofhHascFbGhscrhldninaD8SbbgPcFbGaltasVhsaPcu9kmeaDcefhDalcrfglc8J9hmbkaHhDxekaDcefhDkasce4cbasceG9R7amfgmhHkdndnaCcsSmbaDhsxekaDcefhsaD8SbbglcFeGhPdnalcu9kmbaDcvfhOaPcFbGhPcrhldninas8SbbgDcFbGaltaPVhPaDcu9kmeascefhsalcrfglc8J9hmbkaOhsxekascefhskaPce4cbaPceG9R7amfgmhOkdndnaAcsSmbashlxekascefhlas8SbbgDcFeGhPdnaDcu9kmbascvfhzaPcFbGhPcrhDdninal8SbbgscFbGaDtaPVhPascu9kmealcefhlaDcrfgDc8J9hmbkazhlxekalcefhlkaPce4cbaPceG9R7amfgmhzkdndnadcd9hmbabarcetfgDaH87ebaDclfaz87ebaDcdfaO87ebxekabarcdtfgDaHBdbaDcwfazBdbaDclfaOBdbkavc;abfaocitfgDaOBdbaDaHBdlavaicdtfaHBdbavc;abfaocefcsGcitfgDazBdbaDaOBdlavaicefgicsGcdtfaOBdbavc;abfaocdfcsGcitfgDaHBdbaDazBdlavaiaCTaCcsSVfgicsGcdtfazBdbaiaATaAcsSVfhiaocifhokawcefhwaocsGhoaicsGhiarcifgrae6mbkkcbc99alaqSEhokavc;aef8Kjjjjbaok:clevu8Jjjjjbcz9Rhvdnalaecvf9pmbc9:skdnaiRbbc;:eGc;qeSmbcuskav9cb83iwaicefhoaialfc98fhrdnaeTmbdnadcdSmbcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcdtfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgiBdbalaiBdbawcefgwae9hmbxdkkcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcetfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgi87ebalaiBdbawcefgwae9hmbkkcbc99aoarSEk:Lvoeue99dud99eud99dndnadcl9hmbaeTmeindndnabcdfgd8Sbb:Yab8Sbbgi:Ygl:l:tabcefgv8Sbbgo:Ygr:l:tgwJbb;:9cawawNJbbbbawawJbbbb9GgDEgq:mgkaqaicb9iEalMgwawNakaqaocb9iEarMgqaqNMM:r:vglNJbbbZJbbb:;aDEMgr:lJbbb9p9DTmbar:Ohixekcjjjj94hikadai86bbdndnaqalNJbbbZJbbb:;aqJbbbb9GEMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkavad86bbdndnawalNJbbbZJbbb:;awJbbbb9GEMgw:lJbbb9p9DTmbaw:Ohdxekcjjjj94hdkabad86bbabclfhbaecufgembxdkkaeTmbindndnabclfgd8Ueb:Yab8Uebgi:Ygl:l:tabcdfgv8Uebgo:Ygr:l:tgwJb;:FSawawNJbbbbawawJbbbb9GgDEgq:mgkaqaicb9iEalMgwawNakaqaocb9iEarMgqaqNMM:r:vglNJbbbZJbbb:;aDEMgr:lJbbb9p9DTmbar:Ohixekcjjjj94hikadai87ebdndnaqalNJbbbZJbbb:;aqJbbbb9GEMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkavad87ebdndnawalNJbbbZJbbb:;awJbbbb9GEMgw:lJbbb9p9DTmbaw:Ohdxekcjjjj94hdkabad87ebabcwfhbaecufgembkkk:4ioiue99dud99dud99dnaeTmbcbhiabhlindndnal8Uebgv:YgoJ:ji:1Salcof8UebgrciVgw:Y:vgDNJbbbZJbbb:;avcu9kEMgq:lJbbb9p9DTmbaq:Ohkxekcjjjj94hkkalclf8Uebhvalcdf8UebhxalarcefciGcetfak87ebdndnax:YgqaDNJbbbZJbbb:;axcu9kEMgm:lJbbb9p9DTmbam:Ohxxekcjjjj94hxkabaiarciGgkfcd7cetfax87ebdndnav:YgmaDNJbbbZJbbb:;avcu9kEMgP:lJbbb9p9DTmbaP:Ohvxekcjjjj94hvkalarcufciGcetfav87ebdndnawaw2:ZgPaPMaoaoN:taqaqN:tamamN:tgoJbbbbaoJbbbb9GE:raDNJbbbZMgD:lJbbb9p9DTmbaD:Ohrxekcjjjj94hrkalakcetfar87ebalcwfhlaiclfhiaecufgembkkk9mbdnadcd4ae2gdTmbinababydbgecwtcw91:Yaece91cjjj98Gcjjj;8if::NUdbabclfhbadcufgdmbkkk:Tvirud99eudndnadcl9hmbaeTmeindndnabRbbgiabcefgl8Sbbgvabcdfgo8Sbbgrf9R:YJbbuJabcifgwRbbgdce4adVgDcd4aDVgDcl4aDVgD:Z:vgqNJbbbZMgk:lJbbb9p9DTmbak:Ohxxekcjjjj94hxkaoax86bbdndnaraif:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohoxekcjjjj94hokalao86bbdndnavaifar9R:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohixekcjjjj94hikabai86bbdndnaDadcetGadceGV:ZaqNJbbbZMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkawad86bbabclfhbaecufgembxdkkaeTmbindndnab8Vebgiabcdfgl8Uebgvabclfgo8Uebgrf9R:YJbFu9habcofgw8Vebgdce4adVgDcd4aDVgDcl4aDVgDcw4aDVgD:Z:vgqNJbbbZMgk:lJbbb9p9DTmbak:Ohxxekcjjjj94hxkaoax87ebdndnaraif:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohoxekcjjjj94hokalao87ebdndnavaifar9R:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohixekcjjjj94hikabai87ebdndnaDadcetGadceGV:ZaqNJbbbZMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkawad87ebabcwfhbaecufgembkkk9teiucbcbyd:K:G:cjbgeabcifc98GfgbBd:K:G:cjbdndnabZbcztgd9nmbcuhiabad9RcFFifcz4nbcuSmekaehikaik;LeeeudndnaeabVciGTmbabhixekdndnadcz9pmbabhixekabhiinaiaeydbBdbaiclfaeclfydbBdbaicwfaecwfydbBdbaicxfaecxfydbBdbaeczfheaiczfhiadc9Wfgdcs0mbkkadcl6mbinaiaeydbBdbaeclfheaiclfhiadc98fgdci0mbkkdnadTmbinaiaeRbb86bbaicefhiaecefheadcufgdmbkkabk;aeedudndnabciGTmbabhixekaecFeGc:b:c:ew2hldndnadcz9pmbabhixekabhiinaialBdbaicxfalBdbaicwfalBdbaiclfalBdbaiczfhiadc9Wfgdcs0mbkkadcl6mbinaialBdbaiclfhiadc98fgdci0mbkkdnadTmbinaiae86bbaicefhiadcufgdmbkkabkk83dbcj:Gdk8Kbbbbdbbblbbbwbbbbbbbebbbdbbblbbbwbbbbc:K:Gdkl8W:qbb";
   var wasm_simd = "b9H79TebbbeKl9Gbb9Gvuuuuueu9Giuuub9Geueuixkbbebeeddddilve9Weeeviebeoweuecj:Gdkr;Neqo9TW9T9VV95dbH9F9F939H79T9F9J9H229F9Jt9VV7bb8A9TW79O9V9Wt9F9KW9J9V9KW9wWVtW949c919M9MWVbdY9TW79O9V9Wt9F9KW9J9V9KW69U9KW949c919M9MWVblE9TW79O9V9Wt9F9KW9J9V9KW69U9KW949tWG91W9U9JWbvL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9p9JtboK9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9r919HtbrL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVT949WbwY9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVJ9V29VVbDl79IV9Rbqq:W9Dklbzik94evu8Jjjjjbcz9Rhbcbheincbhdcbhiinabcwfadfaicjuaead4ceGglE86bbaialfhiadcefgdcw9hmbkaeai86b:q:W:cjbaecitab8Piw83i:q:G:cjbaecefgecjd9hmbkk:JBl8Aud97dur978Jjjjjbcj;kb9Rgv8Kjjjjbc9:hodnalTmbcuhoaiRbbgrc;WeGc:Ge9hmbarcsGgwce0mbc9:hoalcufadcd4cbawEgDadfgrcKcaawEgqaraq0Egk6mbaialfgxar9RhodnadTgmmbavaoad;8qbbkaicefhPcj;abad9Uc;WFbGcjdadca0EhsdndndnadTmbaoadfhzcbhHinaeaH9nmdaxaP9RaD6miabaHad2fhOaPaDfhAasaeaH9RaHasfae6EgCcsfgocl4cifcd4hXavcj;cbfaoc9WGgQcetfhLavcj;cbfaQci2fhKavcj;cbfaQfhYcbh8Aaoc;ab6hEincbh3dnawTmbaPa8Acd4fRbbh3kcbh5avcj;cbfh8Eindndndndna3a5cet4ciGgoc9:fPdebdkaxaA9RaQ6mwdnaQTmbavcj;cbfa5aQ2faAaQ;8qbbkaAaCfhAxdkaQTmeavcj;cbfa5aQ2fcbaQ;8kbxekaxaA9RaX6moaoclVcbawEhraAaXfhocbhidnaEmbaxao9Rc;Gb6mbcbhlina8EalfhidndndndndndnaAalco4fRbbgqciGarfPDbedibledibkaipxbbbbbbbbbbbbbbbbpklbxlkaiaopbblaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLg8Fcdp:mea8FpmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9ogapxiiiiiiiiiiiiiiiip8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbahaoclffagRb:q:W:cjbfhoxikaiaopbbwaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLpxssssssssssssssssp9ogapxssssssssssssssssp8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbahaocwffagRb:q:W:cjbfhoxdkaiaopbbbpklbaoczfhoxekaiaopbbdaoRbbghcitpbi:q:G:cjbahRb:q:W:cjbghpsaoRbeggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbahaocdffagRb:q:W:cjbfhokdndndndndndnaqcd4ciGarfPDbedibledibkaiczfpxbbbbbbbbbbbbbbbbpklbxlkaiczfaopbblaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLg8Fcdp:mea8FpmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9ogapxiiiiiiiiiiiiiiiip8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbahaoclffagRb:q:W:cjbfhoxikaiczfaopbbwaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLpxssssssssssssssssp9ogapxssssssssssssssssp8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbahaocwffagRb:q:W:cjbfhoxdkaiczfaopbbbpklbaoczfhoxekaiczfaopbbdaoRbbghcitpbi:q:G:cjbahRb:q:W:cjbghpsaoRbeggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbahaocdffagRb:q:W:cjbfhokdndndndndndnaqcl4ciGarfPDbedibledibkaicafpxbbbbbbbbbbbbbbbbpklbxlkaicafaopbblaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLg8Fcdp:mea8FpmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9ogapxiiiiiiiiiiiiiiiip8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbahaoclffagRb:q:W:cjbfhoxikaicafaopbbwaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLpxssssssssssssssssp9ogapxssssssssssssssssp8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbahaocwffagRb:q:W:cjbfhoxdkaicafaopbbbpklbaoczfhoxekaicafaopbbdaoRbbghcitpbi:q:G:cjbahRb:q:W:cjbghpsaoRbeggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbahaocdffagRb:q:W:cjbfhokdndndndndndnaqco4arfPDbedibledibkaic8Wfpxbbbbbbbbbbbbbbbbpklbxlkaic8Wfaopbblaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLg8Fcdp:mea8FpmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9ogapxiiiiiiiiiiiiiiiip8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Ngicitpbi:q:G:cjbaiRb:q:W:cjbgipsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Ngqcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbaiaoclffaqRb:q:W:cjbfhoxikaic8Wfaopbbwaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLpxssssssssssssssssp9ogapxssssssssssssssssp8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Ngicitpbi:q:G:cjbaiRb:q:W:cjbgipsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Ngqcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spklbaiaocwffaqRb:q:W:cjbfhoxdkaic8Wfaopbbbpklbaoczfhoxekaic8WfaopbbdaoRbbgicitpbi:q:G:cjbaiRb:q:W:cjbgipsaoRbegqcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbaiaocdffaqRb:q:W:cjbfhokalc;abfhialcjefaQ0meaihlaxao9Rc;Fb0mbkkdnaiaQ9pmbaici4hlinaxao9RcK6mwa8EaifhqdndndndndndnaAaico4fRbbalcoG4ciGarfPDbedibledibkaqpxbbbbbbbbbbbbbbbbpkbbxlkaqaopbblaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLg8Fcdp:mea8FpmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9ogapxiiiiiiiiiiiiiiiip8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spkbbahaoclffagRb:q:W:cjbfhoxikaqaopbbwaopbbbg8Fclp:mea8FpmbzeHdOiAlCvXoQrLpxssssssssssssssssp9ogapxssssssssssssssssp8Jg8Fp5b9cjF;8;4;W;G;ab9:9cU1:Nghcitpbi:q:G:cjbahRb:q:W:cjbghpsa8Fp5e9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPaaa8Fp9spkbbahaocwffagRb:q:W:cjbfhoxdkaqaopbbbpkbbaoczfhoxekaqaopbbdaoRbbghcitpbi:q:G:cjbahRb:q:W:cjbghpsaoRbeggcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpkbbahaocdffagRb:q:W:cjbfhokalcdfhlaiczfgiaQ6mbkkaohAaoTmoka8EaQfh8Ea5cefg5cl9hmbkdndndndnawTmbaza8Acd4fRbbglciGPlbedwbkaQTmdavcjdfa8Afhlava8Afpbdbh8Jcbhoinalavcj;cbfaofpblbg8KaYaofpblbg8LpmbzeHdOiAlCvXoQrLg8MaLaofpblbg8NaKaofpblbgypmbzeHdOiAlCvXoQrLg8PpmbezHdiOAlvCXorQLg8Fcep9Ta8Fpxeeeeeeeeeeeeeeeegap9op9Hp9rg8Fa8Jp9Ug8Jp9Abbbaladfgla8Ja8Fa8Fpmlvorlvorlvorlvorp9Ug8Jp9Abbbaladfgla8Ja8Fa8FpmwDqkwDqkwDqkwDqkp9Ug8Jp9Abbbaladfgla8Ja8Fa8FpmxmPsxmPsxmPsxmPsp9Ug8Jp9Abbbaladfgla8Ja8Ma8PpmwDKYqk8AExm35Ps8E8Fg8Fcep9Ta8Faap9op9Hp9rg8Fp9Ug8Jp9Abbbaladfgla8Ja8Fa8Fpmlvorlvorlvorlvorp9Ug8Jp9Abbbaladfgla8Ja8Fa8FpmwDqkwDqkwDqkwDqkp9Ug8Jp9Abbbaladfgla8Ja8Fa8FpmxmPsxmPsxmPsxmPsp9Ug8Jp9Abbbaladfgla8Ja8Ka8LpmwKDYq8AkEx3m5P8Es8Fg8Ka8NaypmwKDYq8AkEx3m5P8Es8Fg8LpmbezHdiOAlvCXorQLg8Fcep9Ta8Faap9op9Hp9rg8Fp9Ug8Jp9Abbbaladfgla8Ja8Fa8Fpmlvorlvorlvorlvorp9Ug8Jp9Abbbaladfgla8Ja8Fa8FpmwDqkwDqkwDqkwDqkp9Ug8Jp9Abbbaladfgla8Ja8Fa8FpmxmPsxmPsxmPsxmPsp9Ug8Jp9Abbbaladfgla8Ja8Ka8LpmwDKYqk8AExm35Ps8E8Fg8Fcep9Ta8Faap9op9Hp9rg8Fp9Ugap9Abbbaladfglaaa8Fa8Fpmlvorlvorlvorlvorp9Ugap9Abbbaladfglaaa8Fa8FpmwDqkwDqkwDqkwDqkp9Ugap9Abbbaladfglaaa8Fa8FpmxmPsxmPsxmPsxmPsp9Ug8Jp9AbbbaladfhlaoczfgoaQ6mbxikkaQTmeavcjdfa8Afhlava8Afpbdbh8Jcbhoinalavcj;cbfaofpblbg8KaYaofpblbg8LpmbzeHdOiAlCvXoQrLg8MaLaofpblbg8NaKaofpblbgypmbzeHdOiAlCvXoQrLg8PpmbezHdiOAlvCXorQLg8Fcep:nea8Fpxebebebebebebebebgap9op:bep9rg8Fa8Jp:oeg8Jp9Abbbaladfgla8Ja8Fa8Fpmlvorlvorlvorlvorp:oeg8Jp9Abbbaladfgla8Ja8Fa8FpmwDqkwDqkwDqkwDqkp:oeg8Jp9Abbbaladfgla8Ja8Fa8FpmxmPsxmPsxmPsxmPsp:oeg8Jp9Abbbaladfgla8Ja8Ma8PpmwDKYqk8AExm35Ps8E8Fg8Fcep:nea8Faap9op:bep9rg8Fp:oeg8Jp9Abbbaladfgla8Ja8Fa8Fpmlvorlvorlvorlvorp:oeg8Jp9Abbbaladfgla8Ja8Fa8FpmwDqkwDqkwDqkwDqkp:oeg8Jp9Abbbaladfgla8Ja8Fa8FpmxmPsxmPsxmPsxmPsp:oeg8Jp9Abbbaladfgla8Ja8Ka8LpmwKDYq8AkEx3m5P8Es8Fg8Ka8NaypmwKDYq8AkEx3m5P8Es8Fg8LpmbezHdiOAlvCXorQLg8Fcep:nea8Faap9op:bep9rg8Fp:oeg8Jp9Abbbaladfgla8Ja8Fa8Fpmlvorlvorlvorlvorp:oeg8Jp9Abbbaladfgla8Ja8Fa8FpmwDqkwDqkwDqkwDqkp:oeg8Jp9Abbbaladfgla8Ja8Fa8FpmxmPsxmPsxmPsxmPsp:oeg8Jp9Abbbaladfgla8Ja8Ka8LpmwDKYqk8AExm35Ps8E8Fg8Fcep:nea8Faap9op:bep9rg8Fp:oegap9Abbbaladfglaaa8Fa8Fpmlvorlvorlvorlvorp:oegap9Abbbaladfglaaa8Fa8FpmwDqkwDqkwDqkwDqkp:oegap9Abbbaladfglaaa8Fa8FpmxmPsxmPsxmPsxmPsp:oeg8Jp9AbbbaladfhlaoczfgoaQ6mbxdkkaQTmbcbhocbalcl4gl9Rc8FGhiavcjdfa8Afhrava8Afpbdbhainaravcj;cbfaofpblbg8JaYaofpblbg8KpmbzeHdOiAlCvXoQrLg8LaLaofpblbg8MaKaofpblbg8NpmbzeHdOiAlCvXoQrLgypmbezHdiOAlvCXorQLg8Faip:Rea8Falp:Tep9qg8Faap9rgap9Abbbaradfgraaa8Fa8Fpmlvorlvorlvorlvorp9rgap9Abbbaradfgraaa8Fa8FpmwDqkwDqkwDqkwDqkp9rgap9Abbbaradfgraaa8Fa8FpmxmPsxmPsxmPsxmPsp9rgap9Abbbaradfgraaa8LaypmwDKYqk8AExm35Ps8E8Fg8Faip:Rea8Falp:Tep9qg8Fp9rgap9Abbbaradfgraaa8Fa8Fpmlvorlvorlvorlvorp9rgap9Abbbaradfgraaa8Fa8FpmwDqkwDqkwDqkwDqkp9rgap9Abbbaradfgraaa8Fa8FpmxmPsxmPsxmPsxmPsp9rgap9Abbbaradfgraaa8Ja8KpmwKDYq8AkEx3m5P8Es8Fg8Ja8Ma8NpmwKDYq8AkEx3m5P8Es8Fg8KpmbezHdiOAlvCXorQLg8Faip:Rea8Falp:Tep9qg8Fp9rgap9Abbbaradfgraaa8Fa8Fpmlvorlvorlvorlvorp9rgap9Abbbaradfgraaa8Fa8FpmwDqkwDqkwDqkwDqkp9rgap9Abbbaradfgraaa8Fa8FpmxmPsxmPsxmPsxmPsp9rgap9Abbbaradfgraaa8Ja8KpmwDKYqk8AExm35Ps8E8Fg8Faip:Rea8Falp:Tep9qg8Fp9rgap9Abbbaradfgraaa8Fa8Fpmlvorlvorlvorlvorp9rgap9Abbbaradfgraaa8Fa8FpmwDqkwDqkwDqkwDqkp9rgap9Abbbaradfgraaa8Fa8FpmxmPsxmPsxmPsxmPsp9rgap9AbbbaradfhraoczfgoaQ6mbkka8Aclfg8Aad6mbkdnaCad2goTmbaOavcjdfao;8qbbkdnammbavavcjdfaCcufad2fad;8qbbkaCaHfhHc9:hoaAhPaAmbxlkkaeTmbaDalfhrcbhocuhlinaralaD9RglfaD6mdasaeao9Raoasfae6Eaofgoae6mbkaial9RhPkcbc99axaP9RakSEhoxekc9:hokavcj;kbf8Kjjjjbaokwbz:bjjjbkNsezu8Jjjjjbc;ae9Rgv8Kjjjjbc9:hodnalaeci9UgrcHf6mbcuhoaiRbbgwc;WeGc;Ge9hmbawcsGgDce0mbavc;abfcFecje;8kbav9cu83iUav9cu83i8Wav9cu83iyav9cu83iaav9cu83iKav9cu83izav9cu83iwav9cu83ibaialfc9WfhqaicefgwarfhldnaeTmbcmcsaDceSEhkcbhxcbhmcbhrcbhicbhoindnalaq9nmbc9:hoxikdndnawRbbgDc;Ve0mbavc;abfaoaDcu7gPcl4fcsGcitfgsydlhzasydbhHdndnaDcsGgsak9pmbavaiaPfcsGcdtfydbaxasEhDaxasTgOfhxxekdndnascsSmbcehOasc987asamffcefhDxekalcefhDal8SbbgscFeGhPdndnascu9mmbaDhlxekalcvfhlaPcFbGhPcrhsdninaD8SbbgOcFbGastaPVhPaOcu9kmeaDcefhDascrfgsc8J9hmbxdkkaDcefhlkcehOaPce4cbaPceG9R7amfhDkaDhmkavc;abfaocitfgsaDBdbasazBdlavaicdtfaDBdbavc;abfaocefcsGcitfgsaHBdbasaDBdlaocdfhoaOaifhidnadcd9hmbabarcetfgsaH87ebasclfaD87ebascdfaz87ebxdkabarcdtfgsaHBdbascwfaDBdbasclfazBdbxekdnaDcpe0mbavaiaqaDcsGfRbbgscl4gP9RcsGcdtfydbaxcefgOaPEhDavaias9RcsGcdtfydbaOaPTgzfgOascsGgPEhsaPThPdndnadcd9hmbabarcetfgHax87ebaHclfas87ebaHcdfaD87ebxekabarcdtfgHaxBdbaHcwfasBdbaHclfaDBdbkavaicdtfaxBdbavc;abfaocitfgHaDBdbaHaxBdlavaicefgicsGcdtfaDBdbavc;abfaocefcsGcitfgHasBdbaHaDBdlavaiazfgicsGcdtfasBdbavc;abfaocdfcsGcitfgDaxBdbaDasBdlaocifhoaiaPfhiaOaPfhxxekaxcbalRbbgsEgHaDc;:eSgDfhOascsGhAdndnascl4gCmbaOcefhzxekaOhzavaiaC9RcsGcdtfydbhOkdndnaAmbazcefhxxekazhxavaias9RcsGcdtfydbhzkdndnaDTmbalcefhDxekalcdfhDal8SbegPcFeGhsdnaPcu9kmbalcofhHascFbGhscrhldninaD8SbbgPcFbGaltasVhsaPcu9kmeaDcefhDalcrfglc8J9hmbkaHhDxekaDcefhDkasce4cbasceG9R7amfgmhHkdndnaCcsSmbaDhsxekaDcefhsaD8SbbglcFeGhPdnalcu9kmbaDcvfhOaPcFbGhPcrhldninas8SbbgDcFbGaltaPVhPaDcu9kmeascefhsalcrfglc8J9hmbkaOhsxekascefhskaPce4cbaPceG9R7amfgmhOkdndnaAcsSmbashlxekascefhlas8SbbgDcFeGhPdnaDcu9kmbascvfhzaPcFbGhPcrhDdninal8SbbgscFbGaDtaPVhPascu9kmealcefhlaDcrfgDc8J9hmbkazhlxekalcefhlkaPce4cbaPceG9R7amfgmhzkdndnadcd9hmbabarcetfgDaH87ebaDclfaz87ebaDcdfaO87ebxekabarcdtfgDaHBdbaDcwfazBdbaDclfaOBdbkavc;abfaocitfgDaOBdbaDaHBdlavaicdtfaHBdbavc;abfaocefcsGcitfgDazBdbaDaOBdlavaicefgicsGcdtfaOBdbavc;abfaocdfcsGcitfgDaHBdbaDazBdlavaiaCTaCcsSVfgicsGcdtfazBdbaiaATaAcsSVfhiaocifhokawcefhwaocsGhoaicsGhiarcifgrae6mbkkcbc99alaqSEhokavc;aef8Kjjjjbaok:clevu8Jjjjjbcz9Rhvdnalaecvf9pmbc9:skdnaiRbbc;:eGc;qeSmbcuskav9cb83iwaicefhoaialfc98fhrdnaeTmbdnadcdSmbcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcdtfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgiBdbalaiBdbawcefgwae9hmbxdkkcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcetfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgi87ebalaiBdbawcefgwae9hmbkkcbc99aoarSEk;Toio97eue97aec98Ghedndnadcl9hmbaeTmecbhdinababpbbbgicKp:RecKp:Sep;6eglaicwp:RecKp:Sep;6ealp;Geaiczp:RecKp:Sep;6egvp;Gep;Kep;Legopxbbbbbbbbbbbbbbbbp:2egralpxbbbjbbbjbbbjbbbjgwp9op9rp;Keglpxbb;:9cbb;:9cbb;:9cbb;:9calalp;Meaoaop;Meavaravawp9op9rp;Keglalp;Mep;Kep;Kep;Jep;Negvp;Mepxbbn0bbn0bbn0bbn0grp;KepxFbbbFbbbFbbbFbbbp9oaipxbbbFbbbFbbbFbbbFp9op9qalavp;Mearp;Kecwp:RepxbFbbbFbbbFbbbFbbp9op9qaoavp;Mearp;Keczp:RepxbbFbbbFbbbFbbbFbp9op9qpkbbabczfhbadclfgdae6mbxdkkaeTmbcbhdinabczfgDaDpbbbgipxbbbbbbFFbbbbbbFFgwp9oabpbbbgoaipmbediwDqkzHOAKY8AEgvczp:Reczp:Sep;6eglaoaipmlvorxmPsCXQL358E8FpxFubbFubbFubbFubbp9op;6eavczp:Sep;6egvp;Gealp;Gep;Kep;Legipxbbbbbbbbbbbbbbbbp:2egralpxbbbjbbbjbbbjbbbjgqp9op9rp;Keglpxb;:FSb;:FSb;:FSb;:FSalalp;Meaiaip;Meavaravaqp9op9rp;Keglalp;Mep;Kep;Kep;Jep;Negvp;Mepxbbn0bbn0bbn0bbn0grp;KepxFFbbFFbbFFbbFFbbp9oaiavp;Mearp;Keczp:Rep9qgialavp;Mearp;KepxFFbbFFbbFFbbFFbbp9oglpmwDKYqk8AExm35Ps8E8Fp9qpkbbabaoawp9oaialpmbezHdiOAlvCXorQLp9qpkbbabcafhbadclfgdae6mbkkk;2ileue97euo97dnaec98GgiTmbcbheinabcKfpx:ji:1S:ji:1S:ji:1S:ji:1SabpbbbglabczfgvpbbbgopmlvorxmPsCXQL358E8Fgrczp:Segwpxibbbibbbibbbibbbp9qp;6egDp;NegqaDaDp;MegDaDp;KealaopmbediwDqkzHOAKY8AEgDczp:Reczp:Sep;6eglalp;MeaDczp:Sep;6egoaop;Mearczp:Reczp:Sep;6egrarp;Mep;Kep;Kep;Lepxbbbbbbbbbbbbbbbbp:4ep;Jep;Mepxbbn0bbn0bbn0bbn0gDp;KepxFFbbFFbbFFbbFFbbgkp9oaqaop;MeaDp;Keczp:Rep9qgoaqalp;MeaDp;Keakp9oaqarp;MeaDp;Keczp:Rep9qgDpmwDKYqk8AExm35Ps8E8Fglp5eawclp:RegqpEi:T:j83ibavalp5baqpEd:T:j83ibabcwfaoaDpmbezHdiOAlvCXorQLgDp5eaqpEe:T:j83ibabaDp5baqpEb:T:j83ibabcafhbaeclfgeai6mbkkkuee97dnadcd4ae2c98GgeTmbcbhdinababpbbbgicwp:Recwp:Sep;6eaicep:SepxbbjFbbjFbbjFbbjFp9opxbbjZbbjZbbjZbbjZp:Uep;Mepkbbabczfhbadclfgdae6mbkkk:Sodw97euaec98Ghedndnadcl9hmbaeTmecbhdinabpxbbuJbbuJbbuJbbuJabpbbbgicKp:TeglaicYp:Tep9qgvcdp:Teavp9qgvclp:Teavp9qgop;6ep;Negvaicwp:RecKp:SegraipxFbbbFbbbFbbbFbbbgwp9ogDp:Uep;6ep;Mepxbbn0bbn0bbn0bbn0gqp;Kecwp:RepxbFbbbFbbbFbbbFbbp9oavaDarp:Xeaiczp:RecKp:Segip:Uep;6ep;Meaqp;Keawp9op9qavaDaraip:Uep:Xep;6ep;Meaqp;Keczp:RepxbbFbbbFbbbFbbbFbp9op9qavaoalcep:Rep9oalpxebbbebbbebbbebbbp9op9qp;6ep;Meaqp;KecKp:Rep9qpkbbabczfhbadclfgdae6mbxdkkaeTmbcbhdinabczfgkpxbFu9hbFu9hbFu9hbFu9habpbbbglakpbbbgrpmlvorxmPsCXQL358E8Fgvczp:TegqavcHp:Tep9qgicdp:Teaip9qgiclp:Teaip9qgicwp:Teaip9qgop;6ep;NegialarpmbediwDqkzHOAKY8AEgDpxFFbbFFbbFFbbFFbbglp9ograDczp:Segwp:Ueavczp:Reczp:SegDp:Xep;6ep;Mepxbbn0bbn0bbn0bbn0gvp;Kealp9oaiarawaDp:Uep:Xep;6ep;Meavp;Keczp:Rep9qgwaiaoaqcep:Rep9oaqpxebbbebbbebbbebbbp9op9qp;6ep;Meavp;Keczp:ReaiaDarp:Uep;6ep;Meavp;Kealp9op9qgipmwDKYqk8AExm35Ps8E8FpkbbabawaipmbezHdiOAlvCXorQLpkbbabcafhbadclfgdae6mbkkk9teiucbcbydj:G:cjbgeabcifc98GfgbBdj:G:cjbdndnabZbcztgd9nmbcuhiabad9RcFFifcz4nbcuSmekaehikaikkxebcj:Gdklz:zbb";
@@ -48508,311 +48508,6 @@ function damaskTex(K) {
     x.stroke();
   }
   return c;
-}
-
-// src/walk.js
-function createWalker({ THREE, root, kick: kick2 }) {
-  const EYE = 1.6, SPEED = 1.7, TURN = 1.9, R = 0.28;
-  const st = {
-    on: false,
-    pos: new THREE.Vector3(),
-    yaw: 0,
-    pitch: -0.05,
-    vel: new THREE.Vector2(),
-    turnV: 0,
-    keys: /* @__PURE__ */ new Set(),
-    stick: { x: 0, y: 0 },
-    bounds: null,
-    obstacles: [],
-    level: 0,
-    upper: null,
-    stair: null,
-    climb: null,
-    near: null
-  };
-  const climbBtn = document.createElement("button");
-  climbBtn.type = "button";
-  climbBtn.className = "walk-climb";
-  climbBtn.hidden = true;
-  root.appendChild(climbBtn);
-  climbBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    startClimb();
-  });
-  climbBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-  const lerp2 = THREE.MathUtils.lerp;
-  function pathAt(s) {
-    const S = st.stair, phi = S.a0 + 0.12 + s * (S.span - 0.24), rho = 0.45;
-    return new THREE.Vector3(S.cx + Math.cos(phi) * rho, S.top * s + EYE, S.cz - Math.sin(phi) * rho);
-  }
-  function yawAlong(s, up) {
-    const S = st.stair, phi = S.a0 + 0.12 + s * (S.span - 0.24);
-    let dx = -Math.sin(phi), dz = -Math.cos(phi);
-    if (!up) {
-      dx = -dx;
-      dz = -dz;
-    }
-    return Math.atan2(-dx, -dz);
-  }
-  function startClimb() {
-    if (!st.on || st.climb || !st.near) return;
-    const up = st.near === "up";
-    st.climb = { up, t: 0, dur: 5.2, from: st.pos.clone(), to: up ? new THREE.Vector3(st.stair.land[0], st.stair.top + EYE, st.stair.land[1]) : new THREE.Vector3(st.stair.foot[0], EYE, st.stair.foot[1]) };
-    st.vel.set(0, 0);
-    st.turnV = 0;
-    climbBtn.hidden = true;
-    st.near = null;
-    kick2(6e3);
-  }
-  function stepClimb(dt) {
-    const c = st.climb;
-    c.t += dt;
-    const k = Math.min(1, c.t / c.dur), A = 0.14, B = 0.86;
-    let ty, tp;
-    if (k < A) {
-      const e = k / A, P = pathAt(c.up ? 0 : 1);
-      st.pos.lerpVectors(c.from, P, e * e * (3 - 2 * e));
-      ty = yawAlong(c.up ? 0 : 1, c.up);
-      tp = 0;
-    } else if (k < B) {
-      let e = (k - A) / (B - A);
-      e = e * e * (3 - 2 * e);
-      const s = c.up ? e : 1 - e;
-      st.pos.copy(pathAt(s));
-      ty = yawAlong(s, c.up);
-      tp = c.up ? 0.22 : -0.38;
-    } else {
-      const e = (k - B) / (1 - B);
-      st.pos.lerpVectors(pathAt(c.up ? 1 : 0), c.to, e * e * (3 - 2 * e));
-      const y0 = yawAlong(c.up ? 1 : 0, c.up);
-      ty = y0 + Math.atan2(Math.sin(0 - y0), Math.cos(0 - y0)) * e;
-      tp = c.up ? -0.12 : 0;
-    }
-    const w = 1 - Math.exp(-dt * 4);
-    st.yaw += Math.atan2(Math.sin(ty - st.yaw), Math.cos(ty - st.yaw)) * w;
-    st.pitch += (tp - st.pitch) * w;
-    if (k >= 1) {
-      st.level = c.up ? 1 : 0;
-      st.pos.copy(c.to);
-      st.climb = null;
-    }
-  }
-  const pad = document.createElement("div");
-  pad.className = "walk-pad";
-  pad.hidden = true;
-  pad.innerHTML = '<span class="walk-ring" aria-hidden="true"><span class="walk-knob"></span></span>';
-  pad.setAttribute("aria-label", "Walk: drag to move");
-  root.appendChild(pad);
-  const ring = pad.querySelector(".walk-ring"), knob = pad.querySelector(".walk-knob");
-  let pid = null, c0 = null;
-  const RAD = 46;
-  const setStick = (dx, dy) => {
-    const L = Math.hypot(dx, dy), k = L > RAD ? RAD / L : 1;
-    dx *= k;
-    dy *= k;
-    knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    const m = Math.min(1, L / RAD), e = m < 0.12 ? 0 : Math.pow((m - 0.12) / 0.88, 1.4);
-    st.stick.x = L ? dx / Math.max(1e-6, Math.hypot(dx, dy)) * e : 0;
-    st.stick.y = L ? dy / Math.max(1e-6, Math.hypot(dx, dy)) * e : 0;
-    kick2(400);
-  };
-  ring.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    pid = e.pointerId;
-    ring.setPointerCapture(pid);
-    const r = ring.getBoundingClientRect();
-    c0 = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    setStick(e.clientX - c0.x, e.clientY - c0.y);
-    pad.classList.add("held");
-  });
-  ring.addEventListener("pointermove", (e) => {
-    if (e.pointerId === pid) setStick(e.clientX - c0.x, e.clientY - c0.y);
-  });
-  const release = (e) => {
-    if (e.pointerId !== pid) return;
-    pid = null;
-    setStick(0, 0);
-    pad.classList.remove("held");
-  };
-  ring.addEventListener("pointerup", release);
-  ring.addEventListener("pointercancel", release);
-  const KEYS = { w: "f", arrowup: "f", s: "b", arrowdown: "b", a: "l", d: "r", arrowleft: "tl", arrowright: "tr", q: "tl", e: "tr" };
-  addEventListener("keydown", (e) => {
-    if (!st.on || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName || "")) return;
-    if ((e.key === "Enter" || e.key === " ") && st.near && !st.climb) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      startClimb();
-      return;
-    }
-    const k = KEYS[e.key.toLowerCase()];
-    if (!k) return;
-    st.keys.add(k);
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    kick2(400);
-  }, true);
-  addEventListener("keyup", (e) => {
-    const k = KEYS[(e.key || "").toLowerCase()];
-    if (k) st.keys.delete(k);
-  });
-  addEventListener("blur", () => st.keys.clear());
-  function collideUpper(p) {
-    const rs = st.upper.rects;
-    let best = null, bd = Infinity;
-    for (const r of rs) {
-      const x = THREE.MathUtils.clamp(p.x, r.x0, r.x1), z = THREE.MathUtils.clamp(p.z, r.z0, r.z1), d = Math.hypot(p.x - x, p.z - z);
-      if (d < bd) {
-        bd = d;
-        best = [x, z];
-      }
-    }
-    if (best) {
-      p.x = best[0];
-      p.z = best[1];
-    }
-    return p;
-  }
-  function collide(p) {
-    if (st.level === 1 && st.upper) return collideUpper(p);
-    const b = st.bounds;
-    if (b) {
-      for (const z of b.zones) {
-        if (p.z >= z.z0 && p.z <= z.z1) {
-          p.x = THREE.MathUtils.clamp(p.x, z.x0 + R, z.x1 - R);
-        }
-      }
-      p.z = THREE.MathUtils.clamp(p.z, b.zMin + R, b.zMax - R);
-    }
-    for (const o of st.obstacles) {
-      if (o.r) {
-        const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz), need = o.r + R;
-        if (d < need) {
-          if (d < 1e-4) {
-            p.x += need;
-          } else {
-            p.x = o.x + dx / d * need;
-            p.z = o.z + dz / d * need;
-          }
-        }
-      } else {
-        const cx = THREE.MathUtils.clamp(p.x, o.x0, o.x1), cz = THREE.MathUtils.clamp(p.z, o.z0, o.z1);
-        const dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz);
-        if (d < R) {
-          if (d > 1e-4) {
-            p.x = cx + dx / d * R;
-            p.z = cz + dz / d * R;
-          } else {
-            const out = [[o.x0 - R - p.x, 0], [o.x1 + R - p.x, 0], [0, o.z0 - R - p.z], [0, o.z1 + R - p.z]].sort((a, b2) => Math.abs(a[0] + a[1]) - Math.abs(b2[0] + b2[1]))[0];
-            p.x += out[0];
-            p.z += out[1];
-          }
-        }
-      }
-    }
-    return p;
-  }
-  return {
-    get on() {
-      return st.on;
-    },
-    // where you can walk (from the room's size) and what's in the way
-    setWorld(bounds, obstacles, more = {}) {
-      st.bounds = bounds;
-      st.obstacles = obstacles;
-      st.upper = more.upper || null;
-      st.stair = more.stair || null;
-      if (!st.stair) st.level = 0;
-    },
-    start(fromPos, fromDir) {
-      st.on = true;
-      st.level = 0;
-      st.climb = null;
-      st.pos.set(fromPos.x, EYE, fromPos.z);
-      collide(st.pos);
-      st.yaw = Math.atan2(-fromDir.x, -fromDir.z);
-      st.pitch = -0.05;
-      st.vel.set(0, 0);
-      st.turnV = 0;
-      st.keys.clear();
-      pad.hidden = !matchMedia("(pointer: coarse)").matches;
-      kick2(600);
-    },
-    stop() {
-      st.on = false;
-      pad.hidden = true;
-      st.keys.clear();
-      setStick(0, 0);
-      st.climb = null;
-      st.level = 0;
-      st.near = null;
-      climbBtn.hidden = true;
-    },
-    get level() {
-      return st.level;
-    },
-    place(x, z) {
-      st.pos.x = x;
-      st.pos.z = z;
-      kick2(600);
-    },
-    // (the test page)
-    look(dx, dy) {
-      if (st.climb) return;
-      st.yaw += dx * 42e-4;
-      st.pitch = THREE.MathUtils.clamp(st.pitch + dy * 34e-4, -0.9, 0.7);
-      kick2(300);
-    },
-    // drag the view, as everywhere else in the room
-    // one frame: ease the velocity toward what the stick and keys ask for, move, slide off obstacles
-    step(dt, camPos, camDir) {
-      if (st.climb) {
-        stepClimb(dt);
-        camPos.copy(st.pos);
-        camDir.set(-Math.sin(st.yaw) * Math.cos(st.pitch), Math.sin(st.pitch), -Math.cos(st.yaw) * Math.cos(st.pitch));
-        kick2(250);
-        return true;
-      }
-      const k = st.keys;
-      let fx = st.stick.x + (k.has("r") ? 1 : 0) - (k.has("l") ? 1 : 0);
-      let fz = st.stick.y + (k.has("b") ? 1 : 0) - (k.has("f") ? 1 : 0);
-      const L = Math.hypot(fx, fz);
-      if (L > 1) {
-        fx /= L;
-        fz /= L;
-      }
-      const want = new THREE.Vector2(fx, fz).multiplyScalar(SPEED);
-      const ease2 = 1 - Math.exp(-dt * (want.lengthSq() > st.vel.lengthSq() ? 7 : 9));
-      st.vel.lerp(want, ease2);
-      const turn = (k.has("tr") ? -1 : 0) + (k.has("tl") ? 1 : 0);
-      st.turnV += (turn * TURN - st.turnV) * (1 - Math.exp(-dt * 8));
-      st.yaw += st.turnV * dt;
-      const sin = Math.sin(st.yaw), cos = Math.cos(st.yaw);
-      const dxw = st.vel.x * cos + st.vel.y * sin, dzw = -st.vel.x * sin + st.vel.y * cos;
-      st.pos.x += dxw * dt;
-      st.pos.z += dzw * dt;
-      collide(st.pos);
-      const floorY = st.level === 1 && st.stair ? st.stair.top : 0;
-      st.pos.y += (floorY + EYE - st.pos.y) * (1 - Math.exp(-dt * 4));
-      let near = null;
-      if (st.stair) {
-        const S = st.stair;
-        if (st.level === 0 && Math.hypot(st.pos.x - S.foot[0], st.pos.z - S.foot[1]) < 0.85) near = "up";
-        if (st.level === 1 && Math.hypot(st.pos.x - S.land[0], st.pos.z - S.land[1]) < 0.7) near = "down";
-      }
-      if (near !== st.near) {
-        st.near = near;
-        climbBtn.hidden = !near;
-        climbBtn.textContent = near === "up" ? "Climb the stair" : "Go down the stair";
-      }
-      camPos.copy(st.pos);
-      camDir.set(-Math.sin(st.yaw) * Math.cos(st.pitch), Math.sin(st.pitch), -Math.cos(st.yaw) * Math.cos(st.pitch));
-      const moving = st.vel.lengthSq() > 1e-4 || Math.abs(st.turnV) > 1e-3 || Math.abs(EYE - st.pos.y) > 1e-3;
-      if (moving) kick2(250);
-      return moving;
-    }
-  };
 }
 
 // src/portraits.js
@@ -51741,71 +51436,6 @@ function applyTierStations(sh) {
   Object.assign(STATIONS.house, T === "hall" ? { p: [11.5, 13.5, 21], t: [-0.4, 3.9, 3.6], w: 12.5, h: 15.8, max: 120 } : T === "library" ? { p: [10.6, 11, 15.5], t: [-0.4, 2.1, 1.7], w: 10.8, h: 9.6, max: 100 } : { p: [9.6, 9, 11], t: [-0.3, 0.5, -0.2], w: 9.4, h: 6.8, max: 90 });
   Object.assign(STATIONS.room, T === "hall" ? { p: [1.55, 1.7, 9.9], t: [-0.25, 3.1, -1.5], w: 4.4, h: 2.6, max: 13.5 } : T === "library" ? { p: [1.45, 1.7, 5.95], t: [-0.45, 2.35, -1.6], w: 4.4, h: 2.6, max: 9.6 } : { p: [1, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 });
 }
-function walkWorld(T) {
-  const zF = T === "hall" ? 10.3 : T === "library" ? 6.3 : 2.7;
-  const zones = [{ z0: -99, z1: 2.9, x0: -3, x1: 3 }, { z0: 2.9, z1: 99, x0: T === "study" ? -3 : -2.66, x1: T === "study" ? 3 : 2.66 }];
-  const ob = [
-    { x0: -3, x1: -2.05, z0: -1.4, z1: 0.2 },
-    // the desk
-    { x: -1.95, z: -0.55, r: 0.3 },
-    // its chair
-    { x0: -3, x1: -2.25, z0: 0.75, z1: 2.6 },
-    // the fireplace and hearth
-    { x0: -0.9, x1: 0.9, z0: -2.7, z1: -2.2 },
-    // the bookcase
-    { x: -1.6, z: -2.45, r: 0.3 },
-    { x: -2.5, z: -2.2, r: 0.42 },
-    // the clock, the big plant
-    { x: 1.75, z: -2, r: 0.5 },
-    { x: 2.55, z: -2.38, r: 0.32 },
-    // the armchair, the side table
-    { x: 2.25, z: 0.1, r: 0.45 }
-    // the tome on its branches
-  ];
-  if (shown("ottoman")) ob.push({ x: 1.2, z: -1.2, r: 0.35 });
-  if (shown("display")) {
-    if (T === "study") ob.push({ x0: 2.35, x1: 3, z0: 1.3, z1: 2.4 });
-    if (T === "library") ob.push({ x0: -0.72, x1: 0.72, z0: 3.9, z1: 4.6 });
-    if (T === "hall") for (let i = 0; i < 5; i++) ob.push({ x: (i - 2) * 0.82, z: 4.4 + Math.abs(i - 2) * 0.18, r: 0.24 });
-  }
-  if (T !== "study") ob.push({ x: -1.84, z: zF - 1.15, r: 0.85 });
-  if (T === "hall") ob.push({ x0: -0.95, x1: 0.95, z0: 6, z1: 9 });
-  let more = {};
-  if (T !== "study") {
-    const cx = -3 + 1.16, cz = zF - 1.15, GD = 0.85, ru = 0.15, w0 = 3 - 0.36 - ru, w1 = 3 - GD - ru, zb0 = -2.7 + 0.36 + ru, zb1 = -2.7 + GD - ru, zf0 = zF - GD + ru, zf1 = zF - 0.36 - ru;
-    more = {
-      stair: { cx, cz, top: 3.12, a0: -Math.PI / 2, span: Math.PI * 1.75, foot: [cx + 1.2, cz + 0.15], land: [-w0 + 0.08, zf1 - 0.08] },
-      upper: { rects: [{ x0: -w0, x1: -w1, z0: zb0, z1: zf1 }, { x0: w1, x1: w0, z0: zb0, z1: zf1 }, { x0: -w0, x1: w0, z0: zb0, z1: zb1 }, { x0: -w0, x1: w0, z0: zf0, z1: zf1 }] }
-    };
-  }
-  return { bounds: { zones, zMin: -2.7, zMax: T === "study" ? 2.7 : zF - 0.36 }, obstacles: ob, more };
-}
-var walker = null;
-function startWalk() {
-  if (!world || where !== "main" || outBook) return;
-  putBack();
-  closeCard();
-  let p = cam.pos.clone(), d = lookDir();
-  if (station === "house") {
-    const f = framing("room");
-    p = f.pos;
-    d = f.dir;
-    isOut = true;
-  }
-  const w = walkWorld(world.shell.tier);
-  walker.setWorld(w.bounds, w.obstacles, w.more);
-  tween = null;
-  station = "walk";
-  pressStation("walk");
-  cam.yaw = 0;
-  cam.pitch = 0;
-  cam.vyaw = 0;
-  cam.vpitch = 0;
-  setFov(baseFov());
-  walker.start(p, d);
-  shelfTools();
-  showHint(isPhone ? "Thumbstick to walk \xB7 drag to look around" : "W A S D to walk \xB7 Q E to turn \xB7 drag to look \xB7 Esc to stop", 4200, 200);
-}
 function coverMaterial(b, aspect2) {
   const mat = std({ map: canvasTex(plainCover(b, aspect2), { repeat: false }), roughness: 0.5 });
   coverImage(b).then((img) => {
@@ -51942,7 +51572,6 @@ function go(name, dur = 1.5, { arrive = true } = {}) {
   else if (name === "shelf" && world) shelfHint();
 }
 function glide(name, dur, arrive) {
-  if (walker && walker.on && name !== "walk") walker.stop();
   if ((famStation(name) ? "family" : "main") !== where) {
     crossTo(name, arrive);
     return;
@@ -52034,7 +51663,7 @@ function welcomeCard() {
     <div class="acts"><button type="button" data-act="add">Add your first book</button><button type="button" class="quiet" data-act="import">Import from Goodreads or StoryGraph</button><button type="button" class="quiet" data-act="tour">Show me around</button></div>`, "welcome");
 }
 var TOUR = [
-  ["Getting around", "Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom to walk over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse."],
+  ["Getting around", "Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom and the view glides over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse."],
   ["Your bookcase", "Tap a spine and it slides out a little. Tap it again and it comes off the shelf into your hands: tap the cover to open it, or anywhere else to put it back. Drag to slide along the shelves; the magnifier finds any book."],
   ["Desk, fire and tome", "The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next."],
   ["Everything else", "Your reading goals stay at the top. + Add is up there too, and the \u2022\u2022\u2022 menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback."]
@@ -52057,8 +51686,7 @@ function lookDir() {
   return d;
 }
 function updateCamera(dt) {
-  if (station === "walk" && !tween && walker && walker.on) {
-    walker.step(dt, cam.pos, cam.dir);
+  if (station === "free" && !tween) {
     cam.dist = 1;
     cam.yaw = 0;
     cam.pitch = 0;
@@ -52197,10 +51825,6 @@ canvas.addEventListener("pointermove", (e) => {
   drag.y = e.clientY;
   drag.moved += Math.abs(dx) + Math.abs(dy);
   if (drag.moved < 6 || outBook) return;
-  if (station === "walk" && walker.on) {
-    walker.look(dx, dy);
-    return;
-  }
   if (station === "shelf" && !searching) {
     const lim = shelfPan();
     if (lim) {
@@ -53395,30 +53019,6 @@ document.querySelectorAll(".stations button").forEach((b) => b.addEventListener(
   go(b.dataset.go === "room" ? home() : b.dataset.go);
   kick();
 }));
-function walkButton() {
-  const bar = document.querySelector(".stations");
-  if (!bar || !world) return;
-  let b = bar.querySelector('[data-go="walk"]');
-  const on = world.shell.tier !== "study" && where === "main";
-  if (!on) {
-    if (b) b.remove();
-    if (station === "walk") go(home());
-    return;
-  }
-  if (b) return;
-  b = document.createElement("button");
-  b.type = "button";
-  b.dataset.go = "walk";
-  b.textContent = "Walk";
-  b.setAttribute("aria-pressed", String(station === "walk"));
-  b.addEventListener("click", () => {
-    if (station === "walk") go(home());
-    else startWalk();
-    kick();
-  });
-  const fam = bar.querySelector('[data-go="family"]');
-  bar.insertBefore(b, fam || null);
-}
 function familyButton() {
   const bar = document.querySelector(".stations");
   if (!bar) return;
@@ -53470,7 +53070,6 @@ addEventListener("keydown", (e) => {
       putAway();
       return;
     }
-    if (station === "walk") go(home());
     putBack();
     closeCard();
   }
@@ -53586,11 +53185,6 @@ function rebuildShell(tier) {
   world.shell = sh;
   applyTierStations(sh);
   buildPortraitsNow();
-  if (walker && walker.on) {
-    const w = walkWorld(tier);
-    walker.setWorld(w.bounds, w.obstacles, w.more);
-  }
-  setTimeout(walkButton, 0);
   buildDisplayNow();
   world.applyLook();
   sh.group.traverse((o) => {
@@ -53794,7 +53388,6 @@ function crossTo(name, arrive) {
   }).then(() => {
     if (arrive) arrived(name);
     shelfTools();
-    walkButton();
   });
 }
 function familyCard() {
@@ -53974,7 +53567,7 @@ function resize() {
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
-  if (world && !tween && station !== "walk") {
+  if (world && !tween && station !== "free") {
     const f = framing(station);
     cam.pos.copy(f.pos);
     cam.dir.copy(f.dir);
@@ -54161,7 +53754,6 @@ function refresh() {
     }
   }
   familyButton();
-  walkButton();
   if (!$("card").hidden && cardKind === "desk") deskCard();
   if (!$("card").hidden && cardKind === "hearth") hearthCard();
   if (!$("card").hidden && cardKind === "welcome" && lib.books.length) {
@@ -54219,7 +53811,6 @@ function setActive(on) {
 }
 (async () => {
   resize();
-  walker = createWalker({ THREE: three_module_exports, root: canvas.parentElement, kick });
   world = await build();
   lastSig = libSig();
   lastPaint = paintSig();
@@ -54236,7 +53827,6 @@ function setActive(on) {
   syncShown();
   if (world.shell.tier !== tierNow()) rebuildShell(tierNow());
   familyButton();
-  walkButton();
   frameShelf();
   const start = params.get("st") && (STATIONS[params.get("st")] || famStation(params.get("st")) || params.get("st") === "display") ? params.get("st") : null;
   const f = framing(start && STATIONS[start] && !famStation(start) ? start : "room");
@@ -54285,11 +53875,7 @@ function setActive(on) {
   window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => {
     if (HOST) lib = fromHost();
     queueArrivals();
-  }, go: (st) => go(st), openBook: (id) => openOnDesk(id), walk: (x, z) => {
-    if (HOST) return;
-    if (!walker.on) startWalk();
-    if (x != null) walker.place(x, z);
-  }, tour: () => {
+  }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => {
     go(home(), 1.5, { arrive: false });
     tourCard(0);
     kick();
@@ -54319,7 +53905,7 @@ function setActive(on) {
     veil.classList.add("gone");
     setTimeout(() => veil.remove(), 1400);
     if (camQ && camQ.length === 6) {
-      station = "walk";
+      station = "free";
     } else if (!start && !customizing) go(home(), 2.6);
     else if (famStation(start)) {
       crossTo(start, false);
