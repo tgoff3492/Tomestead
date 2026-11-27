@@ -99,6 +99,12 @@
   const cleanTimer = (t) => (t && typeof t === 'object' && /^[A-Za-z0-9_-]{1,120}$/.test(String(t.id || '')) && Number(t.start) > 0 ? { id: String(t.id), start: Number(t.start) } : null);
   prefs.readMarks = cleanMarks(prefs.readMarks);
   prefs.timer = cleanTimer(prefs.timer);
+  // the daily literary question (trivia.js): answers live with the other synced settings
+  const Trivia = window.TomesteadTrivia || null;
+  if (Trivia) {
+    prefs.trivia = Trivia.clean(prefs.trivia);
+    Trivia.use({ get: () => prefs.trivia || {}, set: (v) => { prefs.trivia = Trivia.clean(v); savePrefs(); } });
+  }
   let calendar = null, memories = null, ritual = null, openLife = () => {};
   // tags: a starter set you can change, plus any you make yourself
   const TAG_PRESETS = ['Favorite', 'Comfort read', 'Book club', 'Cozy', 'Dark', 'Funny', 'Hopeful', 'Emotional', 'Mysterious', 'Adventurous', 'Thought-provoking', 'Fast-paced'];
@@ -2099,6 +2105,16 @@
     window.scrollTo(0, 0);
   }
   function openTags() { renderTagsList(); $('#tagsDialog').showModal(); }
+  // today's question: in the room, the camera goes to the paper on the armchair; elsewhere, a dialog
+  function renderTrivia() {
+    const st = Trivia.state(), bk = st.item.book;
+    $('#triviaBody').innerHTML = Trivia.html(st, { canWant: true, owned: !!(bk && findDuplicate(bk.title, bk.author)) });
+  }
+  function openTrivia() {
+    if (!Trivia) return;
+    if (inRoom() && window.TomesteadRoom) { window.TomesteadRoom.go('paper'); return; }
+    renderTrivia(); $('#triviaDialog').showModal();
+  }
   function renderTagsList() {
     const vocab = tagVocab();
     const count = (t) => books.filter(b => tagsOf(b).some(x => x.toLowerCase() === t.toLowerCase())).length;
@@ -2388,7 +2404,7 @@
       for (const [id, blob] of Object.entries(all)) { if (books.some(b => b.id === id)) uploads[id] = await blobToDataURL(blob); }
     } catch {}
     const clean = books;
-    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList, readMarks: prefs.readMarks }, uploads };
+    const payload = { app: 'Tomestead', version: 4, exportedAt: new Date().toISOString(), books: clean, settings: { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, tagList: prefs.tagList, readMarks: prefs.readMarks, trivia: prefs.trivia || {} }, uploads };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2533,6 +2549,7 @@
           }
           if (Array.isArray(st.tagList)) prefs.tagList = cleanTags([...prefs.tagList, ...st.tagList]);
           if (Array.isArray(st.readMarks)) prefs.readMarks = cleanMarks([...prefs.readMarks, ...st.readMarks]);
+          if (Trivia && st.trivia) prefs.trivia = Trivia.merge(prefs.trivia, st.trivia);
           if (Array.isArray(st.customGoals)) {
             for (const g of cleanGoals(st.customGoals)) {
               const i = prefs.customGoals.findIndex(x => x.id === g.id);
@@ -2839,6 +2856,13 @@
     $('#customizeBtn').addEventListener('click', () => { more.open = false; location.hash = 'customize'; });
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoals(); });
     $('#calBtn').addEventListener('click', () => { more.open = false; calendar.open(); });
+    $('#triviaBtn').addEventListener('click', () => { more.open = false; openTrivia(); });
+    $('#triviaDialog').addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]');
+      if (!act || !Trivia) return;
+      if (act.dataset.act === 'trivia') { Trivia.answer(Number(act.dataset.i)); renderTrivia(); }
+      else if (act.dataset.act === 'trivia-want') { const bk = Trivia.state().item.book; if (bk) addWant({ title: bk.title, author: bk.author }); renderTrivia(); }
+    });
     $('#tcStop').addEventListener('click', () => stopTimer());
     $('#tcDiscard').addEventListener('click', () => stopTimer({ discard: true }));
     $('#tcSettle').addEventListener('click', () => { const t = timerNow(); if (t && ritual) ritual.open(t.id); });
@@ -3021,7 +3045,7 @@
   }
 
   function settingsForSync() {
-    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null, earned: prefs.earned || null, family: prefs.family || null, showcase: Array.isArray(prefs.showcase) ? prefs.showcase : null };
+    return { theme: prefs.theme, goals: prefs.goals, goalSince: prefs.goalSince, trophies: prefs.trophies, customGoals: prefs.customGoals, recs: prefs.recs, tagList: prefs.tagList, readMarks: prefs.readMarks, timer: prefs.timer || null, earned: prefs.earned || null, family: prefs.family || null, trivia: prefs.trivia || null, showcase: Array.isArray(prefs.showcase) ? prefs.showcase : null };
   }
   function applySettings(s) {
     if (s.theme && typeof s.theme === 'object') prefs.theme = Object.assign({ ...D.DEFAULTS, trinkets: [...D.DEFAULTS.trinkets], tableItems: [...D.DEFAULTS.tableItems] }, migrateTheme(s.theme));
@@ -3038,6 +3062,8 @@
     prefs.recs = s.recs && typeof s.recs === 'object' ? Object.assign({ dismissed: [] }, s.recs) : { dismissed: [] };
     // (older devices don't send these; keep what's here)
     if (Array.isArray(s.readMarks)) prefs.readMarks = cleanMarks(s.readMarks);
+    // a day answered on either device counts
+    if (Trivia && s.trivia && typeof s.trivia === 'object') prefs.trivia = Trivia.merge(prefs.trivia, s.trivia);
     if ('timer' in s) prefs.timer = cleanTimer(s.timer);
     // what the room has earned is kept forever: join both sides rather than replace
     if (s.earned && typeof s.earned === 'object') prefs.earned = Object.assign({}, s.earned, prefs.earned || {});
@@ -3303,7 +3329,7 @@
     if (window.TomesteadRoom) { window.TomesteadRoom.setActive(true); window.TomesteadRoom.refresh(); return; }
     if (roomLoading) return;
     roomLoading = true;
-    import('./room/room.js?v=20261127104655').catch(() => window.TomesteadRoomHost.unavailable());
+    import('./room/room.js?v=20261127111236').catch(() => window.TomesteadRoomHost.unavailable());
   }
   function roomHide() {
     document.documentElement.classList.remove('room-mode');

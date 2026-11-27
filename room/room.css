@@ -189,3 +189,32 @@ html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-s
 .rm .card .author-bio { font-family: var(--serif); font-size: 1rem; line-height: 1.45; margin: 8px 0; max-height: 34vh; overflow-y: auto; }
 .rm .card .author-books { font-size: .85rem; }
 .rm .card .note a { color: #7a5520; }
+/* the daily question (trivia.js): in the room's card and in the app's dialog */
+.rm .stations button[data-go="paper"] { position: relative; }
+.rm .stations button[data-go="paper"].fresh::after { content: ""; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: #e6b04a; box-shadow: 0 0 6px rgba(230,176,74,.8); }
+.tq-paper { font-variant: small-caps; letter-spacing: .04em; }
+h2.tq-q { font-family: var(--serif, Georgia, serif); font-weight: 400; font-size: 1.22rem; line-height: 1.3; margin: 4px 26px 10px 0; text-wrap: pretty; }
+.tq-choices { display: grid; gap: 7px; }
+.tq-choice { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1.5px solid rgba(42,30,22,.22); background: rgba(255,255,255,.35); color: var(--ink, #2a1e16);
+  border-radius: 10px; padding: 9px 12px; font: 500 .97rem/1.25 var(--sans, system-ui, sans-serif); cursor: pointer; transition: background .15s, border-color .15s, opacity .2s; }
+.tq-choice:not([disabled]):hover { border-color: #b08a48; background: rgba(255,255,255,.6); }
+.tq-choice:not([disabled]):active { transform: translateY(1px); }
+.tq-choice[disabled] { cursor: default; }
+.tq-letter { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgba(42,30,22,.1); font: 700 .78rem var(--sans, system-ui, sans-serif); }
+.tq-choice.right { border-color: #5d7a3a; background: rgba(120,160,80,.2); }
+.tq-choice.right .tq-letter { background: #5d7a3a; color: #f4ecd8; }
+.tq-choice.wrong { border-color: #9a3b2c; background: rgba(170,70,50,.14); }
+.tq-choice.wrong .tq-letter { background: #9a3b2c; color: #f4ecd8; }
+.tq-choice.dim { opacity: .55; }
+.tq-verdict { margin: 12px 0 2px; font-family: var(--serif, Georgia, serif); font-size: 1.12rem; }
+.tq-verdict.is-right { color: #46632a; }
+.tq-verdict.is-wrong { color: #8a3324; }
+.tq-note { font-size: .93rem; line-height: 1.4; color: var(--ink, #2a1e16); }
+.tq-owned { font-style: italic; }
+.tq-tally { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(42,30,22,.15); font-size: .84rem; color: var(--ink-soft, #5b4634); }
+.tq-tally span { font-style: italic; }
+.tq-dialog .eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: #8a6a35; margin-bottom: 2px; }
+.tq-dialog h2.tq-q { margin-right: 0; }
+.tq-dialog .meta { font-size: .92rem; color: var(--ink-soft); margin: 6px 0; }
+.tq-dialog .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.tq-dialog .acts button { border: 0; border-radius: 999px; padding: 10px 16px; font: 700 .95rem var(--sans); cursor: pointer; background: rgba(42,30,22,.1); color: var(--ink); }

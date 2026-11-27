@@ -12,6 +12,7 @@ import { buildShell } from './shell.js';
 import { buildDisplay } from './display.js';
 import { buildFamilyRoom } from './family.js';
 import { buildPortraits } from './portraits.js';
+import { buildPaper } from './paper.js';
 
 // When the room runs inside the Tomestead app, the app hands over its books and its screens
 // through window.TomesteadRoomHost; on its own (the lab page) it reads the browser's saved library.
@@ -1921,6 +1922,8 @@ const STATIONS = {
   hearth: { p: [-0.5, 1.45, 2.3], t: [-2.7, 0.95, 1.6], w: 2.1, h: 2.0, max: 2.9 },
   tome: { p: [0.6, 1.6, 0.95], t: [2.25, 1.08, 0.1], w: 1.3, h: 1.4, max: 2.4 },
   nook: { p: [1.45, 1.3, -1.35], t: [2.55, 0.85, -2.35], w: 0.8, h: 0.8, max: 1.6 },
+  // the morning paper on the armchair (the daily question), seen from in front of the chair
+  paper: { p: [1.3, 1.22, -1.18], t: [1.72, 0.34, -1.98], w: 0.52, h: 0.48, max: 1.5 },
   // (the cat on the hearth, for when it arrives)
   catview: { p: [-1.65, 0.85, 2.75], t: [-2.5, 0.15, 2.25], w: 0.9, h: 0.7, max: 1.6 },
   // (the painting above the reading corner, for when it arrives)
@@ -2113,6 +2116,7 @@ function arrived(name) {
   else if (name === 'display') displayCard();
   else if (name === 'authors') authorsCard();
   else if (name === 'family') familyCard();
+  else if (name === 'paper') triviaCard();
   else if (isHome(name)) { if (!growIntro()) firstRun(); }
   setTimeout(playArrival, 400);
 }
@@ -2148,7 +2152,7 @@ function welcomeCard() {
 const TOUR = [
   ['Getting around', 'Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom and the view glides over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse.'],
   ['Your bookcase', 'Tap a spine and it slides out a little. Tap it again and it comes off the shelf into your hands: tap the cover to open it, or anywhere else to put it back. Drag to slide along the shelves; the magnifier finds any book.'],
-  ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next.'],
+  ['Desk, fire and tome', 'The desk keeps a reading timer. The fireside holds your streak, calendar, goals and year in books, and your trophies stand on the mantel. Wake the tome for what to read next, and the morning paper on the armchair has a new literary question every day.'],
   ['Everything else', 'Your reading goals stay at the top. + Add is up there too, and the ••• menu has imports, backups, tags, Customize the room (paintings, the bookcase, trinkets and the desk) and Send feedback.'],
 ];
 function tourCard(i) {
@@ -2342,6 +2346,7 @@ function tap(px, py) {
     const cup = hits.find((h) => h.object.userData.trophy && h.distance < first.distance + 0.8);
     if (cup) return trophyCard(cup.object.userData.trophy);
     if (st === 'tome') return magic();
+    if (st === 'paper') return triviaCard();
     if (st === 'desk') return deskCard();
     if (st === 'hearth' && HOST) return hearthCard();
   }
@@ -2537,6 +2542,8 @@ $('card-body').addEventListener('click', (e) => {
   if (act) {
     const a = act.dataset.act;
     if (a === 'arrived') { closeCard(); setTimeout(playArrival, 300); return; }
+    if (a === 'trivia' && Trivia) { Trivia.answer(Number(act.dataset.i)); paperNow(); triviaCard(); return; }
+    if (a === 'trivia-want' && Trivia) { const bk = Trivia.state().item.book; if (bk && HOST && HOST.wantBook) { HOST.wantBook({ title: bk.title, author: bk.author }); setTimeout(triviaCard, 50); } return; }
     if (a === 'step-in') { closeCard(); setHome('room'); go('room'); setTimeout(playArrival, 2600); return; }
     if (a === 'open-fav') { openOnDesk(act.dataset.id); return; }
     if (a === 'fam-go') { go('fam' + act.dataset.i); return; }
@@ -3195,6 +3202,31 @@ function clockText(ms) {
 }
 $('card').querySelector('.card-x').addEventListener('click', () => { if (cardKind === 'tour') markTour(); if (outBook) { if (outBook.phase === 'held') putAway(); else closeUp(); return; } if (cardKind !== 'search') putBack(); closeCard(); });
 document.querySelectorAll('.stations button').forEach((b) => b.addEventListener('click', () => { putBack(); go(b.dataset.go === 'room' ? home() : b.dataset.go); kick(); }));
+// ---------------------------------------------------------------- the morning paper (trivia.js)
+// One literary question a day, on the armchair in the reading corner. The paper lies folded until
+// it's answered, then opens to the trivia page. The Corner button wears a small dot until then.
+const Trivia = window.TomesteadTrivia || null;
+let paperDay = '';
+const normTitle = (t) => String(t || '').toLowerCase().replace(/^(the|a|an) /, '').replace(/[^a-z0-9]+/g, '');
+function paperNow(instant = false) {
+  if (!Trivia || !world || !world.paper) return;
+  const st = Trivia.state();
+  const [y, m, d] = st.key.split('-').map(Number);
+  const date = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const moving = world.paper.set(st, date, instant || paperDay === '');
+  if (paperDay && paperDay !== st.key && !$('card').hidden && cardKind === 'trivia') triviaCard();
+  paperDay = st.key;
+  renderer.shadowMap.needsUpdate = true;
+  if (moving) kick(1500); else kick(200);
+  const b = document.querySelector('.stations [data-go="paper"]');
+  if (b) b.classList.toggle('fresh', st.picked < 0);
+}
+function triviaCard() {
+  if (!Trivia) return;
+  const st = Trivia.state(), bk = st.item.book;
+  const owned = !!(bk && lib.books.some((b) => normTitle(b.title) === normTitle(bk.title)));
+  openCard(Trivia.html(st, { canWant: !!(HOST && HOST.wantBook), owned }), 'trivia');
+}
 // the Family button: for family accounts, beside the others
 function familyButton() {
   const bar = document.querySelector('.stations'); if (!bar) return;
@@ -3611,6 +3643,7 @@ function frame(now) {
   const booksMoving = animateBooks(dt);
   if (booksMoving) kick(300);
   world.desk.tick(t); world.tome.tick(t, dt); world.furniture.tick(t);
+  if (world.paper && world.paper.tick(dt)) { kick(300); renderer.shadowMap.needsUpdate = true; }
   world.beam.material.uniforms.uTime.value = t;
   world.motes.material.uniforms.uTime.value = t;
   const r0 = performance.now();
@@ -3710,6 +3743,7 @@ function refresh() {
     if (world.fam !== before && !STATIONS[station]) { station = 'family'; const f = framing('family'); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; }
   }
   familyButton();
+  paperNow();
   // the timer or the calendar may have changed: keep the desk and fireside cards current
   if (!$('card').hidden && cardKind === 'desk') deskCard();
   if (!$('card').hidden && cardKind === 'hearth') hearthCard();
@@ -3754,6 +3788,8 @@ function setActive(on) {
   lastDesk = deskSig();
   lastWood = lib.theme.wood || 'oak'; lastVine = lib.theme.vine || 'roses';
   lastTier = world.shell.tier; lastFav = favSig();
+  world.paper = buildPaper(world.K); paperNow(true);
+  if (Trivia) { Trivia.onAnswer(() => paperNow()); setInterval(() => { if (Trivia.dayKey() !== paperDay) paperNow(); }, 60000); }
   if (HOST && HOST.arrivals) pendingArrive = HOST.arrivals().filter((k) => earnedNow()[k]);
   lastEarned = ''; syncShown();
   if (world.shell.tier !== tierNow()) rebuildShell(tierNow());
