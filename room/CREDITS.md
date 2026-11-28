@@ -81,3 +81,4 @@ Sculpted for Tomestead: the purple frog (`models/trinkets/frog.glb`, a glazed ce
 Hand-built in code: the bookcase (modelled on the app's arched bookcase, with its bookends, labels and climbing vine), the pedestal desk, the fireplace and its fire, the branch pedestal, the mantel trophies, the rug and the lamp shade.
 
 The spine cloth, leather and other textures in the app's own `tex/` folder are Tomestead's.
+- Window view: [Borghese Gardens](https://polyhaven.com/a/borghese_gardens) HDRI (CC0), cut to a flat view and graded for day and night (`tex/window_day.webp`, `tex/window_night.webp`).
