@@ -1466,27 +1466,33 @@
     sel.options[0].text = `Automatic (${auto === 'F' ? 'Fiction' : auto + ' · ' + Sh.byKey[auto].name})`;
     sel.value = (b && Sh.byKey[b.shelf]) ? b.shelf : '';
   }
-  // Each finished book's Dewey number, looked up once (gently, a book every couple of seconds), so it
-  // stands in the right section of your shelves. A book with none is tried again in a month.
+  // Each finished book's Dewey number, looked up once (gently, a book every couple of seconds, while
+  // the app sits idle), so it stands in the right section of your shelves. A book with none is tried
+  // again in a month. The room is shelved again once, at the end, not book by book.
   let ddcRun = false;
+  const idle = (ms) => new Promise(r => (window.requestIdleCallback ? requestIdleCallback(() => setTimeout(r, ms), { timeout: ms + 4000 }) : setTimeout(r, ms)));
   async function backfillDewey() {
     if (ddcRun || !Covers.ddcFor || !navigator.onLine) return;
     ddcRun = true;
+    let changed = 0;
     try {
       const due = books.filter(b => statusOf(b) === 'read' && !b.ddc && !b.shelf && !(Number(b.ddcAt) > Date.now() - 30 * 864e5)).slice(0, 40);
-      let changed = 0;
       for (const b of due) {
+        if (document.hidden) break;
         const d = await Covers.ddcFor(b).catch(() => null);
         if (d === null) break;                        // (offline, or the catalog is busy: another time)
         b.ddcAt = Date.now();
         if (d) { b.ddc = d; changed++; }
-        if (changed && changed % 8 === 0) { save(); roomRefresh(); }
-        await new Promise(r => setTimeout(r, 1800));
+        await idle(1800);
       }
-      save(); if (changed) roomRefresh();
-    } finally { ddcRun = false; }
+    } finally {
+      ddcRun = false;
+      saveHere();
+      if (changed) { Sync.push(); roomRefresh(); }
+    }
   }
-  setTimeout(backfillDewey, 15000);
+  // (well after the room has opened and settled)
+  setTimeout(() => idle(0).then(backfillDewey), 45000);
   function lookup(b) {
     if (inflight.has(b.id)) return inflight.get(b.id);
     const p = (async () => {
@@ -1903,7 +1909,7 @@
       toast({ read: `“${title}” is on the shelf.`, reading: `Enjoy “${title}”! It’s up top under Reading now.`, want: `“${title}” is on your to-read pile.`, dnf: `“${title}” is set aside.` }[st]);
     }
     if (!target.lookedUp) lookup(target).then(() => { if (reader && reader.currentId() === target.id) reader.refresh(); });
-    if (statusOf(target) === 'read' && !target.ddc) setTimeout(backfillDewey, 2500);
+    if (statusOf(target) === 'read' && !target.ddc) setTimeout(backfillDewey, 4000);
     const wasEditing = editingId;
     editingId = null;
     finishing = false;
@@ -3503,7 +3509,7 @@
   // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
   // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
   // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
-  const ROOM_SRC = './room/room.js?v=20261128075108';
+  const ROOM_SRC = './room/room.js?v=20261128082509';
   function loadRoom(attempt) {
     // a failed import can be remembered for its exact address, so each retry asks with a fresh one
     import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {

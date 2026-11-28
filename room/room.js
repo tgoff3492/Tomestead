@@ -49027,7 +49027,8 @@ function buildForestYard(K, dims2, tier, ground) {
     for (let i = 0; i < 30; i++) blob(r() * w, r() * h, 8 + r() * 26, "rgba(255,236,190,.55)");
   }, [1, 1]);
   patchT.wrapS = patchT.wrapT = THREE.RepeatWrapping;
-  const floorMat = own(std2({ color: "#ffffff", roughness: 1 }));
+  const lambert = (o) => own(new THREE.MeshLambertMaterial(o));
+  const floorMat = lambert({ color: "#ffffff" });
   floorMat.userData.u = { uPatch: { value: patchT } };
   floorMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, floorMat.userData.u);
@@ -49052,26 +49053,25 @@ function buildForestYard(K, dims2, tier, ground) {
   }
   const setGround = (g2) => {
     if (!g2 || !g2.diff) return;
-    for (const [k, t] of [["map", g2.diff], ["normalMap", g2.nor]]) {
-      if (!t) continue;
+    if (g2.diff) {
+      const t = g2.diff;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.repeat.set(240 / 2.6, 240 / 2.6);
-      floorMat[k] = t;
-    }
-    floorMat.normalScale.set(0.8, 0.8);
-    floorMat.needsUpdate = true;
-    for (const [k, t] of [["map", g2.bark], ["normalMap", g2.barkNor]]) {
-      if (!t) continue;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.repeat.set(1, 9);
-      barkMat[k] = t;
+      floorMat.map = t;
+      floorMat.needsUpdate = true;
     }
     if (g2.bark) {
-      barkMat.color.set("#ffffff");
+      const t = g2.bark;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(1, 9);
+      barkMat.map = t;
+    }
+    if (g2.bark) {
+      barkMat.color.setScalar(1.22);
       barkMat.needsUpdate = true;
     }
   };
-  const barkMat = own(std2({ color: "#4a3a2e", roughness: 0.95 }));
+  const barkMat = lambert({ color: "#4a3a2e" });
   const trees = [];
   {
     const cx = -0.05, cz = midZ, hx = 3.5, hz = (PZ1 + 1.2 - zB) / 2 + 0.3, ccz = (PZ1 + 1.2 + zB) / 2;
@@ -49081,13 +49081,23 @@ function buildForestYard(K, dims2, tier, ground) {
       return ahead > -1.5 && lat < Math.max(hx, hz) + 1;
     });
     let tries = 0;
+    const grid = /* @__PURE__ */ new Map();
     while (trees.length < 260 && tries++ < 9e3) {
       const a = r() * Math.PI * 2, d = 4 + Math.pow(r(), 0.85) * 48;
       const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
       if (Math.abs(x - cx) < hx + 1.2 && Math.abs(z - ccz) < hz + 1.2) continue;
       if (blocks(x, z)) continue;
-      if (trees.some((t) => Math.hypot(t[0] - x, t[1] - z) < 1.7)) continue;
-      trees.push([x, z, 0.28 + r() * 0.36]);
+      const key = Math.floor(x / 2) + "," + Math.floor(z / 2);
+      let close = false;
+      for (let gx = -1; gx <= 1 && !close; gx++) for (let gz = -1; gz <= 1 && !close; gz++) for (const t of grid.get(Math.floor(x / 2) + gx + "," + (Math.floor(z / 2) + gz)) || []) if (Math.hypot(t[0] - x, t[1] - z) < 1.7) {
+        close = true;
+        break;
+      }
+      if (close) continue;
+      const tr = [x, z, 0.28 + r() * 0.36];
+      trees.push(tr);
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push(tr);
     }
     const tg = own(new THREE.CylinderGeometry(0.55, 1, 1, 12, 1, true).translate(0, 0.5, 0));
     const tm = new THREE.InstancedMesh(tg, barkMat, trees.length);
@@ -49102,7 +49112,7 @@ function buildForestYard(K, dims2, tier, ground) {
     });
     G.add(tm);
     const rg = own(new THREE.CylinderGeometry(1, 1.3, 0.3, 12, 1, true).translate(0, 0.15, 0));
-    const rm = new THREE.InstancedMesh(rg, own(std2({ color: "#3b2c22", roughness: 1 })), trees.length);
+    const rm = new THREE.InstancedMesh(rg, lambert({ color: "#4d3a2c" }), trees.length);
     trees.forEach(([x, z, rad], i) => {
       o3.position.set(x, Y0 - 0.25, z);
       o3.rotation.set(0, r() * 6.3, 0);
@@ -49121,7 +49131,7 @@ function buildForestYard(K, dims2, tier, ground) {
     };
     for (let k = 0; k < F; k++) {
       const a = k / F * Math.PI * 2 + r() * 0.5, lean = 0.7 + r() * 0.4, L = 0.8 + r() * 0.35;
-      const ca = Math.cos(a), sa = Math.sin(a), sx = -sa, sz = ca, seg = 12;
+      const ca = Math.cos(a), sa = Math.sin(a), sx = -sa, sz = ca, seg = 8;
       const P = (t) => [ca * L * t * lean, Math.sin(t * Math.PI * 0.85) * 0.5 * (1.15 - lean * 0.45), sa * L * t * lean];
       for (let i = 1; i <= seg; i++) {
         const t = i / seg, p = P(t), q = P(Math.max(0, t - 0.7 / seg)), c = 0.45 + t * 0.55;
@@ -49136,22 +49146,24 @@ function buildForestYard(K, dims2, tier, ground) {
     fg.setAttribute("position", new THREE.Float32BufferAttribute(frond, 3));
     fg.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     fg.computeVertexNormals();
-    const fernMat = own(std2({ color: "#ffffff", vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }));
+    const fernMat = lambert({ color: "#ffffff", vertexColors: true, side: THREE.DoubleSide });
+    fernMat.color.setRGB(1.75, 1.75, 2.1);
     const greens = ["#4a6a2c", "#56762f", "#3f5c27", "#628236", "#4c6630"].map((c) => new THREE.Color(c));
     const fw = new THREE.Vector2(-0.67, -0.74), fwL = fw.clone().rotateAround(new THREE.Vector2(), 0.5), fwR = fw.clone().rotateAround(new THREE.Vector2(), -0.5);
     const backOf = (f) => 3.4 * Math.abs(f.x) + (len / 2 + 0.5) * Math.abs(f.y);
+    const pathPts = Array.from({ length: 41 }, (_, i) => curve.getPointAt(i / 40));
     const near = (x, z) => {
       let d = 99;
-      for (let i = 0; i <= 60; i++) {
-        const p = curve.getPointAt(i / 60);
-        d = Math.min(d, Math.hypot(p.x - x, p.z - z));
+      for (const p of pathPts) {
+        const e = Math.hypot(p.x - x, p.z - z);
+        if (e < d) d = e;
       }
       return d;
     };
     const spots = [];
     const centers = [];
-    for (let i = 0; i < 200; i++) {
-      const a = r() * 6.3, d = 4 + r() * 30;
+    for (let i = 0; i < 150; i++) {
+      const a = r() * 6.3, d = 4 + r() * 24;
       centers.push([Math.cos(a) * d, midZ + Math.sin(a) * d]);
     }
     for (const [cx, cz] of centers) {
@@ -49193,7 +49205,7 @@ function buildForestYard(K, dims2, tier, ground) {
     group: G,
     setGround,
     setLook(mode2) {
-      floorMat.color.set(mode2 === "night" ? "#c8d0e0" : "#ecdcbc");
+      floorMat.color.set(mode2 === "night" ? "#c8d0e0" : "#ecdfcf").multiplyScalar(1.55);
       barkMat.emissive.set(mode2 === "night" ? "#000000" : "#120a05");
       pool.material.opacity = mode2 === "night" ? 0.55 : 0;
       pool.visible = mode2 === "night";
@@ -50118,8 +50130,10 @@ async function build() {
     document.querySelector('meta[name="theme-color"]').setAttribute("content", L.bg);
   }
   await fontReady;
-  books.paint();
-  books.showPage(books.page);
+  if (!books.painted) {
+    books.paint();
+    books.showPage(books.page);
+  }
   applyLook();
   mergeStatics();
   scene.traverse((o) => {
@@ -50749,6 +50763,11 @@ function buildBookcase(M, { cloth, leather }) {
   const caseOfAbs = (placed) => Math.floor((placed.length ? placed[placed.length - 1].abs : 0) / ROWS);
   const S = window.TomesteadShelving;
   let far = [], farMesh = null, farMat = null, farTex = null, plates = [], caseMeshes = [], caseMat = null, hiddenPage = -1;
+  const plateGeo = new PlaneGeometry(0.42, 0.063), plateMats = /* @__PURE__ */ new Map();
+  const plateMat = (text) => {
+    if (!plateMats.has(text)) plateMats.set(text, std({ map: canvasTex(plateTex(text, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }));
+    return plateMats.get(text);
+  };
   const V3 = Vector3;
   function farPose(it) {
     const s2 = it.slot, start = s2.LR > 0 ? s2.a0 : s2.a1, a = start + s2.LR * (it.ax + it.t / 2);
@@ -50759,6 +50778,13 @@ function buildBookcase(M, { cloth, leather }) {
       out: s2.axis === "x" ? new V3(0, 0, s2.dir) : new V3(s2.dir, 0, 0)
     };
   }
+  const fontReady = () => {
+    try {
+      return document.fonts.check('20px "IM Fell English"');
+    } catch {
+      return true;
+    }
+  };
   function paintSet(bookMeshes) {
     const n = bookMeshes.length;
     if (!n) return null;
@@ -50904,11 +50930,7 @@ function buildBookcase(M, { cloth, leather }) {
     }
     for (const o of [...wallGroup.children]) {
       wallGroup.remove(o);
-      if (o.geometry) o.geometry.dispose();
-      if (o.material && o.material !== farMat) {
-        if (o.material.map) o.material.map.dispose();
-        o.material.dispose();
-      }
+      if (o.geometry && o.geometry !== plateGeo) o.geometry.dispose();
     }
     farMesh = null;
     plates = [];
@@ -51053,7 +51075,9 @@ function buildBookcase(M, { cloth, leather }) {
       }
       for (const [i2, its] of bySlot) {
         const s2 = BAYS[i2], text = S ? S.range(its[0].b, its[its.length - 1].b) : "";
-        const pl = mesh(new PlaneGeometry(0.42, 0.063), std({ map: canvasTex(plateTex(text.replace(/\s+/g, " "), 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), wallGroup, { cast: false });
+        const pl = new Mesh(plateGeo, plateMat(text.replace(/\s+/g, " ")));
+        pl.userData.dyn = true;
+        wallGroup.add(pl);
         const mid = (s2.a0 + s2.a1) / 2, yv = s2.y1 - 0.04, n = s2.front + s2.dir * 0.075;
         if (s2.axis === "x") {
           pl.position.set(mid, yv, n);
@@ -51068,6 +51092,7 @@ function buildBookcase(M, { cloth, leather }) {
     let mat = null;
     function paint() {
       api.mat = mat = paintSet(bookMeshes);
+      api.painted = fontReady();
     }
     Object.assign(api, {
       meshes: bookMeshes,
@@ -51131,8 +51156,6 @@ function buildBookcase(M, { cloth, leather }) {
   };
   api.hitPage = (instanceId) => far[instanceId] ? far[instanceId].page : -1;
   api.farMesh = () => farMesh;
-  fill2();
-  api.paint();
   const HT = AY + HS + RISE;
   const hit = new Mesh(new BoxGeometry(W + 0.1, HT, D), new MeshBasicMaterial({ visible: false }));
   hit.position.set(0, HT / 2, ZC);
@@ -52669,8 +52692,8 @@ function buildYardNow() {
   world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier, groundTex);
   if (!groundTex.asked) {
     groundTex.asked = true;
-    Promise.all([loadTex("ground_diff", true), loadTex("ground_nor"), loadTex("bark_diff", true), loadTex("bark_nor")]).then(([d, n, b, bn]) => {
-      Object.assign(groundTex, { diff: d, nor: n, bark: b, barkNor: bn });
+    Promise.all([loadTex("ground_diff", true), loadTex("bark_diff", true)]).then(([d, b]) => {
+      Object.assign(groundTex, { diff: d, bark: b });
       if (world.yard) world.yard.setGround(groundTex);
       kick();
     });
@@ -55062,7 +55085,8 @@ function setActive(on) {
     cam.dist = 1;
   }
   updateCamera(0);
-  renderer.compile(scene, camera);
+  if (renderer.compileAsync) await renderer.compileAsync(scene, camera).catch(() => renderer.compile(scene, camera));
+  else renderer.compile(scene, camera);
   requestAnimationFrame(frame);
   const customize = (on, r = 0, b = 0) => {
     if (on && !customizing) {

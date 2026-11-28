@@ -659,7 +659,7 @@ async function build() {
   }
 
   await fontReady;
-  books.paint(); books.showPage(books.page);     // spine lettering needs the font
+  if (!books.painted) { books.paint(); books.showPage(books.page); }     // spine lettering needs the font (once it's in, if it wasn't at first)
   applyLook();
 
   // nothing in the room moves on its own except a few small things: freeze the rest,
@@ -1083,6 +1083,8 @@ function buildBookcase(M, { cloth, leather }) {
   // on the cart by the door.)
   const S = window.TomesteadShelving;
   let far = [], farMesh = null, farMat = null, farTex = null, plates = [], caseMeshes = [], caseMat = null, hiddenPage = -1;
+  const plateGeo = new THREE.PlaneGeometry(0.42, 0.063), plateMats = new Map();
+  const plateMat = (text) => { if (!plateMats.has(text)) plateMats.set(text, std({ map: canvasTex(plateTex(text, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 })); return plateMats.get(text); };
   const V3 = THREE.Vector3;
   function farPose(it) {
     const s2 = it.slot, start = s2.LR > 0 ? s2.a0 : s2.a1, a = start + s2.LR * (it.ax + it.t / 2);
@@ -1093,7 +1095,8 @@ function buildBookcase(M, { cloth, leather }) {
       out: s2.axis === 'x' ? new V3(0, 0, s2.dir) : new V3(s2.dir, 0, 0),
     };
   }
-  // spine lettering: one texture for a set of books (one material for every spine in the set)
+  const fontReady = () => { try { return document.fonts.check('20px "IM Fell English"'); } catch { return true; } };
+// spine lettering: one texture for a set of books (one material for every spine in the set)
   function paintSet(bookMeshes) {
     const n = bookMeshes.length;
     if (!n) return null;
@@ -1182,7 +1185,7 @@ function buildBookcase(M, { cloth, leather }) {
   if (api.mat) { api.mat.map.dispose(); api.mat.dispose(); api.mat = null; }
   for (const m of caseMeshes) { wallGroup.remove(m); m.geometry.dispose(); } caseMeshes = [];
   if (caseMat) { caseMat.map.dispose(); caseMat.dispose(); caseMat = null; }
-  for (const o of [...wallGroup.children]) { wallGroup.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== farMat) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }
+  for (const o of [...wallGroup.children]) { wallGroup.remove(o); if (o.geometry && o.geometry !== plateGeo) o.geometry.dispose(); }
   farMesh = null; plates = []; hiddenPage = -1;
   const g = shelfGroup;
   // brass name plate on the sill, like the app ("16 read")
@@ -1297,7 +1300,7 @@ function buildBookcase(M, { cloth, leather }) {
     const bySlot = new Map(); for (const it of far) { if (!bySlot.has(it.si)) bySlot.set(it.si, []); bySlot.get(it.si).push(it); }
     for (const [i2, its] of bySlot) {
       const s2 = BAYS[i2], text = S ? S.range(its[0].b, its[its.length - 1].b) : '';
-      const pl = mesh(new THREE.PlaneGeometry(0.42, 0.063), std({ map: canvasTex(plateTex(text.replace(/\s+/g, ' '), 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), wallGroup, { cast: false });
+      const pl = new THREE.Mesh(plateGeo, plateMat(text.replace(/\s+/g, ' '))); pl.userData.dyn = true; wallGroup.add(pl);
       const mid = (s2.a0 + s2.a1) / 2, yv = s2.y1 - 0.04, n = s2.front + s2.dir * 0.075;
       if (s2.axis === 'x') { pl.position.set(mid, yv, n); pl.rotation.y = s2.dir > 0 ? 0 : Math.PI; } else { pl.position.set(n, yv, mid); pl.rotation.y = s2.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
       plates.push(pl);
@@ -1305,7 +1308,7 @@ function buildBookcase(M, { cloth, leather }) {
   }
 
   let mat = null;
-  function paint() { api.mat = mat = paintSet(bookMeshes); }
+  function paint() { api.mat = mat = paintSet(bookMeshes); api.painted = fontReady(); }
   Object.assign(api, { meshes: bookMeshes, meshes0: bookMeshes, paint, hidden, count: list.length, order: null, page: 0, pages: 1 + BAYS.length, all, far,
     byId: new Map(bookMeshes.map((m) => [m.userData.book.id, m])) });
   }
@@ -1347,8 +1350,7 @@ function buildBookcase(M, { cloth, leather }) {
   };
   api.hitPage = (instanceId) => (far[instanceId] ? far[instanceId].page : -1);
   api.farMesh = () => farMesh;
-  fill();
-  api.paint();
+  // (the books are shelved once the room's other bookcases are known: see build())
 
   // one picking target for the whole case (books are picked first)
   const HT = AY + HS + RISE;
@@ -2507,7 +2509,7 @@ function outside() {
 function buildYardNow() {
   if (world.yard) { const i = PLINTH.indexOf(world.yard.group); if (i >= 0) PLINTH.splice(i, 1); world.yard.dispose(); }
   world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier, groundTex);
-  if (!groundTex.asked) { groundTex.asked = true; Promise.all([loadTex('ground_diff', true), loadTex('ground_nor'), loadTex('bark_diff', true), loadTex('bark_nor')]).then(([d, n, b, bn]) => { Object.assign(groundTex, { diff: d, nor: n, bark: b, barkNor: bn }); if (world.yard) world.yard.setGround(groundTex); kick(); }); }
+  if (!groundTex.asked) { groundTex.asked = true; Promise.all([loadTex('ground_diff', true), loadTex('bark_diff', true)]).then(([d, b]) => { Object.assign(groundTex, { diff: d, bark: b }); if (world.yard) world.yard.setGround(groundTex); kick(); }); }
   world.yard.group.visible = isOut; PLINTH.push(world.yard.group);
   world.yard.setLook(mode);
 }
@@ -4284,7 +4286,7 @@ function setActive(on) {
   const camQ = !HOST && params.get('cam') ? params.get('cam').split(',').map(Number) : null;
   if (camQ && camQ.length === 6) { cam.pos.set(camQ[0], camQ[1], camQ[2]); cam.dir.set(camQ[3] - camQ[0], camQ[4] - camQ[1], camQ[5] - camQ[2]).normalize(); cam.dist = 1; }
   updateCamera(0);
-  renderer.compile(scene, camera);
+  if (renderer.compileAsync) await renderer.compileAsync(scene, camera).catch(() => renderer.compile(scene, camera)); else renderer.compile(scene, camera);
   requestAnimationFrame(frame);
   // Customize (app.js): frame the room beside the panel and glide to what's being changed
   const customize = (on, r = 0, b = 0) => {

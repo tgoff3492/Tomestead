@@ -87,7 +87,8 @@ export function buildForestYard(K, dims, tier, ground) {
     for (let i = 0; i < 30; i++) blob(r() * w, r() * h, 8 + r() * 26, 'rgba(255,236,190,.55)');                                   // sun flecks
   }, [1, 1]);
   patchT.wrapS = patchT.wrapT = THREE.RepeatWrapping;
-  const floorMat = own(std({ color: '#ffffff', roughness: 1 }));
+  const lambert = (o) => own(new THREE.MeshLambertMaterial(o));   // (matte, and far cheaper to draw than the room's materials)
+  const floorMat = lambert({ color: '#ffffff' });
   floorMat.userData.u = { uPatch: { value: patchT } };
   floorMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, floorMat.userData.u);
@@ -110,15 +111,14 @@ export function buildForestYard(K, dims, tier, ground) {
   }
   const setGround = (g) => {
     if (!g || !g.diff) return;
-    for (const [k, t] of [['map', g.diff], ['normalMap', g.nor]]) { if (!t) continue; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(240 / 2.6, 240 / 2.6); floorMat[k] = t; }
-    floorMat.normalScale.set(0.8, 0.8); floorMat.needsUpdate = true;
-    for (const [k, t] of [['map', g.bark], ['normalMap', g.barkNor]]) { if (!t) continue; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 9); barkMat[k] = t; }
-    if (g.bark) { barkMat.color.set('#ffffff'); barkMat.needsUpdate = true; }
+    if (g.diff) { const t = g.diff; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(240 / 2.6, 240 / 2.6); floorMat.map = t; floorMat.needsUpdate = true; }
+    if (g.bark) { const t = g.bark; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 9); barkMat.map = t; }
+    if (g.bark) { barkMat.color.setScalar(1.22); barkMat.needsUpdate = true; }
   };
 
   // the pines: tall straight trunks all around and behind the house, rising out of the top of the view;
   // none stand between you and the room, and a few close ones frame the edges
-  const barkMat = own(std({ color: '#4a3a2e', roughness: 0.95 }));
+  const barkMat = lambert({ color: '#4a3a2e' });
   const trees = [];
   {
     const cx = -0.05, cz = midZ, hx = 3.5, hz = (PZ1 + 1.2 - zB) / 2 + 0.3, ccz = (PZ1 + 1.2 + zB) / 2;
@@ -128,13 +128,18 @@ export function buildForestYard(K, dims, tier, ground) {
       return ahead > -1.5 && lat < Math.max(hx, hz) + 1.0;
     });
     let tries = 0;
+    const grid = new Map();
     while (trees.length < 260 && tries++ < 9000) {
       const a = r() * Math.PI * 2, d = 4 + Math.pow(r(), 0.85) * 48;
       const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
       if (Math.abs(x - cx) < hx + 1.2 && Math.abs(z - ccz) < hz + 1.2) continue;
       if (blocks(x, z)) continue;
-      if (trees.some((t) => Math.hypot(t[0] - x, t[1] - z) < 1.7)) continue;
-      trees.push([x, z, 0.28 + r() * 0.36]);
+      const key = Math.floor(x / 2) + ',' + Math.floor(z / 2);
+      let close = false;
+      for (let gx = -1; gx <= 1 && !close; gx++) for (let gz = -1; gz <= 1 && !close; gz++) for (const t of grid.get((Math.floor(x / 2) + gx) + ',' + (Math.floor(z / 2) + gz)) || []) if (Math.hypot(t[0] - x, t[1] - z) < 1.7) { close = true; break; }
+      if (close) continue;
+      const tr = [x, z, 0.28 + r() * 0.36]; trees.push(tr);
+      if (!grid.has(key)) grid.set(key, []); grid.get(key).push(tr);
     }
     const tg = own(new THREE.CylinderGeometry(0.55, 1, 1, 12, 1, true).translate(0, 0.5, 0));
     const tm = new THREE.InstancedMesh(tg, barkMat, trees.length);
@@ -143,7 +148,7 @@ export function buildForestYard(K, dims, tier, ground) {
     G.add(tm);
     // a flared root collar at each trunk's foot, so they stand in the ground rather than on it
     const rg = own(new THREE.CylinderGeometry(1, 1.3, 0.3, 12, 1, true).translate(0, 0.15, 0));
-    const rm = new THREE.InstancedMesh(rg, own(std({ color: '#3b2c22', roughness: 1 })), trees.length);
+    const rm = new THREE.InstancedMesh(rg, lambert({ color: '#4d3a2c' }), trees.length);
     trees.forEach(([x, z, rad], i) => { o3.position.set(x, Y0 - 0.25, z); o3.rotation.set(0, r() * 6.3, 0); o3.scale.set(rad, 1, rad); o3.updateMatrix(); rm.setMatrixAt(i, o3.matrix); });
     G.add(rm);
   }
@@ -156,7 +161,7 @@ export function buildForestYard(K, dims, tier, ground) {
     const F = 9, tri = (a, b, c, ca, cb, cc) => { frond.push(...a, ...b, ...c); col.push(ca, ca, ca, cb, cb, cb, cc, cc, cc); };
     for (let k = 0; k < F; k++) {
       const a = (k / F) * Math.PI * 2 + r() * 0.5, lean = 0.7 + r() * 0.4, L = 0.8 + r() * 0.35;
-      const ca = Math.cos(a), sa = Math.sin(a), sx = -sa, sz = ca, seg = 12;
+      const ca = Math.cos(a), sa = Math.sin(a), sx = -sa, sz = ca, seg = 8;
       const P = (t) => [ca * L * t * lean, Math.sin(t * Math.PI * 0.85) * 0.5 * (1.15 - lean * 0.45), sa * L * t * lean];
       for (let i = 1; i <= seg; i++) {
         const t = i / seg, p = P(t), q = P(Math.max(0, t - 0.7 / seg)), c = 0.45 + t * 0.55;
@@ -169,13 +174,14 @@ export function buildForestYard(K, dims, tier, ground) {
       }
     }
     const fg = own(new THREE.BufferGeometry()); fg.setAttribute('position', new THREE.Float32BufferAttribute(frond, 3)); fg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); fg.computeVertexNormals();
-    const fernMat = own(std({ color: '#ffffff', vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }));
+    const fernMat = lambert({ color: '#ffffff', vertexColors: true, side: THREE.DoubleSide }); fernMat.color.setRGB(1.75, 1.75, 2.1);
     const greens = ['#4a6a2c', '#56762f', '#3f5c27', '#628236', '#4c6630'].map((c) => new THREE.Color(c));
     const fw = new THREE.Vector2(-0.67, -0.74), fwL = fw.clone().rotateAround(new THREE.Vector2(), 0.5), fwR = fw.clone().rotateAround(new THREE.Vector2(), -0.5);
     const backOf = (f) => 3.4 * Math.abs(f.x) + (len / 2 + 0.5) * Math.abs(f.y);
-    const near = (x, z) => { let d = 99; for (let i = 0; i <= 60; i++) { const p = curve.getPointAt(i / 60); d = Math.min(d, Math.hypot(p.x - x, p.z - z)); } return d; };
+    const pathPts = Array.from({ length: 41 }, (_, i) => curve.getPointAt(i / 40));
+    const near = (x, z) => { let d = 99; for (const p of pathPts) { const e = Math.hypot(p.x - x, p.z - z); if (e < d) d = e; } return d; };
     const spots = [];
-    const centers = []; for (let i = 0; i < 200; i++) { const a = r() * 6.3, d = 4 + r() * 30; centers.push([Math.cos(a) * d, midZ + Math.sin(a) * d]); }
+    const centers = []; for (let i = 0; i < 150; i++) { const a = r() * 6.3, d = 4 + r() * 24; centers.push([Math.cos(a) * d, midZ + Math.sin(a) * d]); }
     for (const [cx, cz] of centers) {
       const n = 4 + Math.floor(r() * 9);
       for (let i = 0; i < n; i++) {
@@ -201,7 +207,7 @@ export function buildForestYard(K, dims, tier, ground) {
   return {
     group: G,
     setGround,
-    setLook(mode) { floorMat.color.set(mode === 'night' ? '#c8d0e0' : '#ecdcbc'); barkMat.emissive.set(mode === 'night' ? '#000000' : '#120a05'); pool.material.opacity = mode === 'night' ? 0.55 : 0; pool.visible = mode === 'night'; },
+    setLook(mode) { floorMat.color.set(mode === 'night' ? '#c8d0e0' : '#ecdfcf').multiplyScalar(1.55); barkMat.emissive.set(mode === 'night' ? '#000000' : '#120a05'); pool.material.opacity = mode === 'night' ? 0.55 : 0; pool.visible = mode === 'night'; },
     dispose() { K.scene.remove(G); geos.forEach((x) => x.dispose()); mats.forEach((x) => x.dispose()); texs.forEach((x) => x.dispose()); },
   };
 }
