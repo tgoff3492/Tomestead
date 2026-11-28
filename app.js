@@ -989,10 +989,14 @@
     const y = thisYear();
     // the long line for the classic views; one short line over the room
     const sk = calendar ? calendar.streaks() : null;
-    const short = n ? [`${n} read`, `${countInYear(y)} this year`, sk && sk.cur >= 2 ? `<button type="button" class="streak-link" data-cal-open>${sk.cur}-day streak</button>` : ''].filter(Boolean).join(' · ') : '';
+    // over the room: one quiet line (this year's count, a streak when there is one)
+    const cy = countInYear(y);
+    const short = [cy ? `${cy} ${cy === 1 ? 'book' : 'books'} read this year` : `${n} ${n === 1 ? 'book' : 'books'} on your shelves`,
+      sk && sk.cur >= 2 ? `<button type="button" class="streak-link" data-cal-open>${sk.cur}-day streak</button>` : ''].filter(Boolean).join(' · ');
     $('#stats').innerHTML = n
-      ? `<span class="st-long">${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${countInYear(y)} finished in ${y}.`)}${streakNote()}</span><span class="st-short">${short}</span>`
-      : (books.length ? 'Your first finished book goes on the shelf.' : 'Every book you’ve read, on one shelf.');
+      ? `<span class="st-long">${esc(`${n} ${n === 1 ? 'book' : 'books'} read${rated.length ? `, averaging ${avg.toFixed(1)} stars` : ''}. ${cy} finished in ${y}.`)}${streakNote()}</span><span class="st-short">${short}</span>`
+      : (books.length ? `<span class="st-long">Your first finished book goes on the shelf.</span><span class="st-short">Your first finished book goes on the shelf</span>`
+        : `<span class="st-long">Every book you’ve read, on one shelf.</span><span class="st-short">Your reading room is ready</span>`);
     $('#genres').innerHTML = [...new Set(books.map(b => b.genre).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
     $('#seriesList').innerHTML = [...new Set(books.map(b => b.series).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('');
   }
@@ -1057,14 +1061,35 @@
     bar.className = 'goalbar';
     bar.innerHTML = rows.join('');
     // the 3D room shows this year's goal and the goals running now, under the toolbar
+    // (this year's goal is the ring in the header there; only goals with their own timeline line up here)
     const rg = $('#roomGoals');
-    const rrows = goalRows(thisYear(), 2);
+    const rrows = goalRows(thisYear(), 2, true);
     rg.hidden = !rrows.length;
     rg.innerHTML = rrows.join('');
+    renderGoalRing();
   }
-  function goalRows(y, maxCustom) {
+  // this year's goal over the room: a small brass ring by + Add (an empty dotted one offers to set a goal)
+  function renderGoalRing() {
+    const el = $('#goalRing'), y = thisYear();
+    const goal = goalFor(y);
+    const show = books.length > 0 && (goal || offerYearGoal(y));
+    el.hidden = !show;
+    if (!show) return;
+    const R = 17, C = 2 * Math.PI * R;
+    if (!goal) {
+      el.className = 'goal-ring empty';
+      el.setAttribute('aria-label', `Set a ${y} reading goal`);
+      el.innerHTML = `<svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true"><circle cx="22" cy="22" r="${R}" class="gr-track"/><circle cx="22" cy="22" r="7" class="gr-target"/><circle cx="22" cy="22" r="2.2" class="gr-dot"/></svg>`;
+      return;
+    }
+    const done = countForGoal(y), met = done >= goal, pct = Math.min(1, done / goal);
+    el.className = 'goal-ring' + (met ? ' met' : '');
+    el.setAttribute('aria-label', `${y} reading goal: ${done} of ${goal}${met ? ', reached' : ''}. Open goal.`);
+    el.innerHTML = `<svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true"><circle cx="22" cy="22" r="${R}" class="gr-track"/><circle cx="22" cy="22" r="${R}" class="gr-fill" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 22 22)"/></svg><span class="gr-n" aria-hidden="true">${done}</span>`;
+  }
+  function goalRows(y, maxCustom, skipYear = false) {
     const rows = [];
-    if (/^\d{4}$/.test(y)) {
+    if (/^\d{4}$/.test(y) && !skipYear) {
       const goal = goalFor(y), done = countInYear(y);
       if (!goal) {
         // only ask for a year goal when there's no goal at all yet (and the year isn't over)
@@ -2861,6 +2886,7 @@
     $('#goalMenuBtn').addEventListener('click', () => { more.open = false; openGoals(); });
     $('#calBtn').addEventListener('click', () => { more.open = false; calendar.open(); });
     $('#triviaBtn').addEventListener('click', () => { more.open = false; openTrivia(); });
+    $('#goalRing').addEventListener('click', () => openGoal(thisYear()));
     $('#triviaDialog').addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]');
       if (!act || !Trivia) return;
@@ -3338,7 +3364,7 @@
   // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
   // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
   // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
-  const ROOM_SRC = './room/room.js?v=20261127195647';
+  const ROOM_SRC = './room/room.js?v=20261127202410';
   function loadRoom(attempt) {
     // a failed import can be remembered for its exact address, so each retry asks with a fresh one
     import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {

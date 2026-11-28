@@ -47493,6 +47493,24 @@ function buildShell(K, tier) {
     m.visible = false;
     plinth.push(m);
   }
+  {
+    const [c, x] = K.mkCanvas(256, 256);
+    const g = x.createRadialGradient(128, 128, 30, 128, 128, 128);
+    g.addColorStop(0, "rgba(0,0,0,0.62)");
+    g.addColorStop(0.55, "rgba(0,0,0,0.38)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    x.fillStyle = g;
+    x.fillRect(0, 0, 256, 256);
+    const mat = new THREE.MeshBasicMaterial({ map: K.canvasTex(c, { repeat: false }), transparent: true, depthWrite: false, toneMapped: false });
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(6.42 + 3.2, len + 0.42 + 3.2).rotateX(-Math.PI / 2), mat);
+    sh.position.set(-0.05, -0.43, midZ);
+    sh.renderOrder = -1;
+    sh.userData.plinth = true;
+    sh.userData.dyn = true;
+    sh.visible = false;
+    plinth.push(sh);
+    G.add(sh);
+  }
   const arch = (P, cx, y0, w, h) => {
     P.moveTo(cx - w / 2, y0);
     P.lineTo(cx + w / 2, y0);
@@ -49074,7 +49092,21 @@ try {
 var isPhone = matchMedia("(pointer: coarse)").matches;
 var dpr = Math.min(window.devicePixelRatio || 1, isPhone ? 2 : 1.75);
 renderer.setPixelRatio(dpr);
-renderer.toneMapping = ACESFilmicToneMapping;
+ShaderChunk.tonemapping_pars_fragment = ShaderChunk.tonemapping_pars_fragment.replace(
+  "vec3 CustomToneMapping( vec3 color ) { return color; }",
+  `vec3 CustomToneMapping( vec3 color ) {
+    color = ACESFilmicToneMapping( color );
+    float lum = dot( color, vec3( 0.2126, 0.7152, 0.0722 ) );
+    float sh = 1.0 - smoothstep( 0.0, 0.32, lum );
+    float hi = smoothstep( 0.35, 0.95, lum );
+    color = mix( color, color * vec3( 0.86, 0.96, 1.14 ), sh * 0.42 );
+    color = mix( color, color * vec3( 1.03, 1.0, 0.9 ), hi * 0.35 );
+    color = mix( vec3( lum ), color, 0.92 );
+    color = 0.18 * pow( max( color, vec3( 0.0 ) ) / 0.18, vec3( 1.07 ) );
+    return clamp( color, 0.0, 1.0 );
+  }`
+);
+renderer.toneMapping = CustomToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFShadowMap;
 renderer.shadowMap.autoUpdate = false;
@@ -49702,6 +49734,35 @@ async function build() {
     }
   };
   const skyCanvases = { day: skyMat.map, night: canvasTex(skyTex("night"), { repeat: false }) };
+  const stageTex = (night) => {
+    const [c, x] = mkCanvas(512, 512);
+    x.fillStyle = night ? "#0b0a10" : "#1b120c";
+    x.fillRect(0, 0, 512, 512);
+    const g = x.createRadialGradient(256, 245, 10, 256, 245, 330);
+    if (night) {
+      g.addColorStop(0, "rgba(70,56,64,1)");
+      g.addColorStop(0.45, "rgba(38,30,40,.85)");
+      g.addColorStop(1, "rgba(11,10,16,0)");
+    } else {
+      g.addColorStop(0, "rgba(112,78,50,1)");
+      g.addColorStop(0.45, "rgba(66,44,28,.85)");
+      g.addColorStop(1, "rgba(27,18,12,0)");
+    }
+    x.fillStyle = g;
+    x.fillRect(0, 0, 512, 512);
+    const r = rng(17), d = x.getImageData(0, 0, 512, 512);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const n = (r() - 0.5) * 7;
+      d.data[i] += n;
+      d.data[i + 1] += n;
+      d.data[i + 2] += n;
+    }
+    x.putImageData(d, 0, 0);
+    const t = canvasTex(c, { repeat: false });
+    t.colorSpace = SRGBColorSpace;
+    return t;
+  };
+  const stageBg = { day: stageTex(false), night: stageTex(true) };
   Promise.all([loadTex("window_day", true), loadTex("window_night", true)]).then(([d, n]) => {
     for (const t of [d, n]) if (t) {
       t.wrapS = t.wrapT = ClampToEdgeWrapping;
@@ -49746,7 +49807,7 @@ async function build() {
     wallMat.needsUpdate = true;
     skyMat.map = skyCanvases[L.sky];
     skyMat.needsUpdate = true;
-    scene.background.set(L.bg);
+    scene.background = stageBg[mode] || stageBg.day;
     if ($("light")) {
       $("light").textContent = mode === "day" ? "\u263E" : "\u2600";
       $("light").setAttribute("aria-label", mode === "day" ? "Switch to night" : "Switch to day");
@@ -51805,8 +51866,7 @@ function go(name, dur = 1.5, { arrive = true } = {}) {
   }
   glide(name, dur, arrive);
   if (name !== "tome" && world) world.tome.rest();
-  if (name === "shelf" && world && !world.books.meshes.length && HOST) openCard(`<h2>Your shelves are empty</h2><div class="meta">Add the first book and it will stand here, or bring your library over from Goodreads or StoryGraph.</div><div class="acts"><button type="button" data-act="add">Add a book</button><button type="button" class="quiet" data-act="import">Import</button></div>`);
-  else if (name === "shelf" && world) shelfHint();
+  if (name === "shelf" && world && (world.books.meshes.length || !HOST)) shelfHint();
 }
 function glide(name, dur, arrive) {
   if ((famStation(name) ? "family" : "main") !== where) {
@@ -51896,9 +51956,9 @@ function firstRun() {
   if (!tourSeen()) tourCard(0);
 }
 function welcomeCard() {
-  openCard(`<div class="eyebrow">Welcome</div><h2>This is your reading room</h2>
-    <div class="meta">Every book you\u2019ve read, are reading or want to read gets its own spine on the bookcase. Start with one book, or bring your whole library over.</div>
-    <div class="acts"><button type="button" data-act="add">Add your first book</button><button type="button" class="quiet" data-act="import">Import from Goodreads or StoryGraph</button><button type="button" class="quiet" data-act="tour">Show me around</button></div>`, "welcome");
+  openCard(`<div class="eyebrow">Welcome</div><h2>What are you reading right now?</h2>
+    <div class="meta">Add one book and it lands on your shelf. Everything else in the room wakes up as your library grows.</div>
+    <div class="acts stack"><button type="button" data-act="add">Add a book</button><button type="button" class="quiet" data-act="import">Bring my Goodreads or StoryGraph shelf</button></div>`, "welcome");
 }
 var TOUR = [
   ["Getting around", "Tap a place (Shelf, Desk, Fireside or Tome) on the room or along the bottom and the view glides over. Drag to look around. Step inside stands you in the room; Whole room takes you back out to the dollhouse."],
@@ -53267,11 +53327,29 @@ $("card").querySelector(".card-x").addEventListener("click", () => {
   if (cardKind !== "search") putBack();
   closeCard();
 });
-document.querySelectorAll(".stations button").forEach((b) => b.addEventListener("click", () => {
-  putBack();
-  go(b.dataset.go === "room" ? home() : b.dataset.go);
-  kick();
-}));
+var STATION_ICONS = {
+  room: '<path d="M3 20h18M5 20V9l7-5 7 5v11M10 20v-5h4v5"/>',
+  shelf: '<path d="M4 4v16M8 6v14M12 5v15M16 7l3 13M3 20h18"/>',
+  desk: '<path d="M3 13h18M5 13v7M19 13v7M8 13l3-6 4 2M15 9l-1 4"/>',
+  hearth: '<path d="M12 21c-4 0-6-2.6-6-5.6 0-3.2 3-4.9 3.6-8.4 2.4 1.6 3.4 3.6 3.4 5.6 1-.6 1.6-1.8 1.8-3 1.8 1.6 3.2 3.6 3.2 5.8 0 3-2 5.6-6 5.6z"/>',
+  tome: '<path d="M3 6c3-1 6-1 9 1 3-2 6-2 9-1v12c-3-1-6-1-9 1-3-2-6-2-9-1zM12 7v12"/>',
+  paper: '<path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M7 9h7M7 12h7M7 15h4"/>',
+  family: '<path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM2.5 20c.5-3.5 2.8-5.5 5.5-5.5s5 2 5.5 5.5M13.5 15.2c.8-.5 1.6-.7 2.5-.7 2.4 0 4.3 1.8 4.8 5.5"/>'
+};
+function stationIcon(b) {
+  const d = STATION_ICONS[b.dataset.go];
+  if (!d || b.querySelector(".st-ic")) return;
+  const label = b.textContent.trim();
+  b.innerHTML = `<svg class="st-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg><span class="st-name">${esc(label)}</span>`;
+}
+document.querySelectorAll(".stations button").forEach((b) => {
+  stationIcon(b);
+  b.addEventListener("click", () => {
+    putBack();
+    go(b.dataset.go === "room" ? home() : b.dataset.go);
+    kick();
+  });
+});
 var Trivia = window.TomesteadTrivia || null;
 var paperDay = "";
 var normTitle = (t) => String(t || "").toLowerCase().replace(/^(the|a|an) /, "").replace(/[^a-z0-9]+/g, "");
@@ -53310,6 +53388,7 @@ function familyButton() {
   b.type = "button";
   b.dataset.go = "family";
   b.textContent = "Family";
+  stationIcon(b);
   b.addEventListener("click", () => {
     putBack();
     go("family");
@@ -53710,12 +53789,17 @@ function famTap(px2, py2) {
   closeCard();
 }
 var ROOT = canvas.parentElement;
+var vignette = document.createElement("div");
+vignette.className = "vignette";
+vignette.setAttribute("aria-hidden", "true");
+canvas.after(vignette);
 var BASE_PINS = [["shelf", "Shelf", [0, 2.3, -2.45]], ["desk", "Desk", [-2.55, 1.15, -0.6]], ["hearth", "Fireside", [-2.72, 1.5, 1.6]], ["tome", "Tome", [2.25, 1.55, 0.1]]];
 var PINS = BASE_PINS;
 var pinSig = "";
 function pinList() {
   if (where === "family") return world && world.fam ? world.fam.cases.map((c, i) => ["fam" + i, c.name, c.pin]) : [];
   const out = [...BASE_PINS];
+  if (HOST && !lib.books.length) out[0] = ["invite", "Your first book goes here", BASE_PINS[0][2]];
   if (world && world.display) out.push(["display", "Favorites", world.display.pin]);
   if (world && world.portraits) out.push(["authors", "Authors", world.portraits.pin]);
   return out;
@@ -53728,16 +53812,28 @@ function paintPins() {
   const sig = PINS.map((p) => p[0] + p[1]).join("|");
   if (sig === pinSig) return;
   pinSig = sig;
-  pinBox.innerHTML = PINS.map(([st, label]) => `<button type="button" class="pin" data-pin="${st}"><span class="pin-label">${esc(label)}</span><span class="pin-dot" aria-hidden="true"></span></button>`).join("");
+  pinBox.innerHTML = PINS.map(([st, label]) => `<button type="button" class="pin${st === "invite" ? " invite" : ""}" data-pin="${st}"><span class="pin-label">${esc(label)}</span><span class="pin-dot" aria-hidden="true"></span></button>`).join("");
 }
 ROOT.appendChild(pinBox);
 pinBox.addEventListener("click", (e) => {
   const b = e.target.closest("[data-pin]");
-  if (b) {
-    go(b.dataset.pin);
-    kick();
+  if (!b) return;
+  if (b.dataset.pin === "invite") {
+    if (HOST) HOST.addBook();
+    return;
   }
+  go(b.dataset.pin);
+  kick();
 });
+var inviteEl = document.createElement("button");
+inviteEl.type = "button";
+inviteEl.className = "invite-spot";
+inviteEl.hidden = true;
+inviteEl.innerHTML = `<span class="ghosts" aria-hidden="true"><i></i><i></i><i></i></span><span class="invite-text">Your first book goes here</span>`;
+inviteEl.addEventListener("click", () => {
+  if (HOST) HOST.addBook();
+});
+ROOT.appendChild(inviteEl);
 var swap = document.createElement("button");
 swap.type = "button";
 swap.className = "view-swap";
@@ -53839,6 +53935,14 @@ function overlays() {
       swap.setAttribute("aria-label", inHouse ? "Step inside the room" : "See the whole room, like a dollhouse");
     }
     swap.style.top = `${Math.round(topInset() + 2)}px`;
+  }
+  const inviteOn = !!HOST && !lib.books.length && !calmNow && where !== "family" && (station === "shelf" || station === "room" && $("card").hidden);
+  inviteEl.hidden = !inviteOn;
+  if (inviteOn) {
+    camera.updateMatrixWorld();
+    const r = canvas.getBoundingClientRect();
+    pv.set(0, 1.2, -2.45).project(camera);
+    inviteEl.style.transform = `translate3d(${Math.round(r.left + (pv.x + 1) / 2 * r.width)}px, ${Math.round(r.top + (1 - pv.y) / 2 * r.height)}px, 0) translate(-50%, -50%)`;
   }
   const b = atHouse && HOST && $("card").hidden ? nowBook() : null;
   paintNow(b);

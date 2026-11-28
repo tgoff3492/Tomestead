@@ -28,17 +28,24 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .label { flex: 1; text-align: center; font-family: var(--serif); font-size: 1.15rem; color: var(--paper); text-shadow: 0 1px 6px rgba(0,0,0,.6); }
 .rm .label span { font-family: var(--sans); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--brass-lt); margin-left: 4px; }
 .rm .round { width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(230,200,134,.45); background: rgba(20,12,6,.55); color: var(--brass-lt); font-size: 1.1rem; cursor: pointer; }
-.rm .stations { position: fixed; z-index: 10; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 14px);
-  display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(20,12,6,.62); border: 1px solid rgba(230,200,134,.3);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); max-width: calc(100vw - 20px); }
-.rm .stations button { border: 0; background: none; color: rgba(239,227,200,.85); font: 500 .92rem var(--sans); padding: 8px 13px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
-.rm .stations button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
-@media (max-width: 380px) {.rm .stations button { padding: 8px 9px; font-size: .86rem; } }
-.rm .hint { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 112px);
+.rm .stations { position: fixed; z-index: 10; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 12px);
+  display: flex; gap: 2px; padding: 5px 6px 3px; border-radius: 18px; background: rgba(24,15,10,.84); border: 1px solid rgba(230,194,122,.34);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); max-width: calc(100vw - 20px); }
+/* each place: a small line drawing over its name in the room's serif; the one you're at gets a brass underline */
+.rm .stations button { border: 0; background: none; color: rgba(222,206,172,.86); font: 400 .9rem/1.05 var(--serif); letter-spacing: .01em;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 46px; padding: 3px 9px 4px; border-radius: 0;
+  border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color .2s, border-color .2s; }
+.rm .stations button .st-ic { width: 20px; height: 20px; opacity: .9; }
+.rm .stations button:hover { color: #f4e3bb; }
+.rm .stations button[aria-pressed="true"] { background: none; color: #f6dca2; border-bottom-color: #e6c27a; }
+.rm .stations button[aria-pressed="true"] .st-ic { opacity: 1; filter: drop-shadow(0 0 6px rgba(230,194,122,.55)); }
+.rm .stations button:focus-visible { outline: 2px solid #e6c27a; outline-offset: 1px; border-radius: 6px; }
+@media (max-width: 380px) {.rm .stations button { padding: 3px 6px 4px; font-size: .84rem; min-width: 0; } }
+.rm .hint { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 116px);
   font-family: var(--serif); font-style: italic; font-size: 1rem; color: var(--paper); text-shadow: 0 1px 8px rgba(0,0,0,.9);
   opacity: 0; transition: opacity .8s ease; pointer-events: none; white-space: nowrap; }
 .rm .hint.show { opacity: .95; }
-.rm .card { position: fixed; z-index: 12; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 72px);
+.rm .card { position: fixed; z-index: 12; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 76px);
   width: min(420px, calc(100vw - 24px)); max-height: 52vh; overflow: auto; background: var(--paper); color: var(--ink);
   border-radius: 12px; padding: 16px 18px 14px; box-shadow: 0 14px 40px rgba(0,0,0,.55); animation: rm-rise .35s ease; }
 @keyframes rm-rise { from { opacity: 0; transform: translate(-50%, 12px); } }
@@ -54,7 +61,7 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .card li { margin: 4px 0; }
 .rm .card li b { font-family: var(--serif); font-weight: 400; font-size: 1.05rem; }
 .rm .card .eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: #8a6a35; margin-bottom: 2px; }
-.rm .perf-btn { position: fixed; z-index: 11; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 76px); width: 34px; height: 34px; border-radius: 50%;
+.rm .perf-btn { position: fixed; z-index: 11; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 80px); width: 34px; height: 34px; border-radius: 50%;
   border: 1px solid rgba(230,200,134,.35); background: rgba(20,12,6,.55); color: var(--brass-lt); cursor: pointer; font-size: .95rem; }
 .rm .perf { position: fixed; z-index: 11; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 116px); background: rgba(12,8,4,.86); color: var(--paper);
   border: 1px solid rgba(230,200,134,.3); border-radius: 10px; padding: 10px 12px; font: .82rem/1.45 ui-monospace, Menlo, monospace; min-width: 210px; }
@@ -63,7 +70,7 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .nogl { position: fixed; inset: 0; z-index: 30; background: #140d08; display: grid; place-content: center; text-align: center; padding: 24px; font-family: var(--serif); font-size: 1.1rem; }
 .rm .nogl a { color: var(--brass-lt); }
 /* at the bookcase: a small bar with search and, for big libraries, the bookcase arrows */
-.rm .shelf-tools { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 66px);
+.rm .shelf-tools { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 72px);
   display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(20,12,6,.62); border: 1px solid rgba(230,200,134,.3);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: rm-fade .3s ease; }
 @keyframes rm-fade { from { opacity: 0; } }
@@ -138,7 +145,7 @@ html.reading .rm .stations, html.reading .rm .shelf-tools, html.reading .rm .hin
   box-shadow: 0 4px 14px rgba(0,0,0,.35); backdrop-filter: blur(4px); }
 .rm .view-swap[hidden] { display: none; }
 .rm .view-swap:hover { color: #fff4dc; border-color: rgba(230,200,134,.75); }
-.rm .now-card { position: absolute; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 74px);
+.rm .now-card { position: absolute; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 78px);
   width: min(420px, calc(100vw - 28px)); box-sizing: border-box; padding: 12px 14px; border-radius: 14px; background: var(--paper, #efe3c8); color: var(--ink, #2a1e16);
   box-shadow: 0 16px 36px -12px rgba(0,0,0,.75); display: flex; flex-direction: column; gap: 10px; animation: rm-rise .35s ease-out; }
 .rm .now-card[hidden] { display: none; }
@@ -178,12 +185,12 @@ html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-s
 .rm .card .fam-who small { font-family: var(--sans); font-size: .74rem; color: var(--ink-soft); }
 /* the fireside's one quiet line about what comes next */
 .rm .card .next-up { color: #7a5520; font-style: italic; }
-/* six or seven stations (Favourites, Family) on a narrow phone: tighter, and the bar scrolls sideways if it must */
+/* six or seven stations (Paper, Family) on a narrow phone: tighter, and the bar scrolls sideways if it must */
 .rm .stations { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
 .rm .stations::-webkit-scrollbar { display: none; }
 @media (max-width: 520px) {
-  .rm .stations:has(> button:nth-child(6)) button { padding: 8px 8px; font-size: .84rem; }
-  .rm .stations:has(> button:nth-child(7)) button { padding: 7px 6px; font-size: .8rem; }
+  .rm .stations:has(> button:nth-child(6)) button { padding: 3px 7px 4px; font-size: .86rem; min-width: 0; }
+  .rm .stations:has(> button:nth-child(7)) button { padding: 3px 4px 4px; font-size: .8rem; }
 }
 /* About the author */
 .rm .card .author-bio { font-family: var(--serif); font-size: 1rem; line-height: 1.45; margin: 8px 0; max-height: 34vh; overflow-y: auto; }
@@ -191,7 +198,7 @@ html:has(details.more[open]) .rm .pins, html:has(details.more[open]) .rm .view-s
 .rm .card .note a { color: #7a5520; }
 /* the daily question (trivia.js): in the room's card and in the app's dialog */
 .rm .stations button[data-go="paper"] { position: relative; }
-.rm .stations button[data-go="paper"].fresh::after { content: ""; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: #e6b04a; box-shadow: 0 0 6px rgba(230,176,74,.8); }
+.rm .stations button[data-go="paper"].fresh::after { content: ""; position: absolute; top: 2px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #e6b04a; box-shadow: 0 0 6px rgba(230,176,74,.8); }
 .tq-paper { font-variant: small-caps; letter-spacing: .04em; }
 h2.tq-q { font-family: var(--serif, Georgia, serif); font-weight: 400; font-size: 1.22rem; line-height: 1.3; margin: 4px 26px 10px 0; text-wrap: pretty; }
 .tq-choices { display: grid; gap: 7px; }
@@ -221,3 +228,21 @@ h2.tq-q { font-family: var(--serif, Georgia, serif); font-weight: 400; font-size
 /* a pin label lifted clear of another keeps a fine brass stem down to its spot */
 .rm .pin-dot { position: relative; }
 .rm .pin.lifted .pin-dot::before { content: ""; position: absolute; left: 50%; bottom: 100%; width: 1.5px; height: calc(var(--lift, 0px) + 3px); background: linear-gradient(#e9c983, rgba(255,226,160,.5)); transform: translateX(-50%); }
+/* the room's soft vignette (main.js puts it right after the canvas) */
+.rm .vignette { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse 115% 92% at 50% 46%, rgba(8,4,2,0) 52%, rgba(8,4,2,.16) 72%, rgba(8,4,2,.42) 100%); }
+html.reading .rm .vignette { opacity: .6; }
+/* first visit: the dashed place your first book goes (a pin over the dollhouse, a spot on the bookcase inside) */
+.rm .pin.invite .pin-label { background: rgba(24,15,10,.78); color: #f1e2bf; border: 1.5px dashed rgba(240,208,143,.85); font-family: var(--serif); font-weight: 400; font-size: .95rem; }
+.rm .invite-spot { position: absolute; left: 0; top: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 14px 11px;
+  border-radius: 14px; background: rgba(24,15,10,.72); border: 1.5px dashed rgba(240,208,143,.8); color: #f1e2bf; cursor: pointer;
+  font: 400 1.02rem/1.2 var(--serif); box-shadow: 0 8px 22px rgba(0,0,0,.35); animation: rm-fade .4s ease; }
+.rm .invite-spot[hidden] { display: none; }
+.rm .invite-spot .ghosts { display: flex; gap: 5px; align-items: flex-end; }
+.rm .invite-spot .ghosts i { display: block; width: 15px; height: 56px; border-radius: 3px; border: 1.5px dashed rgba(240,208,143,.85); }
+.rm .invite-spot .ghosts i:nth-child(2) { width: 19px; height: 66px; background: rgba(240,208,143,.12); }
+.rm .invite-spot .ghosts i:nth-child(3) { width: 13px; height: 50px; }
+.rm .invite-spot:hover { background: rgba(36,23,14,.82); }
+.rm .invite-spot:focus-visible { outline: 2px solid #e6c27a; outline-offset: 3px; }
+.rm .card .acts.stack { flex-direction: column; align-items: stretch; }
+.rm .card .acts.stack button { width: 100%; }
