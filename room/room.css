@@ -218,3 +218,6 @@ h2.tq-q { font-family: var(--serif, Georgia, serif); font-weight: 400; font-size
 .tq-dialog .meta { font-size: .92rem; color: var(--ink-soft); margin: 6px 0; }
 .tq-dialog .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .tq-dialog .acts button { border: 0; border-radius: 999px; padding: 10px 16px; font: 700 .95rem var(--sans); cursor: pointer; background: rgba(42,30,22,.1); color: var(--ink); }
+/* a pin label lifted clear of another keeps a fine brass stem down to its spot */
+.rm .pin-dot { position: relative; }
+.rm .pin.lifted .pin-dot::before { content: ""; position: absolute; left: 50%; bottom: 100%; width: 1.5px; height: calc(var(--lift, 0px) + 3px); background: linear-gradient(#e9c983, rgba(255,226,160,.5)); transform: translateX(-50%); }

@@ -49702,6 +49702,16 @@ async function build() {
     }
   };
   const skyCanvases = { day: skyMat.map, night: canvasTex(skyTex("night"), { repeat: false }) };
+  Promise.all([loadTex("window_day", true), loadTex("window_night", true)]).then(([d, n]) => {
+    for (const t of [d, n]) if (t) {
+      t.wrapS = t.wrapT = ClampToEdgeWrapping;
+    }
+    if (d) skyCanvases.day = d;
+    if (n) skyCanvases.night = n;
+    skyMat.map = skyCanvases[LOOK[mode].sky];
+    skyMat.needsUpdate = true;
+    kick();
+  });
   function applyLook() {
     const L = LOOK[mode];
     const starry = mode === "night" && lib.theme.nightWall === "stars";
@@ -53706,7 +53716,7 @@ var pinSig = "";
 function pinList() {
   if (where === "family") return world && world.fam ? world.fam.cases.map((c, i) => ["fam" + i, c.name, c.pin]) : [];
   const out = [...BASE_PINS];
-  if (world && world.display) out.push(["display", "Favourites", world.display.pin]);
+  if (world && world.display) out.push(["display", "Favorites", world.display.pin]);
   if (world && world.portraits) out.push(["authors", "Authors", world.portraits.pin]);
   return out;
 }
@@ -53795,11 +53805,28 @@ function overlays() {
     paintPins();
     camera.updateMatrixWorld();
     const r = canvas.getBoundingClientRect();
-    pinBox.querySelectorAll(".pin").forEach((el, i) => {
+    const els = [...pinBox.querySelectorAll(".pin")];
+    const at = els.map((el, i) => {
       pv.set(...PINS[i][2]).project(camera);
-      const x = Math.round(r.left + (pv.x + 1) / 2 * r.width), y = Math.round(r.top + (1 - pv.y) / 2 * r.height);
-      el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
+      const lab = el.firstElementChild;
+      return { el, lab, x: Math.round(r.left + (pv.x + 1) / 2 * r.width), y: Math.round(r.top + (1 - pv.y) / 2 * r.height), w: lab.offsetWidth, h: lab.offsetHeight, lift: 0 };
     });
+    const placed = [];
+    for (const p of [...at].sort((a, b2) => b2.y - a.y)) {
+      for (let guard = 0; guard < 8; guard++) {
+        const top = p.y - 13 - p.h - p.lift, l = p.x - p.w / 2 - 4, rr = p.x + p.w / 2 + 4;
+        const hit = placed.find((q) => l < q.r && rr > q.l && top < q.b && top + p.h > q.t);
+        if (!hit) break;
+        p.lift += top + p.h - hit.t + 4;
+      }
+      placed.push({ l: p.x - p.w / 2 - 4, r: p.x + p.w / 2 + 4, t: p.y - 13 - p.h - p.lift, b: p.y - 13 - p.lift });
+    }
+    for (const p of at) {
+      p.el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) translate(-50%, -100%)`;
+      p.lab.style.transform = p.lift ? `translateY(${-Math.round(p.lift)}px)` : "";
+      p.el.classList.toggle("lifted", p.lift > 0);
+      p.el.style.setProperty("--lift", `${Math.round(p.lift)}px`);
+    }
   }
   const showSwap = !calmNow && isHome(station) && !!HOST;
   swap.hidden = !showSwap;

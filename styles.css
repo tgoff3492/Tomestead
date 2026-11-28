@@ -60,7 +60,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--brass-lt);
   text-shadow: 0 1px 0 rgba(0,0,0,.5), 0 0 24px rgba(242,182,90,.25);
 }
-.stats { margin: 4px 0 0; color: #b9ab8c; font-size: .92rem; line-height: 1.35; }
+.stats { margin: 4px 0 0; color: #b9ab8c; font-size: .92rem; line-height: 1.35; text-wrap: balance; }
 .controls { display: flex; align-items: center; gap: 10px; }
 
 /* small pill toggles */
@@ -402,6 +402,12 @@ html[data-light="night"] .trinket > img { filter: brightness(.62) saturate(.85) 
   text-align: center; width: min(90%, 420px); z-index: 4;
 }
 .empty-note p { margin: 0 0 12px; font-family: var(--serif); font-size: 1.35rem; color: var(--paper); text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+.empty-note p { text-wrap: balance; }
+/* phones: the note is wider than the shelf's inside, so keep it inside the case and lift it off the wood */
+@media (max-width: 560px) {
+  .empty-note { width: 78%; padding: 14px 12px; border-radius: 14px; background: radial-gradient(ellipse at center, rgba(22,13,8,.72), rgba(22,13,8,.45) 70%, rgba(22,13,8,0)); }
+  .empty-note p { font-size: 1.08rem; line-height: 1.35; margin-bottom: 10px; }
+}
 
 /* ---------- List view ---------- */
 .ledger {
