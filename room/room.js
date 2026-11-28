@@ -52312,6 +52312,13 @@ var cam = { pos: new Vector3(), dir: new Vector3(0, 0, -1), dist: 2, yaw: 0, pit
 var station = "room";
 var tween = null;
 var HOME_KEY = "tomestead.roomhome.v2";
+var INTRO_SIDE = Number(params.get("side")) || 0.55;
+var INTRO_DOWN = Number(params.get("down")) || 0.45;
+var INTRO_WIDE = Number(params.get("wide")) || 16;
+var INTRO_SECS = Number(params.get("secs")) || 5.2;
+var camQ0 = () => !HOST && params.get("cam");
+var SLOWMO = !HOST && Number(params.get("slowmo")) || 1;
+if (!HOST) window.__tw = () => tween ? +Math.min(1, tween.t).toFixed(3) : -1;
 var homeView = (() => {
   try {
     return localStorage.getItem(HOME_KEY) === "house" ? "house" : "room";
@@ -52552,6 +52559,7 @@ function tomeCard() {
     <div class="acts"><button type="button" data-act="wake">Wake the tome</button></div>`, "tome");
 }
 var ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+var easeSoft = (x) => (1 - Math.cos(Math.PI * x)) / 2;
 function lookDir() {
   const d = cam.dir.clone();
   const right = new Vector3().crossVectors(d, new Vector3(0, 1, 0)).normalize();
@@ -52570,7 +52578,7 @@ function updateCamera(dt) {
   }
   if (tween) {
     tween.t += dt / tween.dur;
-    const k = ease(Math.min(1, tween.t));
+    const k = (tween.ease || ease)(Math.min(1, tween.t));
     if (tween.aim) {
       const a = tween.aim;
       const T = a.fT.clone().lerp(a.tT, k);
@@ -52692,7 +52700,7 @@ function buildYardNow() {
   world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier, groundTex);
   if (!groundTex.asked) {
     groundTex.asked = true;
-    Promise.all([loadTex("ground_diff", true), loadTex("bark_diff", true)]).then(([d, b]) => {
+    groundTex.ready = Promise.all([loadTex("ground_diff", true), loadTex("bark_diff", true)]).then(([d, b]) => {
       Object.assign(groundTex, { diff: d, bark: b });
       if (world.yard) world.yard.setGround(groundTex);
       kick();
@@ -54795,12 +54803,41 @@ function resize() {
 }
 addEventListener("resize", resize);
 var active = true;
+async function warmUp() {
+  const hidden = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  try {
+    if (renderer.compileAsync) await renderer.compileAsync(scene, camera).catch(() => renderer.compile(scene, camera));
+    else renderer.compile(scene, camera);
+    const seen = /* @__PURE__ */ new Set();
+    scene.traverse((o) => {
+      for (const m of [].concat(o.material || [])) for (const k of ["map", "normalMap", "roughnessMap", "emissiveMap", "alphaMap", "aoMap"]) {
+        const t = m && m[k];
+        if (t && !seen.has(t)) {
+          seen.add(t);
+          try {
+            renderer.initTexture(t);
+          } catch {
+          }
+        }
+      }
+    });
+  } finally {
+    for (const o of hidden) o.visible = false;
+  }
+  renderer.shadowMap.needsUpdate = true;
+}
 function frame(now) {
   requestAnimationFrame(frame);
   if (!active) return;
   const busy = !!tween || !!drag || !!turning || outBook && outBook.phase !== "desk" && outBook.phase !== "held" || !!cam.vx || Math.abs(cam.vyaw) + Math.abs(cam.vpitch) > 1e-4 || now < activeUntil;
   if (!busy && now - lastRender < (settled ? 66 : 32)) return;
-  const dt = Math.min(0.1, (now - last) / 1e3);
+  const dt = Math.min(tween ? 1 / 30 : 0.1, (now - last) / 1e3) / SLOWMO;
   last = now;
   const t = now / 1e3;
   if (turning && (turning.t += dt) > 0.34) finishTurn();
@@ -54838,7 +54875,7 @@ function frame(now) {
 }
 var slow = 0;
 function adapt() {
-  if (perf.busy.length < 20) return;
+  if (perf.busy.length < 20 || tween && tween.intro) return;
   const span = perf.busy[perf.busy.length - 1] - perf.busy[0];
   const fps = (perf.busy.length - 1) * 1e3 / Math.max(1, span);
   if (fps < 40 && dpr > 1) {
@@ -55071,7 +55108,14 @@ function setActive(on) {
   cam.pos.copy(f.pos);
   cam.dir.copy(f.dir);
   cam.dist = f.dist;
-  if (!start) {
+  const intro = !start && !customizing && home() === "room" && !camQ0();
+  if (intro) {
+    const H = dims.H || 3, look = new Vector3(-1, Math.min(1, H * 0.15), dims.zB + Math.min(2.2, (dims.zF - dims.zB) * 0.4));
+    cam.pos.set(dims.x - INTRO_SIDE, H - INTRO_DOWN, dims.zF - 0.35);
+    cam.dir.copy(look).sub(cam.pos).normalize();
+    cam.dist = cam.pos.distanceTo(look);
+    setFov(fovFor("room") + INTRO_WIDE);
+  } else if (!start) {
     cam.pos.z = Math.min(dims.zF - 0.1, cam.pos.z + 0.9);
     cam.pos.y += 0.3;
     cam.pitch = -0.12;
@@ -55085,8 +55129,7 @@ function setActive(on) {
     cam.dist = 1;
   }
   updateCamera(0);
-  if (renderer.compileAsync) await renderer.compileAsync(scene, camera).catch(() => renderer.compile(scene, camera));
-  else renderer.compile(scene, camera);
+  await warmUp();
   requestAnimationFrame(frame);
   const customize = (on, r = 0, b = 0) => {
     if (on && !customizing) {
@@ -55140,11 +55183,21 @@ function setActive(on) {
     }, { once: true });
   });
   if (Q) Q.seen();
+  if (intro) {
+    await Promise.race([groundTex.ready || Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
+    await warmUp();
+  }
   requestAnimationFrame(() => {
     veil.classList.add("gone");
     setTimeout(() => veil.remove(), 1400);
     if (camQ && camQ.length === 6) {
       station = "free";
+    } else if (intro) {
+      go("room", INTRO_SECS);
+      if (tween) {
+        tween.intro = true;
+        tween.ease = easeSoft;
+      }
     } else if (!start && !customizing) go(home(), 2.6);
     else if (famStation(start)) {
       crossTo(start, false);
