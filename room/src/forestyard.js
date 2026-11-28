@@ -34,11 +34,9 @@ export function buildForestYard(K) {
   for (let i = 0; i < 3; i++) m(new THREE.BoxGeometry(1.4, 0.12, 0.34), boards, stepX, -0.16 - i * 0.12, PZ1 + 0.17 + i * 0.32);
 
   // the path: a gravel ribbon with stone edging, from the bottom step toward the viewer
-  const pts = [];
-  for (let i = 0; i <= 40; i++) {
-    const t = i / 40, w = Math.sin(t * 3.4) * 1.0;
-    pts.push(new THREE.Vector3(stepX + 0.05 + t * 9.0 + w * 0.6, Y0 + 0.012, PZ1 + 1.08 + t * 5.6 - w * 0.8));
-  }
+  // straight off the bottom step, then a gentle bend away toward the viewer
+  const pts = [[0, 5.0], [0.04, 5.7], [0.5, 6.5], [1.6, 7.2], [3.2, 7.9], [5.0, 8.8], [6.5, 10.0], [7.8, 11.6]]
+    .map(([dx, z]) => new THREE.Vector3(stepX + dx, Y0 + 0.012, z));
   const curve = new THREE.CatmullRomCurve3(pts);
   const N = 120, half = 0.6;
   const pos = [], uv = [], idx = [];
