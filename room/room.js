@@ -47488,11 +47488,6 @@ function buildShell(K, tier) {
   const midZ = (ZB + zF) / 2, len = zF - ZB;
   const floor = mesh2(new THREE.PlaneGeometry(6, len).rotateX(-Math.PI / 2).translate(0, 0, midZ), mats.floor, false, { cast: false });
   K.worldUV(floor.geometry);
-  for (const m of [K.box(6.3, 0.34, len + 0.3, M.beam, -0.05, -0.185, midZ, G), K.box(6.42, 0.06, len + 0.42, M.trim, -0.05, -0.385, midZ, G)]) {
-    m.userData.plinth = true;
-    m.visible = false;
-    plinth.push(m);
-  }
   {
     const [c, x] = K.mkCanvas(256, 256);
     const g = x.createRadialGradient(128, 128, 30, 128, 128, 128);
@@ -48935,6 +48930,154 @@ function buildPaper(K) {
   };
 }
 
+// src/forestyard.js
+function buildForestYard(K, dims2, tier) {
+  const { THREE, std: std2, mkCanvas: mkCanvas2, canvasTex: canvasTex2, rng: rng2, mergeGeometries: mergeGeometries2 } = K;
+  const G = new THREE.Group();
+  G.userData.dyn = true;
+  K.scene.add(G);
+  const r = rng2(7);
+  const Y0 = -0.42;
+  const zB = dims2.zB, zF = dims2.zF, len = zF - zB, midZ = (zB + zF) / 2;
+  const geos = [], mats = [], texs = [];
+  const own = (o) => {
+    if (o.isTexture) texs.push(o);
+    else if (o.isMaterial) mats.push(o);
+    else geos.push(o);
+    return o;
+  };
+  const m = (geo, mat, x, y, z, ry = 0) => {
+    const o = new THREE.Mesh(own(geo), mat);
+    o.position.set(x, y, z);
+    o.rotation.y = ry;
+    o.receiveShadow = true;
+    G.add(o);
+    return o;
+  };
+  const tex = (w, h, draw, rep) => {
+    const [c, x] = mkCanvas2(w, h);
+    draw(x, w, h);
+    const t = own(canvasTex2(c, { repeat: !!rep }));
+    if (rep) t.repeat.set(rep[0], rep[1]);
+    return t;
+  };
+  const stoneT = tex(512, 256, (x, w, h) => {
+    x.fillStyle = "#6f675c";
+    x.fillRect(0, 0, w, h);
+    for (let row = 0, y = 0; y < h; row++) {
+      const sh = 34 + r() * 18;
+      for (let px2 = row % 2 * -30; px2 < w; ) {
+        const sw = 50 + r() * 60;
+        x.fillStyle = `hsl(${28 + r() * 16},${8 + r() * 10}%,${52 + r() * 16}%)`;
+        x.beginPath();
+        x.roundRect(px2 + 3, y + 3, sw - 6, sh - 6, 10);
+        x.fill();
+        px2 += sw;
+      }
+      y += sh;
+    }
+  }, [3 * (len + 0.55) / 5.95, 1]);
+  const stone = own(std2({ map: stoneT, roughness: 0.95 }));
+  m(new THREE.BoxGeometry(6.55, 0.4, len + 0.55), stone, -0.05, Y0 + 0.2, midZ).castShadow = true;
+  const plankT = tex(512, 256, (x, w) => {
+    for (let i = 0; i < 8; i++) {
+      x.fillStyle = `hsl(30,${26 + r() * 10}%,${38 + r() * 9}%)`;
+      x.fillRect(0, i * 32, w, 31);
+      x.fillStyle = "rgba(30,15,5,.5)";
+      x.fillRect(0, i * 32 + 30, w, 2);
+      for (let k = 0; k < 6; k++) {
+        x.fillStyle = "rgba(40,20,8,.12)";
+        x.fillRect(r() * w, i * 32 + 6 + r() * 18, 40 + r() * 80, 2);
+      }
+    }
+  }, [2, 1]);
+  const boards = own(std2({ map: plankT, roughness: 0.85 }));
+  const timber = own(std2({ color: "#4e3424", roughness: 0.8 }));
+  const PZ0 = zF + 0.28, PZ1 = zF + 1.35, PX0 = -3.12, PX1 = 3.02, stepX = tier === "study" ? 0.4 : 1.7;
+  m(new THREE.BoxGeometry(PX1 - PX0, 0.1, PZ1 - PZ0), boards, (PX0 + PX1) / 2, -0.05, (PZ0 + PZ1) / 2).castShadow = true;
+  m(new THREE.BoxGeometry(PX1 - PX0 - 0.16, 0.34, PZ1 - PZ0 - 0.12), timber, (PX0 + PX1) / 2, Y0 + 0.17, (PZ0 + PZ1) / 2);
+  for (let i = 0; i < 3; i++) m(new THREE.BoxGeometry(1.4, 0.12, 0.34), boards, stepX, -0.16 - i * 0.12, PZ1 + 0.17 + i * 0.32);
+  const s = tier === "study" ? 1 : 1.25;
+  const z0 = PZ1 + 0.95;
+  const bend = tier === "study" ? [[0, 0], [0.04, 0.7], [0.5, 1.5], [1.6, 2.2], [3.2, 2.9], [5, 3.8], [6.5, 5], [7.8, 6.6]] : [[0, 0], [0.04, 0.5], [0.6, 1.1], [1.8, 1.6], [3.6, 2.1], [5.6, 2.8], [7.6, 3.8], [9.4, 5.2]];
+  const pts = bend.map(([dx, dz]) => new THREE.Vector3(stepX + dx, Y0 + 0.012, z0 + dz));
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const N = 140, half = 0.6;
+  const pos = [], uv = [], idx = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, p = curve.getPointAt(t), tg = curve.getTangentAt(t), side = new THREE.Vector3(-tg.z, 0, tg.x).normalize();
+    for (const k of [-1, 1]) {
+      const q = p.clone().addScaledVector(side, k * half);
+      pos.push(q.x, q.y, q.z);
+      uv.push((k + 1) / 2, t * 12 * s);
+    }
+    if (i) {
+      const a = (i - 1) * 2;
+      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const gravelT = tex(256, 256, (x, w, h) => {
+    x.fillStyle = "#9c8c72";
+    x.fillRect(0, 0, w, h);
+    for (let i = 0; i < 2600; i++) {
+      const l = 38 + r() * 30;
+      x.fillStyle = `hsl(${30 + r() * 15},${8 + r() * 12}%,${l}%)`;
+      x.beginPath();
+      x.arc(r() * w, r() * h, 0.8 + r() * 2.2, 0, 7);
+      x.fill();
+    }
+  }, [1, 1]);
+  gravelT.wrapS = gravelT.wrapT = THREE.RepeatWrapping;
+  m(g, own(std2({ map: gravelT, roughness: 1, side: THREE.DoubleSide })), 0, 0, 0);
+  const parts = [], o3 = new THREE.Object3D();
+  const NS = Math.round(64 * s);
+  for (let i = 0; i <= NS; i++) {
+    const t = i / NS, p = curve.getPointAt(t), tg = curve.getTangentAt(t), side = new THREE.Vector3(-tg.z, 0, tg.x).normalize();
+    for (const k of [-1, 1]) {
+      const q = p.clone().addScaledVector(side, k * (half + 0.08));
+      o3.position.set(q.x, Y0 + 0.04, q.z);
+      o3.rotation.set(0, r() * 3, 0);
+      o3.scale.set(1.2, 0.55, 0.9);
+      o3.updateMatrix();
+      parts.push(new THREE.DodecahedronGeometry(0.13 + r() * 0.05, 1).applyMatrix4(o3.matrix));
+    }
+  }
+  const edging = mergeGeometries2(parts);
+  parts.forEach((p) => p.dispose());
+  m(edging, own(std2({ map: stoneT, roughness: 0.95 })), 0, 0, 0);
+  const pool = new THREE.Mesh(
+    own(new THREE.PlaneGeometry(10, 6).rotateX(-Math.PI / 2)),
+    own(new THREE.MeshBasicMaterial({ map: K.glowTex, color: "#ffa860", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
+  );
+  pool.position.set(0, Y0 + 0.02, zF + 2.4);
+  pool.renderOrder = 2;
+  G.add(pool);
+  G.traverse((o) => {
+    if (o.isMesh) {
+      o.updateMatrix();
+      o.matrixAutoUpdate = false;
+    }
+  });
+  return {
+    group: G,
+    setLook(mode2) {
+      pool.material.opacity = mode2 === "night" ? 0.32 : 0;
+      pool.visible = mode2 === "night";
+    },
+    dispose() {
+      K.scene.remove(G);
+      geos.forEach((x) => x.dispose());
+      mats.forEach((x) => x.dispose());
+      texs.forEach((x) => x.dispose());
+    }
+  };
+}
+
 // src/main.js
 var HOST = window.TomesteadRoomHost || null;
 var $ = (id) => document.getElementById("rm-" + id);
@@ -49765,6 +49908,19 @@ async function build() {
     return t;
   };
   const stageBg = { day: stageTex(false), night: stageTex(true) };
+  for (const look of ["day", "night"]) loadTex("forest_" + look, true).then((t) => {
+    if (!t) return;
+    t.wrapS = t.wrapT = ClampToEdgeWrapping;
+    t.userData.forest = true;
+    t.generateMipmaps = false;
+    t.minFilter = LinearFilter;
+    forestBg[look] = t;
+    if (mode === look) {
+      scene.background = t;
+      fitBackdrop();
+      kick();
+    }
+  });
   Promise.all([loadTex("window_day", true), loadTex("window_night", true)]).then(([d, n]) => {
     for (const t of [d, n]) if (t) {
       t.wrapS = t.wrapT = ClampToEdgeWrapping;
@@ -49809,7 +49965,8 @@ async function build() {
     wallMat.needsUpdate = true;
     skyMat.map = skyCanvases[L.sky];
     skyMat.needsUpdate = true;
-    scene.background = stageBg[mode] || stageBg.day;
+    scene.background = forestBg[mode] || stageBg[mode] || stageBg.day;
+    if (world && world.yard) world.yard.setLook(mode);
     if ($("light")) {
       $("light").textContent = mode === "day" ? "\u263E" : "\u2600";
       $("light").setAttribute("aria-label", mode === "day" ? "Switch to night" : "Switch to day");
@@ -52098,6 +52255,7 @@ function outside() {
   const dx = Math.max(0, Math.abs(p.x) - 3.1), dy = Math.max(0, p.y - dims.top - 0.1, -p.y), dz = Math.max(0, p.z - dims.zF - 0.1, dims.zB - 0.1 - p.z);
   const away = Math.hypot(dx, dy, dz);
   const out = away > 0.02;
+  if (out) fitBackdrop();
   const near = out ? MathUtils.clamp(away * 0.5, 0.05, 3) : 0.05, far = 30 + away * 2;
   if (Math.abs(camera.near - near) > 0.01 || Math.abs(camera.far - far) > 0.5) {
     camera.near = near;
@@ -52110,6 +52268,31 @@ function outside() {
   for (const m of PLINTH) m.visible = out;
   setSkies(!out);
   renderer.shadowMap.needsUpdate = true;
+}
+function buildYardNow() {
+  if (world.yard) {
+    const i = PLINTH.indexOf(world.yard.group);
+    if (i >= 0) PLINTH.splice(i, 1);
+    world.yard.dispose();
+  }
+  world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier);
+  world.yard.group.visible = isOut;
+  PLINTH.push(world.yard.group);
+  world.yard.setLook(mode);
+}
+var forestBg = {};
+function fitBackdrop() {
+  const t = scene.background;
+  if (!t || !t.isTexture || !t.userData.forest) return;
+  const a = viewW() / viewH(), T = world && world.shell ? world.shell.tier : "study";
+  let hv = Math.min(1, 0.83 * (T === "hall" ? 1.2 : T === "library" ? 1.1 : 1)), wv = hv * a / 1.25;
+  if (wv > 0.9) {
+    hv *= 0.9 / wv;
+    wv = 0.9;
+  }
+  const turn = station === "house" ? cam.yaw : 0;
+  t.repeat.set(wv, hv);
+  t.offset.set(MathUtils.clamp((1 - wv) / 2 + turn * 0.17, 0, 1 - wv), (1 - hv) / 2);
 }
 function setSkies(on) {
   scene.traverse((o) => {
@@ -53575,6 +53758,7 @@ function rebuildShell(tier) {
   setSkies(!isOut);
   world.shell = sh;
   applyTierStations(sh);
+  buildYardNow();
   buildPortraitsNow();
   buildDisplayNow();
   world.applyLook();
@@ -54313,6 +54497,7 @@ function setActive(on) {
   lastFav = favSig();
   world.paper = buildPaper(world.K);
   paperNow(true);
+  buildYardNow();
   if (Trivia) {
     Trivia.onAnswer(() => paperNow());
     setInterval(() => {

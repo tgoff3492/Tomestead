@@ -27,7 +27,7 @@ export function buildShell(K, tier) {
   // ---------------------------------------------------------------- floor, plinth
   const floor = mesh(new THREE.PlaneGeometry(6, len).rotateX(-Math.PI / 2).translate(0, 0, midZ), mats.floor, false, { cast: false });
   K.worldUV(floor.geometry);
-  for (const m of [K.box(6.3, 0.34, len + 0.3, M.beam, -0.05, -0.185, midZ, G), K.box(6.42, 0.06, len + 0.42, M.trim, -0.05, -0.385, midZ, G)]) { m.userData.plinth = true; m.visible = false; plinth.push(m); }
+  // (what the room stands on in the dollhouse, its stone foundation and porch, is the yard: forestyard.js)
   // in the dollhouse, a soft shadow on the "table" under the plinth, so the room sits on something
   {
     const [c, x] = K.mkCanvas(256, 256);

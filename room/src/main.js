@@ -13,6 +13,7 @@ import { buildDisplay } from './display.js';
 import { buildFamilyRoom } from './family.js';
 import { buildPortraits } from './portraits.js';
 import { buildPaper } from './paper.js';
+import { buildForestYard } from './forestyard.js';
 
 // When the room runs inside the Tomestead app, the app hands over its books and its screens
 // through window.TomesteadRoomHost; on its own (the lab page) it reads the browser's saved library.
@@ -597,6 +598,14 @@ async function build() {
     const t = canvasTex(c, { repeat: false }); t.colorSpace = THREE.SRGBColorSpace; return t;
   };
   const stageBg = { day: stageTex(false), night: stageTex(true) };
+  // ...and once it loads, the pine forest the dollhouse stands in: golden light through the trees by
+  // day, moonlit woods by night (Poly Haven's Misty Pines, CC0, cut wide, thinned of fog and graded)
+  for (const look of ['day', 'night']) loadTex('forest_' + look, true).then((t) => {
+    if (!t) return;
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.userData.forest = true; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter;
+    forestBg[look] = t;
+    if (mode === look) { scene.background = t; fitBackdrop(); kick(); }
+  });
   // the view out of the window: a park of umbrella pines (Poly Haven's Borghese Gardens, cut flat, warmed
   // and softened as if seen through old glass), and the same tree line under a night sky. The drawn
   // skies above stay as the fallback if these don't load.
@@ -628,7 +637,8 @@ async function build() {
     const stars = mode === 'night' && lib.theme.nightWall === 'stars';
     wallMat.map = stars ? wallNight : L.wall; wallMat.color.set(stars ? '#ffffff' : L.wallC); wallMat.needsUpdate = true;
     skyMat.map = skyCanvases[L.sky]; skyMat.needsUpdate = true;
-    scene.background = stageBg[mode] || stageBg.day;
+    scene.background = forestBg[mode] || stageBg[mode] || stageBg.day;
+    if (world && world.yard) world.yard.setLook(mode);
     if ($('light')) { $('light').textContent = mode === 'day' ? '☾' : '☀'; $('light').setAttribute('aria-label', mode === 'day' ? 'Switch to night' : 'Switch to day'); }
     document.querySelector('meta[name="theme-color"]').setAttribute('content', L.bg);
   }
@@ -2299,6 +2309,7 @@ function outside() {
   const dx = Math.max(0, Math.abs(p.x) - 3.1), dy = Math.max(0, p.y - dims.top - 0.1, -p.y), dz = Math.max(0, p.z - dims.zF - 0.1, dims.zB - 0.1 - p.z);
   const away = Math.hypot(dx, dy, dz);
   const out = away > 0.02;
+  if (out) fitBackdrop();
   const near = out ? THREE.MathUtils.clamp(away * 0.5, 0.05, 3) : 0.05, far = 30 + away * 2;
   if (Math.abs(camera.near - near) > 0.01 || Math.abs(camera.far - far) > 0.5) { camera.near = near; camera.far = far; camera.updateProjectionMatrix(); }
   if (out === isOut) return;
@@ -2307,6 +2318,28 @@ function outside() {
   for (const m of PLINTH) m.visible = out;
   setSkies(!out);
   renderer.shadowMap.needsUpdate = true;
+}
+// the dollhouse's yard (stone foundation, porch and steps, the gravel path) for this size of room;
+// it's part of the outside view, so it shows and hides with the plinth
+function buildYardNow() {
+  if (world.yard) { const i = PLINTH.indexOf(world.yard.group); if (i >= 0) PLINTH.splice(i, 1); world.yard.dispose(); }
+  world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier);
+  world.yard.group.visible = isOut; PLINTH.push(world.yard.group);
+  world.yard.setLook(mode);
+}
+// The forest behind the dollhouse is a picture fitted to the screen like a photo's cover crop, a little
+// wider for the bigger rooms (so the Great Hall stands taller among the trees), and it slides a little as
+// you turn the dollhouse, so the woods seem to sit far behind it.
+const forestBg = {};
+function fitBackdrop() {
+  const t = scene.background;
+  if (!t || !t.isTexture || !t.userData.forest) return;
+  const a = viewW() / viewH(), T = world && world.shell ? world.shell.tier : 'study';
+  let hv = Math.min(1, 0.83 * (T === 'hall' ? 1.2 : T === 'library' ? 1.1 : 1)), wv = hv * a / 1.25;
+  if (wv > 0.9) { hv *= 0.9 / wv; wv = 0.9; }
+  const turn = station === 'house' ? cam.yaw : 0;
+  t.repeat.set(wv, hv);
+  t.offset.set(THREE.MathUtils.clamp((1 - wv) / 2 + turn * 0.17, 0, 1 - wv), (1 - hv) / 2);
 }
 // the pictures behind the windows only make sense from inside: from the dollhouse they'd hang in the air
 function setSkies(on) { scene.traverse((o) => { if (o.userData.sky) o.visible = on; }); }
@@ -3420,6 +3453,7 @@ function rebuildShell(tier) {
   sh.cut.forEach((m) => { CUT.push(m); m.visible = !isOut; }); sh.plinth.forEach((m) => { PLINTH.push(m); m.visible = isOut; }); setSkies(!isOut);
   world.shell = sh;
   applyTierStations(sh);
+  buildYardNow();
   buildPortraitsNow();
   buildDisplayNow();
   world.applyLook();
@@ -3956,6 +3990,7 @@ function setActive(on) {
   lastWood = lib.theme.wood || 'oak'; lastVine = lib.theme.vine || 'roses';
   lastTier = world.shell.tier; lastFav = favSig();
   world.paper = buildPaper(world.K); paperNow(true);
+  buildYardNow();
   if (Trivia) { Trivia.onAnswer(() => paperNow()); setInterval(() => { if (Trivia.dayKey() !== paperDay) paperNow(); }, 60000); }
   if (HOST && HOST.arrivals) pendingArrive = HOST.arrivals().filter((k) => earnedNow()[k]);
   lastEarned = ''; syncShown();
