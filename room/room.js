@@ -47488,24 +47488,6 @@ function buildShell(K, tier) {
   const midZ = (ZB + zF) / 2, len = zF - ZB;
   const floor = mesh2(new THREE.PlaneGeometry(6, len).rotateX(-Math.PI / 2).translate(0, 0, midZ), mats.floor, false, { cast: false });
   K.worldUV(floor.geometry);
-  {
-    const [c, x] = K.mkCanvas(256, 256);
-    const g = x.createRadialGradient(128, 128, 30, 128, 128, 128);
-    g.addColorStop(0, "rgba(0,0,0,0.62)");
-    g.addColorStop(0.55, "rgba(0,0,0,0.38)");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    x.fillStyle = g;
-    x.fillRect(0, 0, 256, 256);
-    const mat = new THREE.MeshBasicMaterial({ map: K.canvasTex(c, { repeat: false }), transparent: true, depthWrite: false, toneMapped: false });
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(6.42 + 3.2, len + 0.42 + 3.2).rotateX(-Math.PI / 2), mat);
-    sh.position.set(-0.05, -0.43, midZ);
-    sh.renderOrder = -1;
-    sh.userData.plinth = true;
-    sh.userData.dyn = true;
-    sh.visible = false;
-    plinth.push(sh);
-    G.add(sh);
-  }
   const arch = (P, cx, y0, w, h) => {
     P.moveTo(cx - w / 2, y0);
     P.lineTo(cx + w / 2, y0);
@@ -48931,7 +48913,7 @@ function buildPaper(K) {
 }
 
 // src/forestyard.js
-function buildForestYard(K, dims2, tier) {
+function buildForestYard(K, dims2, tier, ground) {
   const { THREE, std: std2, mkCanvas: mkCanvas2, canvasTex: canvasTex2, rng: rng2, mergeGeometries: mergeGeometries2 } = K;
   const G = new THREE.Group();
   G.userData.dyn = true;
@@ -48950,7 +48932,6 @@ function buildForestYard(K, dims2, tier) {
     const o = new THREE.Mesh(own(geo), mat);
     o.position.set(x, y, z);
     o.rotation.y = ry;
-    o.receiveShadow = true;
     G.add(o);
     return o;
   };
@@ -49050,6 +49031,173 @@ function buildForestYard(K, dims2, tier) {
   const edging = mergeGeometries2(parts);
   parts.forEach((p) => p.dispose());
   m(edging, own(std2({ map: stoneT, roughness: 0.95 })), 0, 0, 0);
+  const patchT = tex(512, 512, (x, w, h) => {
+    x.fillStyle = "#c4bca8";
+    x.fillRect(0, 0, w, h);
+    const blob = (cx, cy, rad, col) => {
+      for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) {
+        const g2 = x.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, rad);
+        g2.addColorStop(0, col);
+        g2.addColorStop(1, "rgba(0,0,0,0)");
+        x.fillStyle = g2;
+        x.fillRect(cx + ox - rad, cy + oy - rad, rad * 2, rad * 2);
+      }
+    };
+    for (let i = 0; i < 44; i++) blob(r() * w, r() * h, 40 + r() * 100, `rgba(${70 + r() * 30},${120 + r() * 40},${45 + r() * 20},.6)`);
+    for (let i = 0; i < 18; i++) blob(r() * w, r() * h, 30 + r() * 70, "rgba(40,30,22,.4)");
+    for (let i = 0; i < 12; i++) blob(r() * w, r() * h, 20 + r() * 50, "rgba(200,170,130,.35)");
+    for (let i = 0; i < 30; i++) blob(r() * w, r() * h, 8 + r() * 26, "rgba(255,236,190,.55)");
+  }, [1, 1]);
+  patchT.wrapS = patchT.wrapT = THREE.RepeatWrapping;
+  const floorMat = own(std2({ color: "#ffffff", roughness: 1 }));
+  floorMat.userData.u = { uPatch: { value: patchT } };
+  floorMat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, floorMat.userData.u);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vFloorW;").replace("#include <project_vertex>", "#include <project_vertex>\nvFloorW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vFloorW; uniform sampler2D uPatch;").replace("#include <alphatest_fragment>", "#include <alphatest_fragment>\n        diffuseColor.rgb *= texture2D(uPatch, vFloorW.xz / 14.0).rgb * 1.25;");
+  };
+  floorMat.customProgramCacheKey = () => "tomestead-floor";
+  const floor = new THREE.Mesh(own(new THREE.PlaneGeometry(240, 240).rotateX(-Math.PI / 2)), floorMat);
+  floor.position.set(0, Y0 - 0.015, midZ);
+  G.add(floor);
+  {
+    const [c, x] = mkCanvas2(256, 256);
+    x.filter = "blur(14px)";
+    x.fillStyle = "rgba(0,0,0,0.85)";
+    x.fillRect(34, 34, 188, 188);
+    const t = own(canvasTex2(c, { repeat: false }));
+    const W = 6.55 + 1.6, D = PZ1 + 0.95 - (zB - 0.28) + 1.6;
+    const cs = new THREE.Mesh(own(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2)), own(new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.55, depthWrite: false })));
+    cs.position.set(-0.05, Y0 - 5e-3, (PZ1 + 0.95 + (zB - 0.28)) / 2);
+    cs.renderOrder = 1;
+    G.add(cs);
+  }
+  const setGround = (g2) => {
+    if (!g2 || !g2.diff) return;
+    for (const [k, t] of [["map", g2.diff], ["normalMap", g2.nor]]) {
+      if (!t) continue;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(240 / 2.6, 240 / 2.6);
+      floorMat[k] = t;
+    }
+    floorMat.normalScale.set(0.8, 0.8);
+    floorMat.needsUpdate = true;
+    for (const [k, t] of [["map", g2.bark], ["normalMap", g2.barkNor]]) {
+      if (!t) continue;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(1, 9);
+      barkMat[k] = t;
+    }
+    if (g2.bark) {
+      barkMat.color.set("#ffffff");
+      barkMat.needsUpdate = true;
+    }
+  };
+  const barkMat = own(std2({ color: "#4a3a2e", roughness: 0.95 }));
+  const trees = [];
+  {
+    const cx = -0.05, cz = midZ, hx = 3.5, hz = (PZ1 + 1.2 - zB) / 2 + 0.3, ccz = (PZ1 + 1.2 + zB) / 2;
+    const views = [-0.55, 0, 0.55].map((y) => new THREE.Vector2(0.67, 0.74).rotateAround(new THREE.Vector2(), -y));
+    const blocks = (x, z) => views.some((c) => {
+      const rel = new THREE.Vector2(x - cx, z - ccz), ahead = rel.dot(c), lat = Math.abs(rel.x * -c.y + rel.y * c.x);
+      return ahead > -1.5 && lat < Math.max(hx, hz) + 1;
+    });
+    let tries = 0;
+    while (trees.length < 260 && tries++ < 9e3) {
+      const a = r() * Math.PI * 2, d = 4 + Math.pow(r(), 0.85) * 48;
+      const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+      if (Math.abs(x - cx) < hx + 1.2 && Math.abs(z - ccz) < hz + 1.2) continue;
+      if (blocks(x, z)) continue;
+      if (trees.some((t) => Math.hypot(t[0] - x, t[1] - z) < 1.7)) continue;
+      trees.push([x, z, 0.28 + r() * 0.36]);
+    }
+    const tg = own(new THREE.CylinderGeometry(0.55, 1, 1, 12, 1, true).translate(0, 0.5, 0));
+    const tm = new THREE.InstancedMesh(tg, barkMat, trees.length);
+    const tint = new THREE.Color();
+    trees.forEach(([x, z, rad], i) => {
+      o3.position.set(x, Y0 - 0.2, z);
+      o3.rotation.set((r() - 0.5) * 0.05, r() * 6.3, (r() - 0.5) * 0.05);
+      o3.scale.set(rad, 34 + r() * 8, rad);
+      o3.updateMatrix();
+      tm.setMatrixAt(i, o3.matrix);
+      tm.setColorAt(i, tint.setHSL(0.07, 0.15 + r() * 0.15, 0.55 + r() * 0.3));
+    });
+    G.add(tm);
+    const rg = own(new THREE.CylinderGeometry(1, 1.3, 0.3, 12, 1, true).translate(0, 0.15, 0));
+    const rm = new THREE.InstancedMesh(rg, own(std2({ color: "#3b2c22", roughness: 1 })), trees.length);
+    trees.forEach(([x, z, rad], i) => {
+      o3.position.set(x, Y0 - 0.25, z);
+      o3.rotation.set(0, r() * 6.3, 0);
+      o3.scale.set(rad, 1, rad);
+      o3.updateMatrix();
+      rm.setMatrixAt(i, o3.matrix);
+    });
+    G.add(rm);
+  }
+  setGround(ground);
+  {
+    const frond = [], col = [];
+    const F = 9, tri = (a, b, c, ca, cb, cc) => {
+      frond.push(...a, ...b, ...c);
+      col.push(ca, ca, ca, cb, cb, cb, cc, cc, cc);
+    };
+    for (let k = 0; k < F; k++) {
+      const a = k / F * Math.PI * 2 + r() * 0.5, lean = 0.7 + r() * 0.4, L = 0.8 + r() * 0.35;
+      const ca = Math.cos(a), sa = Math.sin(a), sx = -sa, sz = ca, seg = 12;
+      const P = (t) => [ca * L * t * lean, Math.sin(t * Math.PI * 0.85) * 0.5 * (1.15 - lean * 0.45), sa * L * t * lean];
+      for (let i = 1; i <= seg; i++) {
+        const t = i / seg, p = P(t), q = P(Math.max(0, t - 0.7 / seg)), c = 0.45 + t * 0.55;
+        const pl = 0.17 * Math.sin(Math.min(1, t * 1.1) * Math.PI) * (1 - 0.25 * t) + 0.02;
+        for (const sd of [1, -1]) {
+          const tip = [p[0] + sx * pl * sd + ca * 0.05, p[1] - 0.05 * pl / 0.17, p[2] + sz * pl * sd + sa * 0.05];
+          tri(q, p, tip, c * 0.8, c * 0.85, c);
+        }
+      }
+    }
+    const fg = own(new THREE.BufferGeometry());
+    fg.setAttribute("position", new THREE.Float32BufferAttribute(frond, 3));
+    fg.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    fg.computeVertexNormals();
+    const fernMat = own(std2({ color: "#ffffff", vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }));
+    const greens = ["#4a6a2c", "#56762f", "#3f5c27", "#628236", "#4c6630"].map((c) => new THREE.Color(c));
+    const fw = new THREE.Vector2(-0.67, -0.74), fwL = fw.clone().rotateAround(new THREE.Vector2(), 0.5), fwR = fw.clone().rotateAround(new THREE.Vector2(), -0.5);
+    const backOf = (f) => 3.4 * Math.abs(f.x) + (len / 2 + 0.5) * Math.abs(f.y);
+    const near = (x, z) => {
+      let d = 99;
+      for (let i = 0; i <= 60; i++) {
+        const p = curve.getPointAt(i / 60);
+        d = Math.min(d, Math.hypot(p.x - x, p.z - z));
+      }
+      return d;
+    };
+    const spots = [];
+    const centers = [];
+    for (let i = 0; i < 200; i++) {
+      const a = r() * 6.3, d = 4 + r() * 30;
+      centers.push([Math.cos(a) * d, midZ + Math.sin(a) * d]);
+    }
+    for (const [cx, cz] of centers) {
+      const n = 4 + Math.floor(r() * 9);
+      for (let i = 0; i < n; i++) {
+        const x = cx + (r() - 0.5) * 2.4, z = cz + (r() - 0.5) * 2.4;
+        if (x > -3.9 && x < 3.8 && z > zB - 0.8 && z < PZ1 + 0.6) continue;
+        if (near(x, z) < 1.25) continue;
+        if (Math.abs(x - stepX) < 1.3 && z > PZ1 - 0.2 && z < PZ1 + 2) continue;
+        if (trees.some((t) => Math.hypot(t[0] - x, t[1] - z) < t[2] * 1.6 + 0.3)) continue;
+        spots.push([x, z, 0.3 + r() * 0.35]);
+      }
+    }
+    const ferns = new THREE.InstancedMesh(fg, fernMat, spots.length);
+    spots.forEach(([x, z, sc], i) => {
+      o3.position.set(x, Y0 - 0.01, z);
+      o3.rotation.set((r() - 0.5) * 0.15, r() * 6.3, (r() - 0.5) * 0.15);
+      o3.scale.set(sc, sc * (0.8 + r() * 0.4), sc);
+      o3.updateMatrix();
+      ferns.setMatrixAt(i, o3.matrix);
+      ferns.setColorAt(i, greens[Math.floor(r() * greens.length)]);
+    });
+    G.add(ferns);
+  }
   const pool = new THREE.Mesh(
     own(new THREE.PlaneGeometry(10, 6).rotateX(-Math.PI / 2)),
     own(new THREE.MeshBasicMaterial({ map: K.glowTex, color: "#ffa860", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
@@ -49065,8 +49213,11 @@ function buildForestYard(K, dims2, tier) {
   });
   return {
     group: G,
+    setGround,
     setLook(mode2) {
-      pool.material.opacity = mode2 === "night" ? 0.32 : 0;
+      floorMat.color.set(mode2 === "night" ? "#c8d0e0" : "#ecdcbc");
+      barkMat.emissive.set(mode2 === "night" ? "#000000" : "#120a05");
+      pool.material.opacity = mode2 === "night" ? 0.55 : 0;
       pool.visible = mode2 === "night";
     },
     dispose() {
@@ -49908,19 +50059,8 @@ async function build() {
     return t;
   };
   const stageBg = { day: stageTex(false), night: stageTex(true) };
-  for (const look of ["day", "night"]) loadTex("forest_" + look, true).then((t) => {
-    if (!t) return;
-    t.wrapS = t.wrapT = ClampToEdgeWrapping;
-    t.userData.forest = true;
-    t.generateMipmaps = false;
-    t.minFilter = LinearFilter;
-    forestBg[look] = t;
-    if (mode === look) {
-      scene.background = t;
-      fitBackdrop();
-      kick();
-    }
-  });
+  const HAZE = { day: new Color("#cdb48c"), night: new Color("#2a3650") };
+  scene.fog = new Fog(HAZE.day, 1e4, 1e4 + 1);
   Promise.all([loadTex("window_day", true), loadTex("window_night", true)]).then(([d, n]) => {
     for (const t of [d, n]) if (t) {
       t.wrapS = t.wrapT = ClampToEdgeWrapping;
@@ -49965,7 +50105,8 @@ async function build() {
     wallMat.needsUpdate = true;
     skyMat.map = skyCanvases[L.sky];
     skyMat.needsUpdate = true;
-    scene.background = forestBg[mode] || stageBg[mode] || stageBg.day;
+    scene.background = HAZE[mode] || stageBg[mode] || stageBg.day;
+    scene.fog.color.copy(HAZE[mode] || HAZE.day);
     if (world && world.yard) world.yard.setLook(mode);
     if ($("light")) {
       $("light").textContent = mode === "day" ? "\u263E" : "\u2600";
@@ -52255,7 +52396,7 @@ function outside() {
   const dx = Math.max(0, Math.abs(p.x) - 3.1), dy = Math.max(0, p.y - dims.top - 0.1, -p.y), dz = Math.max(0, p.z - dims.zF - 0.1, dims.zB - 0.1 - p.z);
   const away = Math.hypot(dx, dy, dz);
   const out = away > 0.02;
-  if (out) fitBackdrop();
+  fitHaze(out);
   const near = out ? MathUtils.clamp(away * 0.5, 0.05, 3) : 0.05, far = 30 + away * 2;
   if (Math.abs(camera.near - near) > 0.01 || Math.abs(camera.far - far) > 0.5) {
     camera.near = near;
@@ -52275,24 +52416,31 @@ function buildYardNow() {
     if (i >= 0) PLINTH.splice(i, 1);
     world.yard.dispose();
   }
-  world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier);
+  world.yard = buildForestYard(world.K, world.shell.dims, world.shell.tier, groundTex);
+  if (!groundTex.asked) {
+    groundTex.asked = true;
+    Promise.all([loadTex("ground_diff", true), loadTex("ground_nor"), loadTex("bark_diff", true), loadTex("bark_nor")]).then(([d, n, b, bn]) => {
+      Object.assign(groundTex, { diff: d, nor: n, bark: b, barkNor: bn });
+      if (world.yard) world.yard.setGround(groundTex);
+      kick();
+    });
+  }
   world.yard.group.visible = isOut;
   PLINTH.push(world.yard.group);
   world.yard.setLook(mode);
 }
-var forestBg = {};
-function fitBackdrop() {
-  const t = scene.background;
-  if (!t || !t.isTexture || !t.userData.forest) return;
-  const a = viewW() / viewH(), T = world && world.shell ? world.shell.tier : "study";
-  let hv = Math.min(1, 0.83 * (T === "hall" ? 1.2 : T === "library" ? 1.1 : 1)), wv = hv * a / 1.25;
-  if (wv > 0.9) {
-    hv *= 0.9 / wv;
-    wv = 0.9;
+var groundTex = {};
+var hazeC = new Vector3();
+function fitHaze(out) {
+  if (!scene.fog) return;
+  if (!out || !world || !world.shell) {
+    scene.fog.near = 1e4;
+    scene.fog.far = 1e4 + 1;
+    return;
   }
-  const turn = station === "house" ? cam.yaw : 0;
-  t.repeat.set(wv, hv);
-  t.offset.set(MathUtils.clamp((1 - wv) / 2 + turn * 0.17, 0, 1 - wv), (1 - hv) / 2);
+  const d = camera.position.distanceTo(hazeC.set(0, 1, (dims.zB + dims.zF) / 2));
+  scene.fog.near = d + 4;
+  scene.fog.far = d + 42;
 }
 function setSkies(on) {
   scene.traverse((o) => {

@@ -28,17 +28,6 @@ export function buildShell(K, tier) {
   const floor = mesh(new THREE.PlaneGeometry(6, len).rotateX(-Math.PI / 2).translate(0, 0, midZ), mats.floor, false, { cast: false });
   K.worldUV(floor.geometry);
   // (what the room stands on in the dollhouse, its stone foundation and porch, is the yard: forestyard.js)
-  // in the dollhouse, a soft shadow on the "table" under the plinth, so the room sits on something
-  {
-    const [c, x] = K.mkCanvas(256, 256);
-    const g = x.createRadialGradient(128, 128, 30, 128, 128, 128);
-    g.addColorStop(0, 'rgba(0,0,0,0.62)'); g.addColorStop(0.55, 'rgba(0,0,0,0.38)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-    const mat = new THREE.MeshBasicMaterial({ map: K.canvasTex(c, { repeat: false }), transparent: true, depthWrite: false, toneMapped: false });
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(6.42 + 3.2, len + 0.42 + 3.2).rotateX(-Math.PI / 2), mat);
-    sh.position.set(-0.05, -0.43, midZ); sh.renderOrder = -1;
-    sh.userData.plinth = true; sh.userData.dyn = true; sh.visible = false; plinth.push(sh); G.add(sh);
-  }
 
   // ---------------------------------------------------------------- walls
   // an arched opening (a window or a door): straight sides with a round top

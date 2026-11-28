@@ -82,4 +82,4 @@ Hand-built in code: the bookcase (modelled on the app's arched bookcase, with it
 
 The spine cloth, leather and other textures in the app's own `tex/` folder are Tomestead's.
 - Window view: [Borghese Gardens](https://polyhaven.com/a/borghese_gardens) HDRI (CC0), cut to a flat view and graded for day and night (`tex/window_day.webp`, `tex/window_night.webp`).
-- Dollhouse setting: [Misty Pines](https://polyhaven.com/a/misty_pines) HDRI (CC0), cut wide, thinned of fog, thickened with trees and graded golden by day and moonlit by night (`tex/forest_day.webp`, `tex/forest_night.webp`).
+- Dollhouse setting (the pine wood around the house): [Brown Mud Leaves 01](https://polyhaven.com/a/brown_mud_leaves_01) for the forest floor (`tex/ground_diff.webp`, `tex/ground_nor.webp`) and [Pine Bark](https://polyhaven.com/a/pine_bark) for the trunks (`tex/bark_diff.webp`, `tex/bark_nor.webp`), both CC0 textures by Poly Haven.
