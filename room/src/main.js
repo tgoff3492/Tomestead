@@ -8,7 +8,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { buildShell } from './shell.js';
+import { buildShell, spineTex } from './shell.js';
 import { buildDisplay } from './display.js';
 import { buildFamilyRoom } from './family.js';
 import { buildPortraits } from './portraits.js';
@@ -95,6 +95,20 @@ function sampleLibrary() {
     progress: status === 'reading' ? Math.round(pages * (i % 2 ? 0.62 : 0.31)) : undefined,
     finished: status === 'read' ? `2026-${String(1 + (i % 10)).padStart(2, '0')}-1${i % 9}` : undefined,
   }));
+  // (the test page can fill the shelves: ?many=400 adds that many finished books, fiction and not)
+  const many = Number(params.get('many')) || 0;
+  if (many) {
+    const first = ['Ada', 'Ben', 'Clara', 'Dev', 'Elena', 'Finn', 'Grace', 'Hugo', 'Iris', 'Jon', 'Kemi', 'Leo', 'Mara', 'Noah', 'Olive', 'Priya'];
+    const last = ['Abbott', 'Baxter', 'Chen', 'Dalton', 'Ellis', 'Ferris', 'Garcia', 'Hale', 'Ibsen', 'Jarvis', 'Kaur', 'Lowe', 'Moreau', 'Nakamura', 'Okafor', 'Price', 'Quinn', 'Reyes', 'Sato', 'Turner', 'Ueda', 'Vance', 'Wilde', 'Young', 'Zhou'];
+    const words = ['Winter', 'Garden', 'River', 'Lantern', 'House', 'Orchard', 'Letters', 'Harbour', 'Silence', 'Tide', 'Ember', 'Atlas', 'Hollow', 'Clockwork', 'Meadow'];
+    const ddc = ['', '', '', '', '', '', '152.4', '200.9', '330.1', '420', '523.1', '641.5', '780.9', '811.54', '909.07', '940.53', '973.7', '005.1', '158.1'];
+    const R = rng(many);
+    for (let i = 0; i < many; i++) {
+      const d = ddc[Math.floor(R() * ddc.length)];
+      books.push({ id: 'm' + i, title: `The ${words[Math.floor(R() * words.length)]} of ${words[Math.floor(R() * words.length)]}`, author: `${first[Math.floor(R() * first.length)]} ${last[Math.floor(R() * last.length)]}`,
+        pages: 150 + Math.floor(R() * 450), rating: Math.floor(R() * 6), status: 'read', ddc: d || undefined, addedAt: 1e11 - i * 1e6 });
+    }
+  }
   return { books, theme: {}, sample: true };
 }
 function fromHost() {
@@ -518,6 +532,7 @@ async function build() {
   const books = buildBookcase(M, { cloth, leather });
   // ----- the desk under the window
   const desk = buildDesk(M, woodH, MOD);
+  const cart = buildCart(M);
   buildFireplace.M = M;
   const furniture = placeFurniture(MOD, M);
   // ----- the magic tome
@@ -544,8 +559,12 @@ async function build() {
     loadImg: (src, cors) => new Promise((res) => { const i = new Image(); if (cors) i.crossOrigin = 'anonymous'; const t = setTimeout(() => res(null), 10000); i.onload = () => { clearTimeout(t); res(i.naturalWidth > 2 ? i : null); }; i.onerror = () => { clearTimeout(t); res(null); }; i.src = src; }),
   };
   let shell = buildShell(K, tierNow());
+  BAYS = shell.slots || [];
+  books.refill();
+  if (!HOST) window.__bays = () => BAYS.map((b) => [+(b.a1 - b.a0).toFixed(4), b.ys.length]);  // (the test page checks these against shelving.js)
   shell.cut.forEach((m) => CUT.push(m)); shell.plinth.forEach((m) => PLINTH.push(m));
   applyTierStations(shell);
+  cart.place();
 
   // ----- light
   const hemi = new THREE.HemisphereLight('#ffe6c4', '#4a3020', 1);
@@ -640,7 +659,7 @@ async function build() {
   }
 
   await fontReady;
-  books.paint();     // spine lettering needs the font
+  books.paint(); books.showPage(books.page);     // spine lettering needs the font
   applyLook();
 
   // nothing in the room moves on its own except a few small things: freeze the rest,
@@ -648,7 +667,7 @@ async function build() {
   mergeStatics();
   scene.traverse((o) => { if (o.isMesh && !o.userData.dyn) { o.updateMatrix(); o.matrixAutoUpdate = false; } });
   renderer.shadowMap.needsUpdate = true;
-  return { books, desk, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null, portraits: null };
+  return { books, desk, cart, tome, beam, motes, applyLook, furniture, setWood, shell, K, rug, rugMaps, display: null, fam: null, portraits: null };
 }
 
 function mergeStatics() {
@@ -932,10 +951,13 @@ function buildBookcase(M, { cloth, leather }) {
 
   // ---- everything that depends on the library lives in its own group, shelved again when books change
   const shelfGroup = new THREE.Group(); shelfGroup.userData.dyn = true; g.add(shelfGroup);
+  // the books on the room's other bookcases (the Study's, the Library's, the Hall's): seen from afar
+  // as one batch of plain spines, and as real books with lettered spines on the bay you're looking at
+  const wallGroup = new THREE.Group(); wallGroup.userData.dyn = true; scene.add(wallGroup);
   const api = {
-    meshes: [], hidden: 0, count: 0, order: null, page: 0, pages: 1, all: [], paint() {},
-    refill() { fill(api.page); api.paint(); },
-    showPage(p) { fill(p); api.paint(); },
+    meshes: [], meshes0: [], hidden: 0, count: 0, order: null, page: 0, pages: 1, all: [], paint() {},
+    refill() { fill(api.page); api.paint(); showCase(Math.min(api.page, api.pages - 1)); },
+    showPage(p) { showCase(p); },
   };
   const outer = g;
   // ---- trinkets: the pieces picked in Customize (Poly Haven models), set out as a person would:
@@ -1055,119 +1077,27 @@ function buildBookcase(M, { cloth, leather }) {
     kick();
   }
   const caseOfAbs = (placed) => Math.floor((placed.length ? placed[placed.length - 1].abs : 0) / ROWS);
-  function fill(want = 0) {
-  shelfGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (o.material && o.material.map && o.material !== api.mat) o.material.map.dispose(); } });
-  shelfGroup.clear();
-  if (api.mat) { api.mat.map.dispose(); api.mat.dispose(); api.mat = null; }
-  const g = shelfGroup;
-  // brass name plate on the sill, like the app ("16 read")
-  const nRead = lib.books.filter((b) => (b.status || 'read') === 'read').length;
-  const plate = mesh(new THREE.PlaneGeometry(0.2, 0.034), std({ map: canvasTex(plateTex(`${nRead} read`), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
-  plate.position.set(0, SILL + 0.0225, ZF + 0.035 / 2 + 0.0185);
-
-  // ---- books, in the app's order: Reading now → To read → Read
-  const ORDER = ['reading', 'want', 'read'];
-  const byAdded = (a, b) => (Number(b.addedAt) || 0) - (Number(a.addedAt) || 0);
-  const list = [...groupSeries(lib.books.filter((b) => (b.status || 'read') === 'reading').sort(byAdded)), ...wantOrder(lib.books.filter((b) => b.status === 'want')), ...groupSeries(lib.books.filter((b) => (b.status || 'read') === 'read').sort(byAdded))];
-  const counts = {}; list.forEach((b) => { const k2 = b.status || 'read'; counts[k2] = (counts[k2] || 0) + 1; });
-  const labelled = Object.keys(counts).length > 1;
-  const PICKS = { reading: ['owl', 'stones', 'oak', 'marble', 'brass'], want: ['oak', 'marble', 'stones', 'owl', 'brass'] };
-  const endFor = (sec) => {
-    if (sec !== 'reading' && sec !== 'want') return theme.bookend;
-    const saved = theme.bookends && theme.bookends[sec]; if (saved) return saved;
-    if (theme.bookend === 'none') return 'none';
-    const taken = [theme.bookend]; if (sec === 'want') taken.push(endFor('reading'));
-    return PICKS[sec].find((k2) => !taken.includes(k2)) || theme.bookend;
-  };
-  const endW = (sec) => (endFor(sec) === 'none' ? 0 : endFor(sec) === 'owl' || endFor(sec) === 'stones' ? 0.064 : 0.054);
-  const innerL = -W / 2 + P + 0.02, innerR = W / 2 - P - 0.02, rowW = innerR - innerL;
-  // first the run of books and bookends, then lay it onto the shelves
-  const seq = [];
-  let sec = null;
-  for (const b of list) {
-    const st = b.status || 'read';
-    const h0 = hash(b.id + '|' + b.title), pages = pagesOf(b);
-    const t = (pages > 0 ? Math.min(66, Math.max(24, 18 + pages / 16)) : 26 + ((h0 >>> 5) % 30)) * 0.00082;
-    const h = (176 + (h0 % 66)) * 0.00118;
-    const d = 0.15 + (h0 % 5) * 0.011;
-    if (st !== sec) {
-      if (sec !== null) seq.push({ kind: 'end', sec, w: endW(sec) + 0.035, flip: true });
-      seq.push({ kind: 'end', sec: st, w: endW(st) + 0.004, start: true });
-      sec = st;
-    }
-    const lean = st === 'reading' ? 0.012 : 0;
-    seq.push({ kind: 'book', w: t + 0.0025 + lean, b, t, h, d, lean, st, variant: (h0 >>> 9) % 4 });
+  // ---- shelving: every finished book, in library order (shelving.js): Fiction A–Z by author, then
+  // nonfiction by Dewey class. The first bookcase fills first; then the room's other bookcases, bay by
+  // bay, top shelf to bottom, left to right. (Books being read sit open on the desk; books to read wait
+  // on the cart by the door.)
+  const S = window.TomesteadShelving;
+  let far = [], farMesh = null, farMat = null, farTex = null, plates = [], caseMeshes = [], caseMat = null, hiddenPage = -1;
+  const V3 = THREE.Vector3;
+  function farPose(it) {
+    const s2 = it.slot, start = s2.LR > 0 ? s2.a0 : s2.a1, a = start + s2.LR * (it.ax + it.t / 2);
+    const n = s2.front - s2.dir * (it.d / 2 + 0.02), y = s2.ys[it.ri] + it.h / 2;
+    return {
+      pos: s2.axis === 'x' ? new V3(a, y, n) : new V3(n, y, a),
+      ry: s2.axis === 'x' ? (s2.dir > 0 ? 0 : Math.PI) : (s2.dir > 0 ? Math.PI / 2 : -Math.PI / 2),
+      out: s2.axis === 'x' ? new V3(0, 0, s2.dir) : new V3(s2.dir, 0, 0),
+    };
   }
-  if (sec !== null) seq.push({ kind: 'end', sec, w: endW(sec), flip: true });
-  // a small library is spread over the shelves, with room for trinkets
-  const total = seq.reduce((s2, e) => s2 + e.w, 0);
-  const needed = Math.ceil(total / rowW);
-  // more than one bookcase's worth: every shelf is filled and the books carry on to the next
-  // bookcase (the room shows one at a time). Otherwise the books are balanced over the shelves
-  // they need, with a little extra so each shelf has room for a trinket.
-  const multi = needed > ROWS;
-  const rowsUsed = multi ? ROWS : Math.min(ROWS, Math.max(needed, Math.ceil(total / (rowW * 0.72))));
-  const cap = multi ? rowW : Math.min(rowW, total / rowsUsed + 0.06);
-  let abs = 0, x = innerL;     // abs: the shelf, counting on through every bookcase
-  const placed = [];
-  for (const e of seq) {
-    if (x + e.w > innerL + cap && x > innerL) {
-      // don't start a row with a closing bookend
-      if (e.kind === 'end' && e.flip) { placed.push({ ...e, abs, x }); x += e.w; continue; }
-      abs++; x = innerL;
-    }
-    placed.push({ ...e, abs, x }); x += e.w;
-  }
-  const caseOf = (i) => Math.floor(i.abs / ROWS);
-  const pages = caseOf(placed[placed.length - 1] || { abs: 0 }) + 1;
-  const page = Math.max(0, Math.min(pages - 1, want || 0));
-  const all = placed.filter((i) => i.kind === 'book').map((i) => ({ b: i.b, page: caseOf(i), st: i.st }));
-  const items = placed.filter((i) => caseOf(i) === page).map((i) => ({ ...i, row: ROWS - 1 - (i.abs % ROWS) }));
-  // a section carried over from the last bookcase gets its label again at the top of this one
-  const firstBook = items.find((i) => i.kind === 'book');
-  if (page > 0 && firstBook && !items.some((i) => i.kind === 'end' && i.start && i.sec === firstBook.st)) items.unshift({ kind: 'label', sec: firstBook.st, row: firstBook.row, x: firstBook.x - 0.004 });
-
-  const bookMeshes = [];
-  for (const it of items) {
-    const y = rowsY[it.row];
-    if (it.kind === 'label') {
-      if (labelled) {
-        const name = { reading: 'Reading now', want: 'To read', read: 'Read' }[it.sec];
-        const lb = mesh(new THREE.PlaneGeometry(0.15, 0.022), std({ map: canvasTex(plateTex(`${name} · ${counts[it.sec]}`, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
-        lb.position.set(it.x + 0.075, y - PLK / 2, ZF + 0.0006);
-      }
-      continue;
-    }
-    if (it.kind === 'end') {
-      const kind = endFor(it.sec);
-      if (kind !== 'none') { const e = bookendMesh(kind, M, !!it.flip); g.add(e); e.position.set(it.x + (it.flip ? 0.006 : 0), y, ZF - 0.1); }
-      // a small brass label on the plank where each section starts, as in the app
-      if (it.start && labelled) {
-        const name = { reading: 'Reading now', want: 'To read', read: 'Read' }[it.sec];
-        const lb = mesh(new THREE.PlaneGeometry(0.15, 0.022), std({ map: canvasTex(plateTex(`${name} · ${counts[it.sec]}`, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
-        lb.position.set(it.x + 0.08, y - PLK / 2, ZF + 0.0006);
-      }
-      continue;
-    }
-    const geo = new THREE.BoxGeometry(it.t, it.h, it.d);
-    const m = mesh(geo, undefined, g);
-    m.position.set(it.x + it.t / 2 + it.lean, y + it.h / 2, ZF - 0.025 - it.d / 2);
-    if (it.lean) { m.rotation.z = -0.07; m.position.x -= 0.004; }
-    m.userData = { book: it.b, home: m.position.clone(), homeRot: m.rotation.clone(), dyn: true, it };
-    if (it.st === 'reading') {     // a red ribbon marks the books being read
-      const rb = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.006, it.t * 0.28), 0.045, 0.002), std({ color: '#9b1d22', roughness: 0.6 }));
-      rb.position.set(0, it.h / 2 + 0.012, it.d / 2 - 0.02); m.add(rb);
-    }
-    bookMeshes.push(m);
-  }
-  // the trinkets picked in Customize, set out in the arch and in the open spots on the shelves
-  dress(page, placed, { endW, innerL, innerR });
-
-  // spine lettering, all books on one texture (one material for every spine)
-  let mat = null;
-  function paint() {
+  // spine lettering: one texture for a set of books (one material for every spine in the set)
+  function paintSet(bookMeshes) {
     const n = bookMeshes.length;
-    const A = isPhone ? 2048 : 2048;
+    if (!n) return null;
+    const A = 2048;
     const rw = n <= 128 ? 64 : n <= 252 ? 48 : 40, rh = rw * 7;
     const cols = Math.floor(A / rw);
     const rows = Math.max(1, Math.ceil(n / cols));
@@ -1184,19 +1114,19 @@ function buildBookcase(M, { cloth, leather }) {
       x.beginPath(); x.rect(cx, cy, rw, rh); x.clip();
       x.fillStyle = bg; x.fillRect(cx, cy, rw, rh);
       const p = it.variant === 3 ? leatherP : clothP;
-      if (p) { x.globalCompositeOperation = 'overlay'; x.globalAlpha = it.st === 'want' ? 0.35 : 0.6; x.fillStyle = p; x.fillRect(cx, cy, rw, art); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; }
+      if (p) { x.globalCompositeOperation = 'overlay'; x.globalAlpha = 0.6; x.fillStyle = p; x.fillRect(cx, cy, rw, art); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; }
       // rounded spine shading
       const sh = x.createLinearGradient(cx, 0, cx + rw, 0);
       sh.addColorStop(0, 'rgba(0,0,0,.42)'); sh.addColorStop(0.22, 'rgba(255,255,255,.12)'); sh.addColorStop(0.55, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.45)');
       x.fillStyle = sh; x.fillRect(cx, cy, rw, art);
-      const gold = it.st === 'want' ? ink : '#e6c886';
+      const gold = '#e6c886';
       x.fillStyle = gold; x.strokeStyle = gold;
       // bands
       const u = rw / 64;
       if (it.variant !== 2) { x.fillRect(cx, cy + 22 * u, rw, 3 * u); x.fillRect(cx, cy + art - 26 * u, rw, 3 * u); }
       if (it.variant === 1) { x.fillRect(cx, cy + 28 * u, rw, 1.5 * u); x.fillRect(cx, cy + art - 32 * u, rw, 1.5 * u); }
-      // stars at the top for rated, finished books
-      const stars = it.st === 'read' ? Math.max(0, Math.min(5, Math.floor(b.rating || 0))) : 0;
+      // stars at the top for rated books
+      const stars = Math.max(0, Math.min(5, Math.floor(b.rating || 0)));
       x.font = `${Math.round(13 * u)}px serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
       for (let k = 0; k < stars; k++) x.fillText('★', cx + rw / 2, cy + 38 * u + k * 13 * u);
       // title down the spine, surname at the foot
@@ -1208,7 +1138,7 @@ function buildBookcase(M, { cloth, leather }) {
       let title = String(b.title);
       while (x.measureText(title).width > len && fs > 14 * u) { fs -= 1; x.font = `${fs}px "IM Fell English", Georgia, serif`; }
       while (x.measureText(title).width > len && title.length > 3) title = title.slice(0, -2).trimEnd() + '…';
-      x.fillStyle = it.st === 'want' ? ink : (ink === '#2B1C0E' || ink === '#24170C' || ink === '#3A2614' ? '#2a1a0c' : '#ead19a');
+      x.fillStyle = ink === '#2B1C0E' || ink === '#24170C' || ink === '#3A2614' ? '#2a1a0c' : '#ead19a';
       x.fillText(title, 0, 1);
       x.restore();
       const surname = String(b.author || '').trim().split(/\s+/).pop() || '';
@@ -1227,6 +1157,8 @@ function buildBookcase(M, { cloth, leather }) {
       const swatch = [(cx + rw / 2) / A, 1 - (cy + art + 3.5) / AH];
       const pageSw = [(cx + rw / 2) / A, 1 - (cy + art + 10.5) / AH];
       const uv = m.geometry.attributes.uv;
+      // (painting again, when the font arrives: start from the box's own mapping)
+      if (!m.geometry.userData.uv0) m.geometry.userData.uv0 = uv.array.slice(); else uv.array.set(m.geometry.userData.uv0);
       for (let f = 0; f < 6; f++) {
         for (let k = 0; k < 4; k++) {
           const i2 = f * 4 + k;
@@ -1238,14 +1170,185 @@ function buildBookcase(M, { cloth, leather }) {
       uv.needsUpdate = true;
     });
     const tex = canvasTex(c, { repeat: false });
-    mat = std({ map: tex, roughness: 0.72 });
+    const mat = std({ map: tex, roughness: 0.72 });
+    const old = bookMeshes[0] && bookMeshes[0].material;
     bookMeshes.forEach((m) => { m.material = mat; });
-    api.mat = mat;
+    if (old && old !== mat && old.map) { old.map.dispose(); old.dispose(); }
+    return mat;
   }
-  Object.assign(api, { meshes: bookMeshes, paint, hidden: 0, count: list.length, order: null, page, pages, all,
+  function fill(want = 0) {
+  shelfGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (o.material && o.material.map && o.material !== api.mat) o.material.map.dispose(); } });
+  shelfGroup.clear();
+  if (api.mat) { api.mat.map.dispose(); api.mat.dispose(); api.mat = null; }
+  for (const m of caseMeshes) { wallGroup.remove(m); m.geometry.dispose(); } caseMeshes = [];
+  if (caseMat) { caseMat.map.dispose(); caseMat.dispose(); caseMat = null; }
+  for (const o of [...wallGroup.children]) { wallGroup.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== farMat) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }
+  farMesh = null; plates = []; hiddenPage = -1;
+  const g = shelfGroup;
+  // brass name plate on the sill, like the app ("16 read")
+  const nRead = lib.books.filter((b) => (b.status || 'read') === 'read').length;
+  const plate = mesh(new THREE.PlaneGeometry(0.2, 0.034), std({ map: canvasTex(plateTex(`${nRead} read`), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
+  plate.position.set(0, SILL + 0.0225, ZF + 0.035 / 2 + 0.0185);
+
+  const list = S ? S.order(lib.books) : lib.books.filter((b) => (b.status || 'read') === 'read');
+  const secOf = (b) => (S ? S.section(b) : 'F');
+  const counts = {}; list.forEach((b) => { const k2 = secOf(b); counts[k2] = (counts[k2] || 0) + 1; });
+  const labelled = Object.keys(counts).length > 1;
+  const endFor = () => theme.bookend;
+  const endW = () => (theme.bookend === 'none' ? 0 : theme.bookend === 'owl' || theme.bookend === 'stones' ? 0.064 : 0.054);
+  const innerL = -W / 2 + P + 0.02, innerR = W / 2 - P - 0.02, rowW = innerR - innerL;
+  const SC = S ? S.SCALE : 1.2;
+  // first the run of books (with a bookend at either end), then lay it onto the shelves
+  const seq = [];
+  let sec = null;
+  seq.push({ kind: 'end', sec: 'read', w: endW() + 0.004, start: true });
+  for (const b of list) {
+    const h0 = hash(b.id + '|' + b.title);
+    const t = S ? S.thick(b) : 0.03;
+    const h = (176 + (h0 % 66)) * 0.00118 * SC;
+    const d = (0.15 + (h0 % 5) * 0.011) * 1.1;
+    const k2 = secOf(b);
+    if (k2 !== sec) { seq.push({ kind: 'mark', sec: k2, w: 0 }); sec = k2; }
+    seq.push({ kind: 'book', w: t + (S ? S.GAP : 0.0025), b, t, h, d, lean: 0, st: 'read', sec: k2, variant: (h0 >>> 9) % 4 });
+  }
+  seq.push({ kind: 'end', sec: 'read', w: endW(), flip: true });
+  // a small library is spread over the first bookcase's shelves, with room for trinkets; past that,
+  // its shelves fill and the books carry on to the room's other bookcases
+  const total = seq.reduce((s2, e) => s2 + e.w, 0);
+  const needed = Math.ceil(total / rowW);
+  const multi = needed > ROWS;
+  const rowsUsed = multi ? ROWS : Math.min(ROWS, Math.max(needed, Math.ceil(total / (rowW * 0.72))));
+  const cap = multi ? rowW : Math.min(rowW, total / rowsUsed + 0.06);
+  let k = 0, placed = [];
+  const lay = (cap) => {
+    let abs = 0, x = innerL; k = 0; placed = [];
+    for (; k < seq.length; k++) {
+      const e = seq[k];
+      if (x + e.w > innerL + cap && x > innerL) {
+        if (e.kind === 'end' && e.flip) { placed.push({ ...e, abs, x }); x += e.w; continue; }
+        if (abs + 1 >= ROWS) break;
+        abs++; x = innerL;
+      }
+      placed.push({ ...e, abs, x }); x += e.w;
+    }
+  };
+  lay(cap);
+  // (spread out, it no longer fits: pack the shelves tight instead)
+  if (k < seq.length && cap < rowW) lay(rowW);
+  // the rest go onto the room's bookcases, bay by bay
+  far = [];
+  let si = 0, ri = 0, ax = 0, hidden = 0;
+  for (; k < seq.length; k++) {
+    const e = seq[k];
+    if (e.kind !== 'book') continue;
+    while (si < BAYS.length && ax + e.w > BAYS[si].a1 - BAYS[si].a0) { ri++; ax = 0; if (ri >= BAYS[si].ys.length) { si++; ri = 0; } }
+    if (si >= BAYS.length) { hidden++; continue; }
+    const slot = BAYS[si];
+    far.push({ ...e, h: Math.min(e.h, slot.clear - 0.015), slot, si, ri, ax, page: 1 + si });
+    ax += e.w;
+  }
+  const items = placed.map((i) => ({ ...i, row: ROWS - 1 - (i.abs % ROWS) }));
+  const all = [...placed.filter((i) => i.kind === 'book').map((i) => ({ b: i.b, page: 0, st: 'read', sec: i.sec })), ...far.map((i) => ({ b: i.b, page: i.page, st: 'read', sec: i.sec }))];
+
+  const bookMeshes = [];
+  let lastLabel = -1, lastRow = -1;
+  for (const it of items) {
+    const y = rowsY[it.row];
+    if (it.kind === 'mark') {
+      // a small brass label on the plank where each section starts ("Fiction · 40", "500 Science · 6")
+      if (labelled && !(it.row === lastRow && it.x - lastLabel < 0.17)) {
+        const sx = S ? S.byKey[it.sec] : null, name = it.sec === 'F' ? 'Fiction' : `${it.sec} ${sx ? sx.name : ''}`;
+        const lb = mesh(new THREE.PlaneGeometry(0.15, 0.022), std({ map: canvasTex(plateTex(`${name} · ${counts[it.sec]}`, 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), g, { cast: false });
+        lb.position.set(Math.min(it.x + 0.075, innerR - 0.075), y - PLK / 2, ZF + 0.0006);
+        lastLabel = it.x; lastRow = it.row;
+      }
+      continue;
+    }
+    if (it.kind === 'end') {
+      const kind = endFor();
+      if (kind !== 'none') { const e = bookendMesh(kind, M, !!it.flip); g.add(e); e.position.set(it.x + (it.flip ? 0.006 : 0), y, ZF - 0.1); }
+      continue;
+    }
+    const geo = new THREE.BoxGeometry(it.t, it.h, it.d);
+    const m = mesh(geo, undefined, g);
+    m.position.set(it.x + it.t / 2, y + it.h / 2, ZF - 0.025 - it.d / 2);
+    m.userData = { book: it.b, home: m.position.clone(), homeRot: m.rotation.clone(), dyn: true, it, out: new V3(0, 0, 1), page: 0 };
+    bookMeshes.push(m);
+  }
+  // the trinkets picked in Customize, set out in the arch and in the open spots on the shelves
+  dress(0, placed, { endW, innerL, innerR });
+
+  // the books further along the walls: one batch, each a plain cloth spine in its own colour
+  if (far.length) {
+    if (!farTex) { farTex = canvasTex(spineTex({ mkCanvas, rng }), { repeat: false }); farMat = std({ map: farTex, roughness: 0.78 }); }
+    farMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), farMat, far.length);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color(), up = new V3(0, 1, 0);
+    far.forEach((it, i) => {
+      const { pos, ry } = farPose(it);
+      it.m4 = m4.compose(pos, q.setFromAxisAngle(up, ry), new V3(it.t, it.h, it.d)).clone();
+      farMesh.setMatrixAt(i, it.m4); farMesh.setColorAt(i, col.set(colorOf(it.b)[0]));
+      it.fi = i;
+    });
+    farMesh.instanceMatrix.needsUpdate = true; if (farMesh.instanceColor) farMesh.instanceColor.needsUpdate = true;
+    farMesh.castShadow = false; farMesh.receiveShadow = true;
+    farMesh.userData = { farBooks: true, station: 'shelf' };
+    wallGroup.add(farMesh);
+    // a brass plate on each bay that holds books, naming what's on it ("Fiction D–G", "500 Science")
+    const bySlot = new Map(); for (const it of far) { if (!bySlot.has(it.si)) bySlot.set(it.si, []); bySlot.get(it.si).push(it); }
+    for (const [i2, its] of bySlot) {
+      const s2 = BAYS[i2], text = S ? S.range(its[0].b, its[its.length - 1].b) : '';
+      const pl = mesh(new THREE.PlaneGeometry(0.42, 0.063), std({ map: canvasTex(plateTex(text.replace(/\s+/g, ' '), 640, 96), { repeat: false }), roughness: 0.35, metalness: 0.6 }), wallGroup, { cast: false });
+      const mid = (s2.a0 + s2.a1) / 2, yv = s2.y1 - 0.04, n = s2.front + s2.dir * 0.075;
+      if (s2.axis === 'x') { pl.position.set(mid, yv, n); pl.rotation.y = s2.dir > 0 ? 0 : Math.PI; } else { pl.position.set(n, yv, mid); pl.rotation.y = s2.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
+      plates.push(pl);
+    }
+  }
+
+  let mat = null;
+  function paint() { api.mat = mat = paintSet(bookMeshes); }
+  Object.assign(api, { meshes: bookMeshes, meshes0: bookMeshes, paint, hidden, count: list.length, order: null, page: 0, pages: 1 + BAYS.length, all, far,
     byId: new Map(bookMeshes.map((m) => [m.userData.book.id, m])) });
   }
+  // the bay you're looking at: its books as real books, lettered spines and all (the batch copies hide)
+  function showCase(p) {
+    for (const m of caseMeshes) { wallGroup.remove(m); m.geometry.dispose(); }
+    caseMeshes = [];
+    if (caseMat) { caseMat.map.dispose(); caseMat.dispose(); caseMat = null; }
+    if (farMesh && hiddenPage > 0) { for (const it of far) if (it.page === hiddenPage) farMesh.setMatrixAt(it.fi, it.m4); farMesh.instanceMatrix.needsUpdate = true; }
+    hiddenPage = -1;
+    api.page = Math.max(0, Math.min(api.pages - 1, p | 0));
+    if (api.page > 0 && farMesh) {
+      const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+      for (const it of far) {
+        if (it.page !== api.page) continue;
+        const { pos, ry, out } = farPose(it);
+        const m = mesh(new THREE.BoxGeometry(it.t, it.h, it.d), undefined, wallGroup);
+        m.position.copy(pos); m.rotation.y = ry;
+        m.userData = { book: it.b, home: pos.clone(), homeRot: m.rotation.clone(), dyn: true, it, out, page: it.page };
+        caseMeshes.push(m);
+        farMesh.setMatrixAt(it.fi, zero);
+      }
+      farMesh.instanceMatrix.needsUpdate = true;
+      hiddenPage = api.page;
+      if (caseMeshes.length) caseMat = paintSet(caseMeshes);
+    }
+    api.meshes = api.page === 0 ? api.meshes0 : caseMeshes;
+    api.byId = new Map([...api.meshes0, ...caseMeshes].map((m) => [m.userData.book.id, m]));
+    renderer.shadowMap.needsUpdate = true;
+    kick();
+  }
+  // the room's bays, for browsing: where each is, and how full
+  api.slot = (p) => (p > 0 ? BAYS[p - 1] || null : null);
+  api.fillOf = (p) => {
+    if (p === 0) return api.meshes0.length ? Math.min(1, api.meshes0.reduce((t, m) => t + m.userData.it.t + 0.0025, 0) / (ROWS * 1.5)) : 0;
+    const s2 = BAYS[p - 1]; if (!s2) return 0;
+    const used = far.filter((it) => it.page === p).reduce((t, it) => t + it.w, 0);
+    return Math.min(1, used / ((s2.a1 - s2.a0) * s2.ys.length));
+  };
+  api.hitPage = (instanceId) => (far[instanceId] ? far[instanceId].page : -1);
+  api.farMesh = () => farMesh;
   fill();
+  api.paint();
 
   // one picking target for the whole case (books are picked first)
   const HT = AY + HS + RISE;
@@ -1253,6 +1356,64 @@ function buildBookcase(M, { cloth, leather }) {
   hit.position.set(0, HT / 2, ZC); hit.userData.station = 'shelf'; scene.add(hit);
   api.setVine = setVine;
   return api;
+}
+
+// ---------------------------------------------------------------- the book cart
+// A wooden library cart carrying the books you mean to read: upright on its two shelves, spines out,
+// the ones marked Up next first. In the cottage it stands against the right-hand wall between the
+// tome and the reading chair; in the bigger rooms, by the doors. Tap it for the list.
+function buildCart(M) {
+  const g = new THREE.Group(); scene.add(g);
+  const place = () => { if (dims.zF > 3) g.position.set(2.45, 0, dims.zF - 1.35); else g.position.set(2.55, 0, -0.95); g.rotation.y = -Math.PI / 2; };   // (its long side faces into the room)
+  place();
+  const L = 0.92, Dp = 0.36, wood = M.caseSide, dark = M.caseDark;
+  const SH = [0.56, 0.2];                                                  // the two shelves (tops), top first
+  // the frame: corner posts, the shelves, low rails, a push bar, and four castors
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.035, 0.86, 0.035, wood, sx * (L / 2 - 0.02), 0.1 + 0.43, sz * (Dp / 2 - 0.02), g);
+  for (const y of SH) { box(L, 0.025, Dp, dark, 0, y - 0.0125, 0, g); box(L, 0.05, 0.015, wood, 0, y + 0.03, Dp / 2 - 0.008, g); }
+  box(0.015, 0.05, Dp, wood, -L / 2 + 0.008, 0.9, 0, g); box(0.015, 0.05, Dp, wood, L / 2 - 0.008, 0.9, 0, g);
+  const bar = mesh(new THREE.CylinderGeometry(0.014, 0.014, Dp + 0.08, 10).rotateX(Math.PI / 2), M.brass, g, { cast: false }); bar.position.set(L / 2 + 0.05, 0.98, 0);
+  for (const sx of [-1, 1]) box(0.08, 0.02, 0.02, M.brass, sx * 0 + L / 2 + 0.02, 0.98, sx * (Dp / 2 + 0.02), g);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const w = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.025, 14).rotateX(Math.PI / 2), dark, g); w.position.set(sx * (L / 2 - 0.06), 0.045, sz * (Dp / 2 - 0.03)); }
+  // an invisible tap target over the whole cart
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(L + 0.2, 1.05, Dp + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
+  hit.position.set(0, 0.52, 0); hit.userData.cart = true; g.add(hit);
+  const books = new THREE.Group(); books.userData.dyn = true; g.add(books);
+  let tex = null, mat = null;
+  function refill() {
+    for (const o of [...books.children]) { books.remove(o); o.geometry.dispose(); }
+    const want = wantOrder(lib.books.filter((b) => b.status === 'want'));
+    g.visible = want.length > 0;
+    if (!want.length) return;
+    if (!tex) { tex = canvasTex(spineTex({ mkCanvas, rng }), { repeat: false }); mat = std({ map: tex, roughness: 0.78 }); }
+    const SH2 = window.TomesteadShelving, list = [];
+    let row = 0, x = -L / 2 + 0.04;
+    for (const b of want) {
+      const h0 = hash(b.id + '|' + b.title), t = SH2 ? SH2.thick(b) : 0.03, h = Math.min(0.32, (176 + (h0 % 66)) * 0.00118 * 1.2), d = (0.15 + (h0 % 5) * 0.011) * 1.1;
+      if (x + t > L / 2 - 0.04) { row++; x = -L / 2 + 0.04; if (row >= SH.length) break; }
+      list.push({ b, t, h, d, x: x + t / 2, y: SH[row] + h / 2 }); x += t + 0.003;
+    }
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, list.length);
+    const m4 = new THREE.Matrix4(), col = new THREE.Color(), q = new THREE.Quaternion();
+    // spines toward the room (the cart's +z side)
+    list.forEach((it, i) => { im.setMatrixAt(i, m4.compose(new THREE.Vector3(it.x, it.y, Dp / 2 - 0.02 - it.d / 2), q, new THREE.Vector3(it.t, it.h, it.d))); im.setColorAt(i, col.set(colorOf(it.b)[0])); });
+    im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    im.userData.cart = true; books.add(im);
+    renderer.shadowMap.needsUpdate = true;
+  }
+  refill();
+  return { group: g, refill, place };
+}
+// the cart's card: the to-read pile, ready to start
+function cartCard() {
+  const want = wantOrder(lib.books.filter((b) => b.status === 'want'));
+  if (!want.length) return;
+  const n = want.length, top = want.slice(0, 12);
+  openCard(`<div class="eyebrow">On the book cart</div><h2>To read · ${n}</h2>
+    <div class="meta">Finish one and it goes up on your shelves, in its place.</div>
+    <ul>${top.map((b) => `<li><b>${esc(b.title)}</b>${b.author ? ` · <i>${esc(b.author)}</i>` : ''}${b.upNext ? ' <span class="upnext">Up next</span>' : ''}
+      ${HOST ? `<div class="acts"><button type="button" data-act="start" data-id="${esc(b.id)}">Start reading</button><button type="button" class="quiet" data-act="open" data-id="${esc(b.id)}">Open</button></div>` : ''}</li>`).join('')}</ul>
+    ${n > top.length ? `<div class="meta">and ${n - top.length} more.</div>` : ''}`, 'cart');
 }
 
 // ---------------------------------------------------------------- the desk
@@ -1984,9 +2145,9 @@ const STATIONS = {
 // How big the room is and what's in it follow what your reading has earned (the app keeps it in
 // your settings). The lab page can try any size: ?tier=study|library|hall (everything earned).
 const Grow = window.TomesteadGrowth || null;
-const ALL_EARNED = { tome: 1, vine: 1, cat: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, authors: 1, nook: 1, damask: 1, library: 1, hall: 1 };
+const ALL_EARNED = { tome: 1, vine: 1, cat: 1, rug: 1, mantel: 1, display: 1, ottoman: 1, authors: 1, nook: 1, damask: 1, roomStudy: 1, roomLibrary: 1, roomHall: 1 };
 function earnedNow() {
-  if (!HOST) { const t = params.get('tier'); return t === 'study' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'library' && k !== 'hall')) : t === 'library' ? Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => k !== 'hall')) : ALL_EARNED; }
+  if (!HOST) { const t = params.get('tier'), drop = { study: ['roomStudy', 'roomLibrary', 'roomHall'], den: ['roomLibrary', 'roomHall'], library: ['roomHall'] }[t] || []; return Object.fromEntries(Object.entries(ALL_EARNED).filter(([k]) => !drop.includes(k))); }
   return lib.earned || {};
 }
 // what the room shows: earned, minus anything still waiting for its moment of arrival
@@ -1995,9 +2156,11 @@ const shown = (k) => !!earnedNow()[k] && !pendingArrive.includes(k);
 function tierNow() {
   const e = earnedNow(), pick = (lib.theme && lib.theme.roomSize) || 'auto';
   const ok = (k) => !!e[k] && !pendingArrive.includes(k);
-  const top = ok('hall') ? 'hall' : ok('library') ? 'library' : 'study';
-  const order = ['study', 'library', 'hall'];
-  return pick !== 'auto' && order.indexOf(pick) >= 0 && order.indexOf(pick) <= order.indexOf(top) ? pick : top;
+  const top = ok('roomHall') ? 'hall' : ok('roomLibrary') ? 'library' : ok('roomStudy') ? 'den' : 'study';
+  const order = ['study', 'den', 'library', 'hall'];
+  // (a smaller room can be picked only while its shelves still hold every finished book)
+  const SH = window.TomesteadShelving, fits = (k) => !HOST || !SH || SH.pack(SH.order(lib.books), k).all;
+  return pick !== 'auto' && order.indexOf(pick) >= 0 && order.indexOf(pick) <= order.indexOf(top) && fits(pick) ? pick : top;
 }
 // the dollhouse and the doorway view, for each size of room
 let dims = { x: 3, zB: -2.7, zF: 2.7, H: 3, top: 3 };
@@ -2006,9 +2169,11 @@ function applyTierStations(sh) {
   const T = sh.tier;
   Object.assign(STATIONS.house, T === 'hall' ? { p: [11.5, 13.5, 21.0], t: [-0.4, 3.9, 3.6], w: 12.5, h: 15.8, max: 120 }
     : T === 'library' ? { p: [10.6, 11.0, 15.5], t: [-0.4, 2.1, 1.7], w: 10.8, h: 9.6, max: 100 }
+    : T === 'den' ? { p: [10.6, 9.6, 15.2], t: [-0.4, 1.0, 1.7], w: 10.4, h: 7.6, max: 100 }
     : { p: [9.6, 9.0, 11.0], t: [-0.3, 0.5, -0.2], w: 9.4, h: 6.8, max: 90 });
   Object.assign(STATIONS.room, T === 'hall' ? { p: [1.55, 1.7, 9.9], t: [-0.25, 3.1, -1.5], w: 4.4, h: 2.6, max: 13.5 }
     : T === 'library' ? { p: [1.45, 1.7, 5.95], t: [-0.45, 2.35, -1.6], w: 4.4, h: 2.6, max: 9.6 }
+    : T === 'den' ? { p: [1.45, 1.65, 5.95], t: [-0.45, 1.25, -1.6], w: 4.4, h: 2.6, max: 9.6 }
     : { p: [1.0, 1.65, 2.55], t: [-0.7, 1.05, -1.5], w: 4.4, h: 2.6, max: 5.2 });
 }
 // a cover for the display case: the plain cloth one at once, the real picture once it loads
@@ -2058,6 +2223,7 @@ function framing(name) {
   const need = Math.max(s.w / 2 / Math.tan(hf / 2), s.h / 2 / vt);
   const d = Math.min(s.max, Math.max(base, need));
   const pos = t.clone().addScaledVector(dir, -d);
+  if (name === 'shelf' && world && world.books.page > 0) return bayFraming(world.books.slot(world.books.page));
   if (name === 'shelf' && shelfSpan) return shelfFraming(dir);
   pos.x = THREE.MathUtils.clamp(pos.x, -2.75, 2.75); pos.z = Math.min(pos.z, (where === 'family' ? 2.05 : dims.zF - 0.1));
   return { pos, dir: t.clone().sub(pos).normalize(), dist: t.distanceTo(pos) };
@@ -2090,7 +2256,7 @@ function topInset() {
 }
 function shelfFraming(dir) {
   const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), ht = vt * camera.aspect;
-  const H = viewH(), top = customizing ? 0.04 : Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - (customizing ? 16 : 132)) / H);
+  const H = viewH(), top = customizing ? 0.04 : Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - (customizing ? 16 : world && world.books.pages > 1 ? 178 : 132)) / H);
   const band = bot - top, mid = (top + bot) / 2;
   const [x0, x1] = shelfSpan, [y0, y1] = shelfY;
   const dV = (y1 - y0 + 0.08) / band / 2 / vt;
@@ -2108,9 +2274,27 @@ function shelfFraming(dir) {
   const pos = t.clone().addScaledVector(dir, -d);
   return { pos, dir: dir.clone(), dist: d };
 }
+// One of the room's other bays, square on: every shelf of it between the controls at the top and the
+// bar at the bottom, as close as that allows
+function bayFraming(s) {
+  if (!s) return framing('room');
+  const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), ht = vt * camera.aspect;
+  const H = viewH(), top = Math.min(0.3, topInset() / H), bot = Math.max(top + 0.4, (H - 178) / H);
+  const band = bot - top, mid = (top + bot) / 2;
+  const y0 = s.ys[s.ys.length - 1] - 0.03, y1 = s.y1 + 0.03;          // (the brass plate on top too)
+  const dV = (y1 - y0) / band / 2 / vt, dW = (s.a1 - s.a0 + 0.16) / 2 / ht;
+  // (as far back as the room allows, on a wide screen)
+  const room = s.axis === 'x' ? (s.dir > 0 ? dims.zF - s.front : s.front - dims.zB) : (s.dir > 0 ? dims.x - s.front : s.front + dims.x);
+  const d = THREE.MathUtils.clamp(Math.max(dV, dW), 0.7, Math.max(1, room - 0.3));
+  const out = s.axis === 'x' ? new THREE.Vector3(0, 0, s.dir) : new THREE.Vector3(s.dir, 0, 0);
+  const along = (s.a0 + s.a1) / 2, vh = 2 * d * vt;
+  const t = s.axis === 'x' ? new THREE.Vector3(along, (y0 + y1) / 2 - (0.5 - mid) * vh, s.front) : new THREE.Vector3(s.front, (y0 + y1) / 2 - (0.5 - mid) * vh, along);
+  const pos = t.clone().addScaledVector(out, d);
+  return { pos, dir: out.clone().negate(), dist: d };
+}
 // how far the view can slide along the shelf (null when every book already fits on the screen)
 function shelfPan() {
-  if (!shelfSpan) return null;
+  if (!shelfSpan || (world && world.books.page > 0)) return null;
   const ht = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
   const wv = 2 * Math.max(0.3, cam.pos.z - STATIONS.shelf.t[2]) * ht;
   const [x0, x1] = shelfSpan;
@@ -2120,11 +2304,13 @@ function shelfPan() {
 // people who ask their phone for less motion get short, flat moves and no flicks
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 function go(name, dur = 1.5, { arrive = true } = {}) {
+  if (name !== 'shelf' && asideNow.length) { for (const o of asideNow) o.visible = true; asideNow = []; }
   if (outBook && outBook.phase === 'held') dropOutBook();     // going somewhere else: the book you're holding goes home
   if (outBook) return;              // the book is open: closing it brings you back
   closeCard();
   if (pulled) { pulled.userData.anim = -1; pulled = null; }
   glide(name, dur, arrive);
+  if (name === 'shelf') clearView();
   if (name !== 'tome' && world) world.tome.rest();
   // an empty bookcase shows the dashed "Your first book goes here" spot instead of a card (overlays())
   if (name === 'shelf' && world && (world.books.meshes.length || !HOST)) shelfHint();
@@ -2298,6 +2484,7 @@ function bakeOrbit() {
 // From outside, the ceiling and the near walls lift away and the room stands on its plinth; step
 // back in and they return. Near and far planes follow how far out the camera is.
 const CUT = [], PLINTH = [];
+let BAYS = [];                      // the room's bookcases beyond the first, bay by bay (shell.js)
 let isOut = false;
 function outside() {
   const p = camera.position;
@@ -2357,9 +2544,15 @@ canvas.addEventListener('pointermove', (e) => {
     if (lim) {
       if (tween) return;
       drag.trail.push([e.timeStamp, e.clientX]); if (drag.trail.length > 8) drag.trail.shift();
-      cam.pos.x = THREE.MathUtils.clamp(cam.pos.x - dx * lim.perPx, lim.lo, lim.hi);
+      const want = cam.pos.x - dx * lim.perPx;
+      // (pushing on past the end of the shelves counts toward moving on to the next bookcase)
+      if (want > lim.hi) drag.over = (drag.over || 0) + (want - Math.max(lim.hi, cam.pos.x)) / lim.perPx;
+      if (want < lim.lo) drag.over = (drag.over || 0) - (Math.min(lim.lo, cam.pos.x) - want) / lim.perPx;
+      cam.pos.x = THREE.MathUtils.clamp(want, lim.lo, lim.hi);
       kick(); return;
     }
+    // a bay that fits the screen: a sideways swipe glides to the next bookcase (see endDrag)
+    if (world && world.books.pages > 1) return;
   }
   const k = 2.2 / Math.max(innerWidth, innerHeight);
   cam.yaw += dx * k; cam.pitch += dy * k * 0.8;
@@ -2370,6 +2563,15 @@ function endDrag(e) {
   if (!drag) return;
   const d = drag; drag = null; canvas.classList.remove('dragging');
   if (d.moved < 8 && e.timeStamp - d.t < 450) { tap(e.clientX, e.clientY); return; }
+  // swiping along the shelves: on to the next bookcase (or back), once the view can slide no further
+  if (station === 'shelf' && !outBook && !searching && world && world.books.pages > 1) {
+    const dx = e.clientX - d.x0, dy = e.clientY - d.y0, lim = shelfPan();
+    const step = dx < 0 ? 1 : -1;
+    // a bay that fits the screen: any clear sideways swipe; a wider one: pushing on past its end
+    const go2 = lim ? Math.abs(d.over || 0) > 45 && Math.sign(d.over) === step : Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4;
+    const p = world.books.page + step;
+    if (go2 && p >= 0 && p < world.books.pages) { closeCard(); turnCase(p, -1, 0.75); return; }
+  }
   // a quick flick along the shelf keeps the view sliding for a moment
   if (station === 'shelf' && !outBook && !searching && !calm.matches && d.trail.length > 1) {
     const lim = shelfPan(), now = e.timeStamp, recent = d.trail.filter(([t]) => now - t < 110);
@@ -2406,9 +2608,17 @@ function tap(px, py) {
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(scene.children, true);
-  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.fav ? 'display' : u.author ? 'authors' : u.station || null);
+  const kindOf = (u) => (u.book ? 'shelf' : u.tome ? 'tome' : u.deskBook ? 'desk' : u.trophy ? 'hearth' : u.fav ? 'display' : u.author ? 'authors' : u.cart ? 'cart' : u.station || null);
   const first = hits.find((h) => kindOf(h.object.userData));
+  if (first && first.object.userData.cart) { if (pulled) putBack(); return cartCard(); }
   if (first) {
+    // a book on one of the room's other bookcases: glide to its bay and slide it out
+    if (first.object.userData.farBooks && first.instanceId != null) {
+      const it = world.books.far[first.instanceId];
+      if (it) { closeCard(); return turnCase(it.page, allBooks().findIndex((e) => e.b.id === it.b.id)); }
+    }
+    // the first bookcase, while the view was last on another one
+    if (kindOf(first.object.userData) === 'shelf' && station !== 'shelf' && world.books.page !== 0 && !first.object.userData.book) { world.books.showPage(0); shelfTools(); }
     const st = kindOf(first.object.userData);
     // the invisible tap areas are generous; prefer the exact thing under your finger
     const exact = hits.find((h) => { const u = h.object.userData; return (u.book || u.tome || u.deskBook) && kindOf(u) === st && h.distance < first.distance + 0.8; });
@@ -2461,13 +2671,41 @@ function selectBook(i, { focus = true } = {}) {
 }
 // the books slide back into the case, the next bookcase's books slide out
 let turning = null;
-function turnCase(page, then) {
-  if (turning) { turning.page = page; turning.then = then; return; }
+// Browsing a bay that something stands in front of (the spiral stair, the ladder, the display case,
+// the cart, the hall's reading table): it steps out of the way while you look, like a cutaway, and is
+// back as soon as you look elsewhere.
+let asideNow = [];
+function clearView(force) {
+  for (const o of asideNow) o.visible = true;
+  asideNow = [];
+  if (!world || (!force && station !== 'shelf') || world.books.page === 0) return;
+  const s2 = world.books.slot(world.books.page), f = bayFraming(s2);
+  if (!s2) return;
+  const out = s2.axis === 'x' ? new THREE.Vector3(0, 0, s2.dir) : new THREE.Vector3(s2.dir, 0, 0);
+  const pt = (a, y, n) => (s2.axis === 'x' ? new THREE.Vector3(a, y, n) : new THREE.Vector3(n, y, a));
+  const n0 = s2.front + s2.dir * 0.1, n1 = (s2.axis === 'x' ? f.pos.z : f.pos.x);
+  const box3 = new THREE.Box3().setFromPoints([pt(s2.a0 - 0.15, s2.y0, n0), pt(s2.a1 + 0.15, s2.y1, n0), pt(s2.a0 - 0.15, s2.y0, n1), pt(s2.a1 + 0.15, s2.y1, n1)]);
+  const pieces = [...(world.shell.cutaways || []), world.display && world.display.group, world.cart && world.cart.group].filter(Boolean);
+  for (const o of pieces) if (o.visible && new THREE.Box3().setFromObject(o).intersectsBox(box3)) { o.visible = false; asideNow.push(o); }
+  if (asideNow.length) renderer.shadowMap.needsUpdate = true;
+}
+function turnCase(page, then, dur = 0.9) {
   cam.vx = 0;
-  if (pulled) { pulled.userData.anim = -1; pulled = null; }
-  world.books.meshes.forEach((m, k) => { m.userData.leave = -k * 0.004; });
-  turning = { page, then, t: 0 };
-  kick(1500);
+  if (pulled) { pulled.userData.anim = -1; pulled.position.copy(pulled.userData.home); pulled.rotation.copy(pulled.userData.homeRot); if (pulled.userData.glow) pulled.userData.glow.material.opacity = 0; pulled = null; }
+  world.books.showPage(page);
+  renderer.shadowMap.needsUpdate = true;
+  const list = allBooks();
+  browseIdx = then >= 0 ? Math.min(list.length - 1, then) : Math.max(0, list.findIndex((e) => e.page === page));
+  shelfTools();
+  if (station !== 'shelf') { go('shelf'); clearView(); }
+  else {
+    const to = framing('shelf');
+    cam.yaw = 0; cam.pitch = 0;
+    tween = { t: 0, dur: calm.matches ? 0.3 : dur, flat: true, from: { pos: cam.pos.clone(), dir: lookDir(), dist: cam.dist }, to };
+    clearView();
+  }
+  if (then >= 0) setTimeout(() => { if (world.books.page === page) selectBook(browseIdx, { focus: false }); }, (calm.matches ? 0.3 : dur) * 1000);
+  kick(1600);
 }
 function finishTurn() {
   const { page, then } = turning; turning = null;
@@ -2518,26 +2756,65 @@ const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden
 // ---- the small bar at the bookcase: find a book, and turn to another bookcase
 const tools = document.createElement('div');
 tools.className = 'shelf-tools'; tools.hidden = true;
-tools.innerHTML = `<button type="button" class="st-find" aria-label="Find a book">${SEARCH_ICON}</button>
-  <span class="st-case"><button type="button" data-case="-1" aria-label="Previous bookcase">‹</button><span class="st-n"></span><button type="button" data-case="1" aria-label="Next bookcase">›</button></span>`;
+tools.innerHTML = `<div class="st-tabs" role="tablist" aria-label="Sections"></div>
+  <div class="st-bar"><button type="button" class="st-find" aria-label="Find a book">${SEARCH_ICON}</button>
+  <span class="st-case"><button type="button" data-case="-1" aria-label="Previous bookcase">‹</button>
+  <span class="st-mid"><span class="st-n"></span><span class="st-strip" aria-hidden="true"></span></span>
+  <button type="button" data-case="1" aria-label="Next bookcase">›</button></span></div>`;
 $('card').parentElement.appendChild(tools);
+let stripSig = '';
 function shelfTools() {
-  const show = active && station === 'shelf' && !!world && world.books.meshes.length > 0 && !outBook && !searching;
+  const show = active && station === 'shelf' && !!world && (world.books.meshes.length > 0 || world.books.pages > 1) && !outBook && !searching;
   tools.hidden = !show;
   if (!show) return;
-  const P = world.books.pages, cs = tools.querySelector('.st-case');
+  const P = world.books.pages, cs = tools.querySelector('.st-case'), page = world.books.page;
   cs.hidden = P < 2;
-  if (P > 1) {
-    tools.querySelector('.st-n').textContent = `Bookcase ${world.books.page + 1} of ${P}`;
-    tools.querySelector('[data-case="-1"]').disabled = world.books.page === 0;
-    tools.querySelector('[data-case="1"]').disabled = world.books.page === P - 1;
+  const SH = window.TomesteadShelving;
+  const all = allBooks(), here = all.filter((e) => e.page === page);
+  // the sections, as tabs (only when there's more than one)
+  const secs = [...new Set(all.map((e) => e.sec))];
+  const tabs = tools.querySelector('.st-tabs'), cur = here.length ? here[0].sec : null;
+  const sig = JSON.stringify([P, secs, all.length, world.shell && world.shell.tier]);
+  if (sig !== stripSig) {
+    stripSig = sig;
+    tabs.innerHTML = secs.length > 1 ? secs.map((k) => `<button type="button" role="tab" data-sec="${esc(k)}">${esc(k === 'F' ? 'Fiction' : k)}</button>`).join('') : '';
+    tools.querySelector('.st-strip').innerHTML = Array.from({ length: P }, (_, p) => `<i data-p="${p}" style="--f:${Math.round(world.books.fillOf(p) * 100)}%"></i>`).join('');
   }
+  tabs.hidden = secs.length < 2;
+  tabs.querySelectorAll('[data-sec]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.sec === cur)));
+  const on = tabs.querySelector('[aria-selected="true"]'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+  tools.querySelectorAll('.st-strip i').forEach((el) => el.classList.toggle('on', Number(el.dataset.p) === page));
+  if (P > 1) {
+    const what = here.length ? (SH ? SH.range(here[0].b, here[here.length - 1].b).replace(/\s+/g, ' ') : '') : 'Empty shelves, waiting for books';
+    tools.querySelector('.st-n').textContent = `${page === 0 ? 'Your first bookcase' : `Bookcase ${page + 1} of ${P}`}${what ? ' · ' + what : ''}`;
+    tools.querySelector('[data-case="-1"]').disabled = page === 0;
+    tools.querySelector('[data-case="1"]').disabled = page === P - 1;
+  }
+}
+// the strip: tap or drag along it to fly to a bookcase
+{
+  const strip = tools.querySelector('.st-strip');
+  let scrub = false, lastP = -1, lastT = 0;
+  const at = (x) => { const r = strip.getBoundingClientRect(); return Math.max(0, Math.min(world.books.pages - 1, Math.floor((x - r.left) / r.width * world.books.pages))); };
+  const to = (x, force) => {
+    if (!world || outBook) return;
+    const p = at(x), now = performance.now();
+    if (p === world.books.page || (!force && (p === lastP || now - lastT < 260))) return;
+    lastP = p; lastT = now; closeCard(); turnCase(p, -1, 0.55);
+  };
+  strip.addEventListener('pointerdown', (e) => { scrub = true; strip.setPointerCapture(e.pointerId); to(e.clientX, true); e.stopPropagation(); });
+  strip.addEventListener('pointermove', (e) => { if (scrub) to(e.clientX); });
+  strip.addEventListener('pointerup', (e) => { if (scrub) { scrub = false; to(e.clientX, true); } });
+  strip.addEventListener('pointercancel', () => { scrub = false; });
 }
 tools.addEventListener('click', (e) => {
   if (outBook) return;
   if (e.target.closest('.st-find')) { openSearch(); return; }
+  // a section's tab: glide to where it starts
+  const t = e.target.closest('[data-sec]');
+  if (t && world) { const i = allBooks().findIndex((x) => x.sec === t.dataset.sec); if (i >= 0) { closeCard(); turnCase(allBooks()[i].page, i); } return; }
   const c = e.target.closest('[data-case]');
-  if (c && world && !turning) {
+  if (c && world) {
     const p = world.books.page + Number(c.dataset.case);
     if (p >= 0 && p < world.books.pages) { closeCard(); turnCase(p, -1); }
   }
@@ -2582,7 +2859,7 @@ function listMatches() {
   const hits = matches(searchQ);
   $('find-list').innerHTML = !searchQ.trim() ? '<li class="sf-empty">Type to find any book on your shelves.</li>'
     : hits.length ? hits.map((h) => `<li><button type="button" data-hit="${h.i}" data-id="${esc(h.b.id)}" role="option">
-        <span class="sf-t">${esc(h.b.title)}</span><span class="sf-s">${esc([h.b.author, h.i < 0 ? 'Set aside · opens the book' : STATUS[stOf(h.b)] + (world.books.pages > 1 ? ` · bookcase ${allBooks()[h.i].page + 1}` : '')].filter(Boolean).join(' · '))}</span></button></li>`).join('')
+        <span class="sf-t">${esc(h.b.title)}</span><span class="sf-s">${esc([h.b.author, h.i < 0 ? ({ reading: 'Reading now · on the desk', want: 'To read · on the cart' }[stOf(h.b)] || 'Set aside') + ' · opens the book' : (world.books.pages > 1 ? `Bookcase ${allBooks()[h.i].page + 1}` : 'On the shelf')].filter(Boolean).join(' · '))}</span></button></li>`).join('')
     : '<li class="sf-empty">No book on your shelves matches that.</li>';
 }
 function closeSearch(goTo) {
@@ -2657,9 +2934,11 @@ function pullPose(m, k) {
   m.position.copy(home); m.position.z += k * 0.075; m.position.y += k * 0.012;
   m.rotation.set(homeRot.x + k * 0.12, homeRot.y + k * 0.04, homeRot.z * (1 - k));
 }
+// slid out toward you, tipped back a little (whichever wall its bookcase stands against)
+const _tip = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.12, 0.04, 0));
 function pulledPose(m) {
-  const { home, homeRot } = m.userData;
-  return { pos: home.clone().add(new THREE.Vector3(0, 0.012, 0.075)), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(homeRot.x + 0.12, homeRot.y + 0.04, 0)) };
+  const { home, homeRot } = m.userData, out = m.userData.out || new THREE.Vector3(0, 0, 1);
+  return { pos: home.clone().add(new THREE.Vector3(0, 0.012, 0)).addScaledVector(out, 0.075), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(homeRot.x, homeRot.y, 0)).multiply(_tip) };
 }
 function animateBooks(dt) {
   let moving = false;
@@ -2671,7 +2950,7 @@ function animateBooks(dt) {
       m.userData[key] += dt * (out ? 5 : 3.2);
       const k = ease(THREE.MathUtils.clamp(m.userData[key], 0, 1));
       m.position.copy(m.userData.home); m.rotation.copy(m.userData.homeRot);
-      m.position.z -= (out ? k : 1 - k) * 0.32;
+      m.position.addScaledVector(m.userData.out || new THREE.Vector3(0, 0, 1), -(out ? k : 1 - k) * 0.32);
       if (!out && m.userData.enter >= 1) { delete m.userData.enter; if (m !== pulled) m.position.copy(m.userData.home); }
       else if (!out || m.userData.leave < 1) moving = true;
       continue;
@@ -3397,7 +3676,7 @@ function buildDisplayNow() {
   if (world.display) { world.display.dispose(); world.display = null; }
   delete STATIONS.display;
   if (!shown('display')) return;
-  world.display = buildDisplay(world.K, world.shell.tier, favourites());
+  world.display = buildDisplay(world.K, world.shell.tier === 'den' ? 'library' : world.shell.tier, favourites());
   world.display.setLight(mode === 'night');
   STATIONS.display = world.display.station;
 }
@@ -3443,9 +3722,11 @@ function rebuildShell(tier) {
   for (const m of old.plinth) { const i = PLINTH.indexOf(m); if (i >= 0) PLINTH.splice(i, 1); }
   old.dispose();
   const sh = buildShell(world.K, tier);
+  BAYS = sh.slots || [];
   sh.cut.forEach((m) => { CUT.push(m); m.visible = !isOut; }); sh.plinth.forEach((m) => { PLINTH.push(m); m.visible = isOut; }); setSkies(!isOut);
   world.shell = sh;
   applyTierStations(sh);
+  world.books.refill(); frameShelf(); world.cart.place();
   buildYardNow();
   buildPortraitsNow();
   buildDisplayNow();
@@ -3490,7 +3771,7 @@ function playArrival() {
       finish();
       const want = tierNow();
       fadeThrough(() => { if (want !== world.shell.tier) rebuildShell(want); const f = framing('house'); cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist; setFov(fovFor('house')); tween = null; }, 650)
-        .then(() => { kick(4000); card(`<div class="note">${esc((Grow.TIERS.find((t) => t.key === target) || {}).blurb || '')}</div>`); });
+        .then(() => { kick(4000); card(`<div class="note">${esc((Grow.TIERS.find((t) => t.key === (step.tier || target)) || {}).blurb || '')}</div>`); });
     }, calm.matches ? 400 : 2400);
     return;
   }
@@ -3529,7 +3810,7 @@ function growIntro() {
   const n = Grow.readCount(lib.books), e = earnedNow(), got = Grow.LADDER.filter((x) => e[x.key]);
   const nx = HOST.nextUnlock ? HOST.nextUnlock() : null;
   openCard(`<div class="eyebrow">New</div><h2>Your room grows as you read</h2>
-    <div class="meta">Finishing books adds to the room: a vine, a cat by the fire, paintings, a case for your five favourites, and in time a bigger room. ${got.length ? `Your ${n} finished ${n === 1 ? 'book has' : 'books have'} already earned ${got.length === Grow.LADDER.length ? 'all of it' : got.length + ' of ' + Grow.LADDER.length + ' things'}.` : ''} ${nx ? esc(nx.text) : ''}</div>
+    <div class="meta">Finishing books adds to the room: a vine, a cat by the fire, paintings, a case for your five favourites, and when your bookcase is full, a bigger room with more shelves. ${got.length ? `Your ${n} finished ${n === 1 ? 'book has' : 'books have'} already earned ${got.length === Grow.LADDER.length ? 'all of it' : got.length + ' of ' + Grow.LADDER.length + ' things'}.` : ''} ${nx ? esc(nx.text) : ''}</div>
     <div class="acts"><button type="button" data-act="arrived">Lovely</button><button type="button" class="quiet" data-act="room-size">Room size</button></div>`, 'arrival');
   return true;
 }
@@ -3884,15 +4165,16 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 // ---------------------------------------------------------------- start
 // frame the shelf on the rows that hold books, close enough to read the spines
 function frameShelf() {
-  const bys = world.books.meshes.map((m) => m.userData.home.y);
+  const ms = world.books.meshes0 || world.books.meshes;
+  const bys = ms.map((m) => m.userData.home.y);
   if (bys.length) { const cy = (Math.min(...bys) + Math.max(...bys)) / 2; STATIONS.shelf.t[1] = cy; STATIONS.shelf.p[1] = cy + 0.2; }
-  const ys = world.books.meshes.flatMap((m) => [m.userData.home.y - m.userData.it.h / 2, m.userData.home.y + m.userData.it.h / 2 + 0.03]);
+  const ys = ms.flatMap((m) => [m.userData.home.y - m.userData.it.h / 2, m.userData.home.y + m.userData.it.h / 2 + 0.03]);
   shelfY = ys.length ? [Math.min(...ys), Math.max(...ys)] : null;
-  const bxs = world.books.meshes.flatMap((m) => [m.userData.home.x - m.userData.it.t / 2, m.userData.home.x + m.userData.it.t / 2]);
+  const bxs = ms.flatMap((m) => [m.userData.home.x - m.userData.it.t / 2, m.userData.home.x + m.userData.it.t / 2]);
   shelfSpan = bxs.length ? [Math.min(...bxs) - 0.07, Math.max(...bxs) + 0.07] : null;   // a little room for the bookends
 }
 // what the room shows from the library; when this changes, the books are shelved again
-const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt, b.upNext]),
+const libSig = () => JSON.stringify([lib.books.map((b) => [b.id, b.title, b.author, b.status, b.rating, b.pages, b.hours, b.format, b.color, b.addedAt, b.upNext, b.ddc, b.shelf, b.genre, b.series, b.seriesNo]),
   lib.theme.bookend, lib.theme.bookends, lib.theme.trinkets]);
 const cupSig = () => JSON.stringify(lib.trophies || {});
 const deskSig = () => JSON.stringify(lib.theme.tableItems || null);
@@ -3907,6 +4189,7 @@ function refresh() {
     const was = pulled && pulled.userData.book.id;
     pulled = null;
     world.books.refill();
+    world.cart.refill();
     frameShelf();
     reacquireOutBook();
     browseIdx = Math.min(browseIdx, Math.max(0, allBooks().length - 1));
@@ -3991,6 +4274,7 @@ function setActive(on) {
   familyButton();
   frameShelf();
   const start = params.get('st') && (STATIONS[params.get('st')] || famStation(params.get('st')) || params.get('st') === 'display') ? params.get('st') : null;
+  if (!HOST && params.get('case')) { world.books.showPage(Number(params.get('case'))); setTimeout(() => clearView(true), 300); }     // (the test page can open on any bookcase)
   const f = framing(start && STATIONS[start] && !famStation(start) ? start : 'room');
   cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist;
   if (!start) { cam.pos.z = Math.min(2.6, cam.pos.z + 0.9); cam.pos.y += 0.3; cam.pitch = -0.12; }

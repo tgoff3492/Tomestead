@@ -112,7 +112,7 @@
   }
 
   // ---------- finding a book while you type (or from its barcode) ----------
-  const FIND_FIELDS = 'key,title,author_name,cover_i,first_publish_year,number_of_pages_median,subject,edition_count';
+  const FIND_FIELDS = 'key,title,author_name,cover_i,first_publish_year,number_of_pages_median,subject,edition_count,ddc';
   const isbnOf = (s) => { const d = String(s || '').replace(/[\s-]/g, '').toUpperCase(); return /^(97[89]\d{10}|\d{9}[\dX])$/.test(d) ? d : ''; };
   // Returns [{ olKey, title, author, year, pages, cover, subjects }]
   // what you type is a title: search titles only, so "Laura" finds the book, not authors named Laura
@@ -183,8 +183,19 @@
   const fromDoc = (d) => ({
     olKey: d.key || null, title: d.title, author: (d.author_name || []).slice(0, 2).join(' & '),
     year: d.first_publish_year || null, pages: d.number_of_pages_median || null, cover: d.cover_i || null,
-    subjects: (d.subject || []).slice(0, 40),
+    subjects: (d.subject || []).slice(0, 40), ddc: deweyOf(d),
   });
+  // the Dewey number libraries shelve a book under (Open Library's catalogue records), or ''
+  const deweyOf = (d) => String(((d && d.ddc) || []).find((v) => /\d{3}|fic/i.test(v)) || '').slice(0, 16);
+  async function ddcFor(book) {
+    const ask = async (params) => (await getJSON(`${OL}/search.json?${new URLSearchParams(Object.assign({ limit: '5', fields: 'key,ddc' }, params))}`)).docs || [];
+    let docs = [];
+    if (/^\/works\/OL\d+W$/.test(String(book.olKey || ''))) docs = await ask({ q: `key:${book.olKey}` });
+    if (!docs.some(deweyOf) && book.isbn) docs = await ask({ q: `isbn:${book.isbn}` });
+    if (!docs.some(deweyOf) && book.title) { const p = { title: book.title }; if (book.author) p.author = String(book.author).split(/\s*&\s*/)[0]; docs = await ask(p); }
+    const hit = docs.find(deweyOf);
+    return hit ? deweyOf(hit) : '';
+  }
   async function olByISBN(isbn) {
     try {
       const q = new URLSearchParams({ q: `isbn:${isbn}`, limit: '1', fields: FIND_FIELDS });
@@ -386,5 +397,5 @@
     });
   }
 
-  window.TomesteadCovers = { okCover, gbAsk, coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, titleMatches, byISBN, isbnOf, genreFrom };
+  window.TomesteadCovers = { okCover, gbAsk, coverURL, lookup, moreCovers, coverSrc, probe, putUpload, getUpload, delUpload, uploadURL, allUploads, resizeImage, cleanDesc, search, titleMatches, byISBN, isbnOf, genreFrom, ddcFor };
 })();

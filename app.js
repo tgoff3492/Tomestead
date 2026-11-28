@@ -1254,9 +1254,10 @@
     // Room: how big the room is (only sizes your reading has earned), and what it has earned so far
     if (Grow) {
       const earned = prefs.earned || {}, n = Grow.readCount(books), pick = t.roomSize || 'auto';
-      const now = Grow.tierOf(earned, pick);
+      const now = Grow.tierOf(earned, pick, books);
       const SIZE_ART = {
         study: '<svg viewBox="0 0 64 44" width="64" height="44"><rect x="14" y="14" width="36" height="26" fill="#5a3a22"/><path d="M10 16 32 4l22 12" fill="none" stroke="#c9a15b" stroke-width="2"/><rect x="22" y="22" width="20" height="18" fill="#2c1a0f"/><g fill="#9b5b3a"><rect x="24" y="24" width="3" height="7"/><rect x="28" y="25" width="2" height="6"/><rect x="31" y="23" width="3" height="8"/><rect x="35" y="25" width="3" height="6"/></g></svg>',
+        den: '<svg viewBox="0 0 64 44" width="64" height="44"><rect x="6" y="16" width="52" height="26" fill="#5a3a22"/><path d="M4 18 32 6l28 12" fill="none" stroke="#c9a15b" stroke-width="2"/><rect x="10" y="22" width="12" height="18" fill="#2c1a0f"/><rect x="24" y="22" width="12" height="18" fill="#2c1a0f"/><rect x="42" y="24" width="12" height="16" fill="#2c1a0f"/><g fill="#9b5b3a"><rect x="12" y="25" width="2" height="5"/><rect x="15" y="26" width="2" height="4"/><rect x="26" y="25" width="3" height="5"/><rect x="44" y="27" width="2" height="5"/><rect x="47" y="28" width="2" height="4"/></g></svg>',
         library: '<svg viewBox="0 0 64 44" width="64" height="44"><rect x="8" y="6" width="48" height="36" fill="#5a3a22"/><rect x="8" y="20" width="48" height="2" fill="#c9a15b"/><g stroke="#1c1a19" stroke-width="1"><path d="M10 20v-4M14 20v-4M18 20v-4M22 20v-4M42 20v-4M46 20v-4M50 20v-4M54 20v-4"/></g><circle cx="32" cy="12" r="4" fill="#a9c6e8"/><rect x="11" y="24" width="14" height="16" fill="#2c1a0f"/><rect x="39" y="24" width="14" height="16" fill="#2c1a0f"/><rect x="28" y="26" width="8" height="14" fill="#3b2415"/></svg>',
         hall: '<svg viewBox="0 0 64 44" width="64" height="44"><path d="M8 42V18a24 16 0 0 1 48 0v24z" fill="#5a3a22"/><path d="M14 18a18 11 0 0 1 36 0" fill="none" stroke="#c9a15b" stroke-width="1.5"/><rect x="8" y="22" width="48" height="1.6" fill="#c9a15b"/><rect x="8" y="31" width="48" height="1.6" fill="#c9a15b"/><path d="M28 42V30a4 4 0 0 1 8 0v12z" fill="#a9c6e8"/><circle cx="22" cy="27" r="1.4" fill="#ffd98a"/><circle cx="42" cy="27" r="1.4" fill="#ffd98a"/></svg>',
       };
@@ -1264,17 +1265,18 @@
           <span class="tile-art size-art"><span style="align-self:center;color:#cdbf9f;font-size:.82rem;text-align:center">Grow with<br>my reading</span></span>
           <span class="tile-label">Automatic</span><span class="check" aria-hidden="true">✓</span></button>` +
         Grow.TIERS.map(tr => {
-          const open = tr.at === 0 || Grow.has(earned, tr.key);
+          // a room is yours once the one before it filled up; a smaller one only while it still holds your books
+          const earnedIt = !tr.grow || Grow.has(earned, tr.grow), fits = Grow.fits(books, tr.key), open = earnedIt && fits;
           return `<button type="button" class="tile${open ? '' : ' locked'}" role="radio" aria-checked="${pick === tr.key}" data-size="${tr.key}" ${open ? '' : 'aria-disabled="true"'}>
             <span class="tile-art size-art">${SIZE_ART[tr.key]}</span>
-            <span class="tile-label">${esc(tr.name)}${open ? '' : `<small>Finish ${tr.at} books</small>`}</span><span class="check" aria-hidden="true">✓</span></button>`;
+            <span class="tile-label">${esc(tr.name)}${open ? '' : `<small>${earnedIt ? 'Too small now' : 'Fill your shelves'}</small>`}</span><span class="check" aria-hidden="true">✓</span></button>`;
         }).join('');
       const tierNow = Grow.TIERS.find(x => x.key === now);
       const nx = Grow.next(books, earned);
       $('#czSizeHint').textContent = `${tierNow.blurb} You’ve finished ${n} ${n === 1 ? 'book' : 'books'}.${nx ? ' ' + nx.text : ''}`;
       $('#czEarned').innerHTML = Grow.LADDER.map(x => {
         const got = Grow.has(earned, x.key);
-        return `<li class="${got ? 'got' : 'not'}"><span class="mark" aria-hidden="true">${got ? '✦' : '·'}</span><span>${esc(x.name)}</span><small>${got ? 'Earned' : `${x.at} ${x.at === 1 ? 'book' : 'books'}`}</small></li>`;
+        return `<li class="${got ? 'got' : 'not'}"><span class="mark" aria-hidden="true">${got ? '✦' : '·'}</span><span>${esc(x.name)}</span><small>${got ? 'Earned' : x.where === 'grow' ? 'Full shelves' : `${x.at} ${x.at === 1 ? 'book' : 'books'}`}</small></li>`;
       }).join('');
       const famOn = Sync.isFamily && Sync.isFamily();
       $('#czFamShare').hidden = !famOn;
@@ -1455,6 +1457,36 @@
   // ---------- cover art & summaries ----------
   const Covers = window.TomesteadCovers;
   const inflight = new Map();
+  // "Shelved under": Automatic (with where that puts it), or any section, like a library's
+  function fillShelfSelect(b) {
+    const Sh = window.TomesteadShelving, sel = $('#fShelf');
+    if (!Sh || !sel) return;
+    if (sel.options.length < 2) Sh.SECTIONS.forEach(x => sel.add(new Option(x.key === 'F' ? 'Fiction' : `${x.key} · ${x.long}`, x.key)));
+    const auto = Sh.section(Object.assign({}, b || {}, { shelf: '' }));
+    sel.options[0].text = `Automatic (${auto === 'F' ? 'Fiction' : auto + ' · ' + Sh.byKey[auto].name})`;
+    sel.value = (b && Sh.byKey[b.shelf]) ? b.shelf : '';
+  }
+  // Each finished book's Dewey number, looked up once (gently, a book every couple of seconds), so it
+  // stands in the right section of your shelves. A book with none is tried again in a month.
+  let ddcRun = false;
+  async function backfillDewey() {
+    if (ddcRun || !Covers.ddcFor || !navigator.onLine) return;
+    ddcRun = true;
+    try {
+      const due = books.filter(b => statusOf(b) === 'read' && !b.ddc && !b.shelf && !(Number(b.ddcAt) > Date.now() - 30 * 864e5)).slice(0, 40);
+      let changed = 0;
+      for (const b of due) {
+        const d = await Covers.ddcFor(b).catch(() => null);
+        if (d === null) break;                        // (offline, or the catalog is busy: another time)
+        b.ddcAt = Date.now();
+        if (d) { b.ddc = d; changed++; }
+        if (changed && changed % 8 === 0) { save(); roomRefresh(); }
+        await new Promise(r => setTimeout(r, 1800));
+      }
+      save(); if (changed) roomRefresh();
+    } finally { ddcRun = false; }
+  }
+  setTimeout(backfillDewey, 15000);
   function lookup(b) {
     if (inflight.has(b.id)) return inflight.get(b.id);
     const p = (async () => {
@@ -1616,8 +1648,9 @@
       editFormat === 'audio' ? (hours > 0 ? `${hours} hours` : '') : (pages > 0 ? `${pages} pages` : ''),
       $('#fGenre').value.trim(),
       $('#fSeries').value.trim() ? `${$('#fSeries').value.trim()}${sn ? ` #${sn}` : ''}` : '',
+      $('#fShelf') && $('#fShelf').value ? `Shelved under ${$('#fShelf').value === 'F' ? 'Fiction' : $('#fShelf').value}` : '',
     ].filter(Boolean);
-    $('#fDetailsSum').textContent = bits.length ? bits.join(' · ') : 'Format, pages, genre, series, spine color';
+    $('#fDetailsSum').textContent = bits.length ? bits.join(' · ') : 'Format, pages, genre, series, shelf, spine color';
   }
 
   function renderRereads() {
@@ -1696,7 +1729,7 @@
   }
   function knownGenres() { return [...new Set(books.map(b => b.genre).filter(Boolean))]; }
   function applyPick(it) {
-    pick = { olKey: it.olKey || null, cover: it.cover || null, isbn: it.isbn || '' };
+    pick = { olKey: it.olKey || null, cover: it.cover || null, isbn: it.isbn || '', ddc: it.ddc || '' };
     $('#fTitle').value = it.title;
     if (it.author) $('#fAuthor').value = it.author;
     if (it.pages && !$('#fPages').value) $('#fPages').value = it.pages;
@@ -1758,6 +1791,7 @@
     $('#fNarrator').value = b?.narrator || '';
     $('#fWhy').value = b?.stopWhy || '';
     $('#fGenre').value = b?.genre || prefill?.genre || '';
+    fillShelfSelect(b);
     $('#fSeries').value = b?.series || '';
     $('#fSeriesNo').value = b && b.seriesNo != null ? b.seriesNo : '';
     $('#fReview').value = b?.review || '';
@@ -1822,6 +1856,7 @@
       stopped: st === 'dnf' ? ($('#fStopped').value || '') : '',
       pages: pages > 0 ? pages : null,
       genre: $('#fGenre').value.trim(),
+      shelf: $('#fShelf').value || '',
       review: $('#fReview').value.trim(),
       color: colorVal && colorVal !== 'auto' ? Number(colorVal) : null,
       format: editFormat,
@@ -1850,12 +1885,14 @@
         b.art = keep || (pick && pick.cover ? { status: 'found', ids: [pick.cover], i: 0, olKey: pick.olKey } : null);
         b.about = null; b.lookedUp = 0;
         b.olKey = pick ? pick.olKey : null;
+        b.ddc = pick && pick.ddc ? pick.ddc : '';
       }
       toast(finishing ? `“${title}” is back on the shelf.` : 'Changes saved.');
     } else {
       const b = target = Object.assign({ id: uid(), addedAt: Date.now() }, data);
       if (pick) {
         b.olKey = pick.olKey;
+        if (pick.ddc) b.ddc = pick.ddc;
         if (pick.cover) b.art = { status: 'found', ids: [pick.cover], i: 0, olKey: pick.olKey };
       }
       books.push(b);
@@ -1866,6 +1903,7 @@
       toast({ read: `“${title}” is on the shelf.`, reading: `Enjoy “${title}”! It’s up top under Reading now.`, want: `“${title}” is on your to-read pile.`, dnf: `“${title}” is set aside.` }[st]);
     }
     if (!target.lookedUp) lookup(target).then(() => { if (reader && reader.currentId() === target.id) reader.refresh(); });
+    if (statusOf(target) === 'read' && !target.ddc) setTimeout(backfillDewey, 2500);
     const wasEditing = editingId;
     editingId = null;
     finishing = false;
@@ -2591,6 +2629,10 @@
     if (num(b.hours, 300) > 0) out.hours = num(b.hours, 300);
     if (b.series) out.series = String(b.series).slice(0, 120);
     if (b.series && num(b.seriesNo, 999) != null && b.seriesNo !== '') out.seriesNo = num(b.seriesNo, 999);
+    // where it stands on the shelves: its Dewey number (from Open Library), and a section you chose
+    if (b.ddc) out.ddc = String(b.ddc).slice(0, 16);
+    if (Number(b.ddcAt) > 0) out.ddcAt = Number(b.ddcAt);
+    if (window.TomesteadShelving && window.TomesteadShelving.byKey[b.shelf]) out.shelf = String(b.shelf);
     const tags = cleanTags(b.tags);
     if (tags.length) out.tags = tags;
     if (Array.isArray(b.quotes)) {
@@ -2836,6 +2878,9 @@
     $('#fStatus').addEventListener('click', e => { const b = e.target.closest('[data-status]'); if (b) setStatus(b.dataset.status); });
     $('#fFormat').addEventListener('click', e => { const b = e.target.closest('[data-format]'); if (b) setFormat(b.dataset.format); });
     ['#fPages', '#fHours', '#fGenre', '#fSeries', '#fSeriesNo'].forEach(id => $(id).addEventListener('input', updateDetailsSum));
+    $('#fShelf').addEventListener('change', updateDetailsSum);
+    // (the genre decides where Automatic shelves it, until you pick a section)
+    $('#fGenre').addEventListener('change', () => { const Sh = window.TomesteadShelving, sel = $('#fShelf'); if (!Sh || !sel.options.length) return; const auto = Sh.section({ genre: $('#fGenre').value, ddc: (books.find(x => x.id === editingId) || {}).ddc }); sel.options[0].text = `Automatic (${auto === 'F' ? 'Fiction' : auto + ' · ' + Sh.byKey[auto].name})`; });
     $('#fTitle').addEventListener('input', onTitleInput);
     $('#fTitle').addEventListener('keydown', e => {
       if ($('#fSuggest').hidden || !findItems.length) return;
@@ -3078,7 +3123,7 @@
       else if (t.dataset.light) setTheme({ light: t.dataset.light });
       else if (t.dataset.nightwall) setTheme({ nightWall: t.dataset.nightwall });
       else if (t.dataset.size) {
-        if (t.classList.contains('locked')) { const tr = Grow.TIERS.find(x => x.key === t.dataset.size); toast(`${tr.name} opens up when you’ve finished ${tr.at} books.`); return; }
+        if (t.classList.contains('locked')) { const tr = Grow.TIERS.find(x => x.key === t.dataset.size); toast(tr.grow && !Grow.has(prefs.earned || {}, tr.grow) ? `${tr.name} opens up when the shelves before it are full.` : `${tr.name} is too small for your books now.`); return; }
         setTheme({ roomSize: t.dataset.size });
       }
       else if (t.dataset.vine) setTheme({ vine: t.dataset.vine });
@@ -3458,7 +3503,7 @@
   // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
   // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
   // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
-  const ROOM_SRC = './room/room.js?v=20261127223904';
+  const ROOM_SRC = './room/room.js?v=20261128075108';
   function loadRoom(attempt) {
     // a failed import can be remembered for its exact address, so each retry asks with a fresh one
     import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {

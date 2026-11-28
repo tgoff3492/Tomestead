@@ -1,21 +1,25 @@
-/* Tomestead · the room's architecture, which grows as you read (growth.js decides how far).
-   The study is today's room: 6 × 5.4 m, 3 m to the beams. The furniture lives against its walls and
-   never moves; as the room grows it rises and reaches forward around it:
-     study    6 × 5.4 m, 3 m high, beamed ceiling
-     library  6 × 9 m, two storeys (6.4 m): a gallery with an iron railing around the room at 3 m, lined
-              with bookcases, a round window high on the back wall, arched windows on the left, a spiral
-              stair, lower bookcases and tall doors in the new front half, a coffered ceiling
-     hall     6 × 13 m: two galleries (3 m and 5.5 m) under a barrel vault with ribs (10 m at the crown),
-              a rose window in the back gable, an arched window over the doors, three chandeliers down
-              the nave and a long reading table
-   Everything here is one group, rebuilt when the room grows. Pieces that lift away in the dollhouse
-   view (the ceiling, the right and front walls and what stands against them) are listed in `cut`. */
+/* Tomestead · the room's architecture, which grows when your shelves are full (growth.js, shelving.js).
+   The cottage ('study') is the first room: 6 × 5.4 m, 3 m to the beams, one bookcase. The furniture
+   lives against its walls and never moves; as the room grows it reaches forward and rises around it:
+     study    the cottage: 6 × 5.4 m, 3 m high, beamed ceiling
+     den      the study: 6 × 9 m, 3.3 m under the beams, two more bookcases along the left wall, tall doors
+     library  6 × 9 m, two storeys (6.4 m): the study's ground floor, and a gallery with an iron railing
+              at 3 m with bookcases along its back wall, a round window high on the back wall, arched
+              windows on the left, a spiral stair, a coffered ceiling
+     hall     6 × 13 m: a long run of bookcases down the left wall, two galleries (3 m and 5.5 m) shelved
+              across the back under a barrel vault with ribs, a rose window in the back gable, three
+              chandeliers down the nave and a long reading table
+   Every bookcase starts empty: its bays come back as `slots` (in shelving order), and the room shelves
+   your finished books on them (main.js). Everything here is one group, rebuilt when the room grows.
+   Pieces that lift away in the dollhouse view (the ceiling, the right and front walls and what stands
+   against them) are listed in `cut`; the stair, ladder and hall table are `cutaways` (they step aside
+   while you browse the shelves behind them). */
 export function buildShell(K, tier) {
   const { THREE, M, mats, MOD, rng } = K;
   const G = new THREE.Group(); G.userData.shell = true; K.scene.add(G);
   const cut = [], plinth = [], lights = [], glows = [];
   const X = 3.0, ZB = -2.7;
-  const DIM = { study: { zF: 2.7, H: 3.0 }, library: { zF: 6.3, H: 6.4 }, hall: { zF: 10.3, H: 7.0, vault: 3.0 } }[tier] || { zF: 2.7, H: 3.0 };
+  const DIM = { study: { zF: 2.7, H: 3.0 }, den: { zF: 6.3, H: 3.3 }, library: { zF: 6.3, H: 6.4 }, hall: { zF: 10.3, H: 7.0, vault: 3.0 } }[tier] || { zF: 2.7, H: 3.0 };
   const { zF, H } = DIM;
   const top = H + (DIM.vault || 0);
   const big = tier !== 'study';
@@ -114,7 +118,7 @@ export function buildShell(K, tier) {
   }
 
   // ---------------------------------------------------------------- ceiling
-  if (!big) {
+  if (!big || tier === 'den') {
     box(6.2, 0.1, len + 0.2, M.beam, 0, H + 0.05, midZ, true);
     for (const x of [-2.25, -0.75, 0.75, 2.25]) box(0.18, 0.22, len, M.beam, x, H - 0.11, midZ, true);
   } else if (tier === 'library') {
@@ -144,12 +148,19 @@ export function buildShell(K, tier) {
   // thousands of spines, one draw call: an instanced box per book, a shared gold-banded cloth
   // texture tinted by each book's colour. (Shelves on the right and front walls lift away in the
   // dollhouse, so they're in their own batch.)
-  const shelfBooks = { keep: [], cut: [] };
-  const R1 = rng(tier === 'hall' ? 777 : 555);
-  // a bookcase along a wall. axis 'x' (back/front walls) or 'z' (left/right walls); a0…a1 along the
-  // wall; wall: the wall's coordinate; dir: +1/−1 into the room; y0…y1 its height
+  // every bay of shelves, empty, handed back so the room can shelve your books on them (main.js)
+  const slots = [];
+  const cutaways = [];
+  const aside = (from) => {
+    const sub = new THREE.Group(); sub.userData.cutaway = true;
+    for (const o of G.children.slice(from)) sub.add(o);
+    G.add(sub); cutaways.push(sub);
+  };
+  const SHELF = 0.44;
+  let runNo = 0;
   function caseRun({ axis, a0, a1, wall, dir, y0, y1, depth = 0.34, isCut = false, rowH = 0.37 }) {
     const along = a1 - a0, mid = (a0 + a1) / 2, front = wall + dir * depth, cz = wall + dir * depth / 2;
+    const run = runNo++, LR = (axis === 'x') === (dir > 0) ? 1 : -1;    // left to right, as you face it
     const put = (wA, h, wD, a, y, d) => axis === 'x' ? box(wA, h, wD, M.caseSide, a, y, d, isCut) : box(wD, h, wA, M.caseSide, d, y, a, isCut);
     const putM = (mat, wA, h, wD, a, y, d) => axis === 'x' ? box(wA, h, wD, mat, a, y, d, isCut) : box(wD, h, wA, mat, d, y, a, isCut);
     // the back, plinth and cornice
@@ -165,23 +176,13 @@ export function buildShell(K, tier) {
     // planks
     const rows = Math.max(1, Math.floor((y1 - y0 - 0.18) / rowH));
     const rh = (y1 - y0 - 0.18) / rows;
-    for (let r = 0; r <= rows; r++) {
-      const y = y0 + 0.1 + r * rh;
-      putM(M.caseShelf, along, 0.025, depth - 0.02, mid, y, cz);
-      if (r === rows) break;
-      // a row of books per bay, with the odd gap
-      for (let i = 0; i < bays; i++) {
-        let a = a0 + i * bw + 0.03;
-        const end = a0 + (i + 1) * bw - 0.03;
-        while (a < end - 0.02) {
-          const t = 0.018 + R1() * 0.03, h = Math.min(rh - 0.04, 0.19 + R1() * 0.12);
-          if (a + t > end) break;
-          if (R1() < 0.04) { a += 0.05 + R1() * 0.1; continue; }
-          const d = 0.15 + R1() * 0.06;
-          (isCut ? shelfBooks.cut : shelfBooks.keep).push({ axis, a: a + t / 2, y: y + 0.0125 + h / 2, d: front - dir * (d / 2 + 0.02), t, h, dd: d, c: R1() });
-          a += t + 0.002;
-        }
-      }
+    for (let r = 0; r <= rows; r++) putM(M.caseShelf, along, 0.025, depth - 0.02, mid, y0 + 0.1 + r * rh, cz);
+    // the bays, each a stack of shelves (plank tops, top shelf first), in order left to right
+    for (let k = 0; k < bays; k++) {
+      const i = LR > 0 ? k : bays - 1 - k;
+      const ys = []; for (let r = rows - 1; r >= 0; r--) ys.push(y0 + 0.1 + r * rh + 0.0125);
+      slots.push({ run, bay: k, axis, dir, LR, wall, front, depth, a0: a0 + i * bw + 0.03, a1: a0 + (i + 1) * bw - 0.03, ys, clear: rh - 0.025, y0, y1, isCut,
+        order: [y0 > 1 ? Math.round(y0 * 10) : 0, run, k] });
     }
   }
 
@@ -218,30 +219,25 @@ export function buildShell(K, tier) {
     // (on the lower gallery the railing stops where the spiral stair comes up, in the front-left corner)
     if (yT < 3.5) edge(xl, zb, xl, zF - 1.75, false); else edge(xl, zb, xl, zf, false);
     edge(xl, zb, xr, zb, false); edge(xr, zb, xr, zf, true); edge(xl, zf, xr, zf, true);
-    // bookcases along the walls up here
-    const leftRuns = [];
-    let z0 = ZB + 0.36;
-    for (const w of UPWIN.filter((u) => u.y0 < y1Cases)) { leftRuns.push([z0, w.z - w.w / 2 - 0.22]); z0 = w.z + w.w / 2 + 0.22; }
-    leftRuns.push([z0, zF - 0.36]);
-    for (const [a0, a1] of leftRuns) if (a1 - a0 > 0.5) caseRun({ axis: 'z', a0, a1, wall: -X, dir: 1, y0: yT, y1: y1Cases });
-    caseRun({ axis: 'z', a0: ZB + 0.36, a1: zF - 0.36, wall: X, dir: -1, y0: yT, y1: y1Cases, isCut: true });
+    // bookcases up here along the back wall (the side walls keep their windows and paintings)
     if (ROSE && ROSE.y - ROSE.r - 0.2 < y1Cases) {
-      caseRun({ axis: 'x', a0: -X, a1: ROSE.x - ROSE.r - 0.3, wall: ZB, dir: 1, y0: yT, y1: y1Cases });
-      caseRun({ axis: 'x', a0: ROSE.x + ROSE.r + 0.3, a1: X, wall: ZB, dir: 1, y0: yT, y1: y1Cases });
-    } else caseRun({ axis: 'x', a0: -X, a1: X, wall: ZB, dir: 1, y0: yT, y1: y1Cases });
-    caseRun({ axis: 'x', a0: -X, a1: X, wall: zF, dir: -1, y0: yT, y1: y1Cases, isCut: true });
+      caseRun({ axis: 'x', a0: -X, a1: ROSE.x - ROSE.r - 0.3, wall: ZB, dir: 1, y0: yT, y1: y1Cases, rowH: SHELF });
+      caseRun({ axis: 'x', a0: ROSE.x + ROSE.r + 0.3, a1: X, wall: ZB, dir: 1, y0: yT, y1: y1Cases, rowH: SHELF });
+    } else caseRun({ axis: 'x', a0: -X, a1: X, wall: ZB, dir: 1, y0: yT, y1: y1Cases, rowH: SHELF });
   }
   if (tier === 'library') gallery(3.12, H - 0.15);
   if (tier === 'hall') { gallery(3.12, 5.45); gallery(5.62, H - 0.05); }
 
   // ---------------------------------------------------------------- the new front of the room
   if (big) {
-    // lower bookcases along both side walls, past the fireplace
-    caseRun({ axis: 'z', a0: 2.95, a1: zF - 0.1, wall: -X, dir: 1, y0: 0, y1: 2.9 });
-    caseRun({ axis: 'z', a0: 2.95, a1: zF - 0.1, wall: X, dir: -1, y0: 0, y1: 2.9, isCut: true });
-    // the doors, with bookcases either side
-    caseRun({ axis: 'x', a0: -X + 0.36, a1: -1.0, wall: zF, dir: -1, y0: 0, y1: 2.9, isCut: true });
-    caseRun({ axis: 'x', a0: 1.0, a1: X - 0.36, wall: zF, dir: -1, y0: 0, y1: 2.9, isCut: true });
+    // the Great Hall: a long run of bookcases down the left wall, past the fireplace. The Study and
+    // the Library: two bookcases like the first, side by side along the left wall
+    if (tier === 'hall') caseRun({ axis: 'z', a0: 2.95, a1: zF - 0.1, wall: -X, dir: 1, y0: 0, y1: 2.9, rowH: SHELF });
+    else {
+      caseRun({ axis: 'z', a0: 4.75, a1: 6.2, wall: -X, dir: 1, y0: 0, y1: 2.05, rowH: 0.6 });
+      caseRun({ axis: 'z', a0: 3.05, a1: 4.55, wall: -X, dir: 1, y0: 0, y1: 2.05, rowH: 0.6 });
+    }
+    // the doors
     const DW = 1.6, DH = tier === 'hall' ? 2.75 : 2.55;
     const door = arch(new THREE.Shape(), 0, 0, DW + 0.22, DH + 0.11); door.holes = [arch(new THREE.Path(), 0, 0, DW, DH)];
     mesh(new THREE.ExtrudeGeometry(door, { depth: 0.08, bevelEnabled: false, curveSegments: 24 }).rotateY(Math.PI).translate(0, 0, zF - 0.01), M.trim, true);
@@ -255,7 +251,8 @@ export function buildShell(K, tier) {
     box(0.02, DH - DW / 2, 0.035, M.trim, 0, (DH - DW / 2) / 2, zF - 0.05, true);
 
     // a rolling ladder on a brass rail along the left lower bookcase
-    {
+    if (tier === 'hall') {
+      const from = G.children.length;
       const zL = 3.55, rx = -X + 0.42;
       const rg = new THREE.CylinderGeometry(0.012, 0.012, zF - 3.0, 10).rotateX(Math.PI / 2).translate(rx, 2.62, (zF + 3.0) / 2);
       mesh(rg, M.brass, false, { cast: false });
@@ -265,10 +262,12 @@ export function buildShell(K, tier) {
       for (let y = 0.28; y < 2.6; y += 0.29) { const r = K.box(0.05, 0.03, 0.44, M.caseShelf, 0.0, y, 0, L); r.castShadow = true; }
       for (const sz of [-1, 1]) { const w = K.mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 14).rotateZ(Math.PI / 2), M.brass, L); w.position.set(0, 0.03, sz * 0.22); }
       L.updateMatrixWorld(true);
+      aside(from);
     }
 
     // a spiral stair up to the gallery, in the front-left corner
-    {
+    if (tier !== 'den') {
+      const from = G.children.length;
       const cx = -X + 1.16, cz = zF - 1.15, r = 0.78, n = 18, rise = 3.12 / n;
       K.mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.12, 14).translate(cx, 3.12 / 2, cz), M.iron, G);
       K.mesh(new THREE.SphereGeometry(0.07, 14, 10).translate(cx, 3.16, cz), M.brass, G);
@@ -284,11 +283,13 @@ export function buildShell(K, tier) {
         mesh(post, M.iron, false, { cast: false });
       }
       mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.02, 8, false), M.brass, false, { cast: false });
+      aside(from);
     }
   }
 
   // a long reading table down the hall's nave, with green banker's lamps
   if (tier === 'hall') {
+    const from = G.children.length;
     const tz0 = 6.2, tz1 = 8.8, tw = 1.0;
     box(tw, 0.06, tz1 - tz0, M.caseShelf, 0, 0.76, (tz0 + tz1) / 2);
     box(tw - 0.12, 0.08, tz1 - tz0 - 0.12, M.caseDark, 0, 0.69, (tz0 + tz1) / 2);
@@ -311,6 +312,7 @@ export function buildShell(K, tier) {
     if (MOD.deskchair) for (const [x, z, ry] of [[-0.75, 6.9, Math.PI / 2], [0.75, 7.6, -Math.PI / 2], [-0.75, 8.2, Math.PI / 2]]) {
       const c = MOD.deskchair.clone(true); c.position.set(x, 0, z); c.rotation.y = ry; c.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); G.add(c);
     }
+    aside(from);
   }
 
   // ---------------------------------------------------------------- chandeliers
@@ -337,29 +339,6 @@ export function buildShell(K, tier) {
   }
 
   // ---------------------------------------------------------------- the books on all those shelves
-  const PAL = ['#6b1f1f', '#2f4a33', '#1f3350', '#5b2f4a', '#7a5232', '#2b3a2f', '#8a6a2a', '#3a2614', '#4a1f2a', '#24413f', '#5a4a2a', '#2c2c3a', '#7b3b22', '#4b5a3a', '#1c2a3a'];
-  const bookTex = K.canvasTex(spineTex(K), { repeat: false });
-  const bookMat = K.std({ map: bookTex, roughness: 0.78 });
-  const bookGeo = new THREE.BoxGeometry(1, 1, 1);
-  // spines face the room: map the texture onto the face that looks out (±x for side walls, ±z for back/front)
-  const instanced = (list, isCut) => {
-    if (!list.length) return;
-    const im = new THREE.InstancedMesh(bookGeo, bookMat, list.length);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
-    const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-    list.forEach((b, i) => {
-      if (b.axis === 'x') { p.set(b.a, b.y, b.d); q.identity(); s.set(b.t, b.h, b.dd); }
-      else { p.set(b.d, b.y, b.a); q.copy(qz); s.set(b.t, b.h, b.dd); }
-      m4.compose(p, q, s); im.setMatrixAt(i, m4);
-      col.set(PAL[Math.floor(b.c * PAL.length) % PAL.length]).multiplyScalar(0.85 + (b.c * 7 % 1) * 0.35);
-      im.setColorAt(i, col);
-    });
-    im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    im.castShadow = false; im.receiveShadow = true;
-    im.userData.shellBooks = true;
-    G.add(im); mark(im, isCut);
-  };
-  instanced(shelfBooks.keep, false); instanced(shelfBooks.cut, true);
   const baluster = new THREE.LatheGeometry([[0.0, 0], [0.018, 0], [0.018, 0.04], [0.01, 0.06], [0.009, 0.4], [0.02, 0.5], [0.009, 0.6], [0.009, 0.9], [0.015, 0.92], [0.0, 0.95]].map(([r, y]) => new THREE.Vector2(r, y)), 8);
   const instB = (list, isCut) => {
     if (!list.length) return;
@@ -372,8 +351,9 @@ export function buildShell(K, tier) {
 
   // ---------------------------------------------------------------- fused, then handed back
   K.mergeGroup(G, cut);
+  for (const sub of cutaways) K.mergeGroup(sub, []);
   return {
-    group: G, cut, plinth, tier,
+    group: G, cut, plinth, tier, cutaways, slots: slots.sort((p, q) => p.order[0] - q.order[0] || p.order[1] - q.order[1] || p.order[2] - q.order[2]),
     dims: { x: X, zB: ZB, zF, H, top },
     setLight(L, night) {
       for (const { l, kind } of lights) l.intensity = kind === 'chand' ? L.chand * 1.25 : (night ? 0.5 : 3.2) * (tier === 'hall' ? 1.5 : 1);
@@ -385,13 +365,12 @@ export function buildShell(K, tier) {
     dispose() {
       K.scene.remove(G);
       G.traverse((o) => { if (o.isMesh || o.isInstancedMesh) { o.geometry.dispose(); } if (o.isLight && o.dispose) o.dispose(); });
-      bookTex.dispose(); bookMat.dispose();
     },
   };
 }
 
-// cloth spines with gold bands at the head and foot (tinted per book)
-function spineTex(K) {
+// cloth spines with gold bands at the head and foot (tinted per book): for books seen from afar
+export function spineTex(K) {
   const [c, x] = K.mkCanvas(64, 256);
   x.fillStyle = '#ffffff'; x.fillRect(0, 0, 64, 256);
   const r = K.rng(3);

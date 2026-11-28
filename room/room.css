@@ -69,10 +69,24 @@ canvas#rm-scene.dragging { cursor: grabbing; }
 .rm .perf .ok { color: #9fd18b; }.rm .perf .meh { color: #e6c886; }.rm .perf .bad { color: #f09a8a; }
 .rm .nogl { position: fixed; inset: 0; z-index: 30; background: #140d08; display: grid; place-content: center; text-align: center; padding: 24px; font-family: var(--serif); font-size: 1.1rem; }
 .rm .nogl a { color: var(--brass-lt); }
-/* at the bookcase: a small bar with search and, for big libraries, the bookcase arrows */
+/* at the bookcase: the sections as tabs, and a bar with search and the strip of bookcases (how full each is) */
 .rm .shelf-tools { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 72px);
-  display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(20,12,6,.62); border: 1px solid rgba(230,200,134,.3);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: rm-fade .3s ease; }
+  display: flex; flex-direction: column; align-items: center; gap: 8px; width: min(94vw, 460px); pointer-events: none; animation: rm-fade .3s ease; }
+.rm .shelf-tools > * { pointer-events: auto; }
+.rm .shelf-tools .st-bar { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(20,12,6,.66); border: 1px solid rgba(230,200,134,.3);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); max-width: 100%; }
+.rm .shelf-tools .st-tabs { display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 0 2px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
+.rm .shelf-tools .st-tabs::-webkit-scrollbar { display: none; }
+.rm .shelf-tools .st-tabs[hidden] { display: none; }
+.rm .shelf-tools .st-tabs button { flex: none; height: 28px; min-width: 0; padding: 0 11px; border-radius: 999px; font: 600 .72rem/1 var(--sans); letter-spacing: .03em;
+  background: rgba(20,12,6,.7); color: rgba(239,227,200,.9); border: 1px solid rgba(230,200,134,.3); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.rm .shelf-tools .st-tabs button[aria-selected="true"] { background: var(--brass-lt); color: #2a1a0a; border-color: transparent; }
+.rm .shelf-tools .st-mid { display: inline-flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; padding: 3px 4px; }
+.rm .shelf-tools .st-case { flex: 1; min-width: 0; }
+.rm .shelf-tools .st-n { overflow: hidden; text-overflow: ellipsis; max-width: 62vw; text-align: center; }
+.rm .shelf-tools .st-strip { display: flex; gap: 2px; height: 14px; align-items: center; cursor: pointer; touch-action: none; }
+.rm .shelf-tools .st-strip i { flex: 1; min-width: 2px; height: 7px; border-radius: 2px; background: linear-gradient(90deg, var(--brass-lt) var(--f), rgba(239,227,200,.18) var(--f)); opacity: .85; }
+.rm .shelf-tools .st-strip i.on { height: 13px; opacity: 1; box-shadow: 0 0 0 1.5px #f6ead0; }
 @keyframes rm-fade { from { opacity: 0; } }
 .rm .shelf-tools button { border: 0; background: none; color: var(--brass-lt); min-width: 38px; height: 34px; border-radius: 999px; cursor: pointer;
   display: inline-grid; place-items: center; font: 400 1.5rem/1 var(--serif); padding: 0 8px; }
