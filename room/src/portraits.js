@@ -37,7 +37,7 @@ export function buildPortraits(K, tier, authors) {
     const top = K.mesh(new THREE.SphereGeometry(0.018, 14, 10), M.gold, P, { cast: false }); top.position.set(0, H / 2 + 0.06, 0.03);
     // the portrait
     const mat = K.std({ map: K.canvasTex(cameo(K, a.name), { repeat: false }), roughness: 0.62 });
-    const face = K.mesh(ovalGeo(W, H), mat, P, { cast: false }); face.position.z = 0.012;
+    const face = K.mesh(ovalGeo(W, H), mat, P, { cast: false, recv: false });   // no window-light shadow cut across a face face.position.z = 0.012;
     face.userData = { author: a, dyn: true };
     // a brass plate with the name and dates
     const years = a.born ? `${a.born}–${a.died || ''}` : '';
@@ -66,29 +66,34 @@ export function buildPortraits(K, tier, authors) {
 // a photo turned into a small oil painting: soft underpainting, a few thousand brushstrokes in the
 // photo's own colours, warm varnish, a vignette and the weave of the canvas
 function oilPortrait(K, img) {
-  const w = 320, h = 414;
+  // finer than before (the gallery is seen close up on phones): a bigger canvas, a sharper
+  // underpainting and more, smaller strokes, so the face stays recognisable
+  const w = 512, h = 662, SW = 128, SH = 166;
   const [c, x] = K.mkCanvas(w, h);
-  const [s, sx] = K.mkCanvas(80, 104);
+  const [s, sx] = K.mkCanvas(SW, SH);
   const fit = (ctx, cw, ch) => { const k = Math.max(cw / img.naturalWidth, ch / img.naturalHeight); const iw = img.naturalWidth * k, ih = img.naturalHeight * k; ctx.drawImage(img, (cw - iw) / 2, (ch - ih) / 2 - ch * 0.04, iw, ih); };
-  fit(sx, 80, 104);
-  let px = null; try { px = sx.getImageData(0, 0, 80, 104).data; } catch { px = null; }
-  // underpainting: the low-resolution picture, smoothly enlarged
-  x.imageSmoothingQuality = 'high'; x.drawImage(s, 0, 0, w, h);
+  fit(sx, SW, SH);
+  let px = null; try { px = sx.getImageData(0, 0, SW, SH).data; } catch { px = null; }
+  // underpainting: the picture itself, softened a little
+  x.imageSmoothingQuality = 'high';
+  if ('filter' in x) x.filter = 'blur(1.5px)';
+  fit(x, w, h);
+  if ('filter' in x) x.filter = 'none';
   if (px) {
     const r = K.rng(7);
     x.lineCap = 'round';
-    for (let i = 0; i < 4200; i++) {
-      const u = r(), v = r(), ix = Math.min(79, Math.floor(u * 80)), iy = Math.min(103, Math.floor(v * 104)), o = (iy * 80 + ix) * 4;
+    for (let i = 0; i < 9000; i++) {
+      const u = r(), v = r(), ix = Math.min(SW - 1, Math.floor(u * SW)), iy = Math.min(SH - 1, Math.floor(v * SH)), o = (iy * SW + ix) * 4;
       const lum = (px[o] + px[o + 1] + px[o + 2]) / 3;
-      x.strokeStyle = `rgba(${px[o]},${px[o + 1]},${px[o + 2]},${0.55})`;
-      x.lineWidth = 2 + r() * (lum > 140 ? 4 : 3);
+      x.strokeStyle = `rgba(${px[o]},${px[o + 1]},${px[o + 2]},${0.42})`;
+      x.lineWidth = 1.6 + r() * (lum > 140 ? 3 : 2.4);
       const a = (r() - 0.5) * 1.2 + (u - 0.5) * 0.8, L = 4 + r() * 9;
       const cx = u * w, cy = v * h;
       x.beginPath(); x.moveTo(cx - Math.cos(a) * L / 2, cy - Math.sin(a) * L / 2); x.lineTo(cx + Math.cos(a) * L / 2, cy + Math.sin(a) * L / 2); x.stroke();
     }
   }
   // warm varnish and a dark vignette, like an old portrait
-  x.globalCompositeOperation = 'multiply'; x.fillStyle = 'rgba(214,176,120,0.42)'; x.fillRect(0, 0, w, h);
+  x.globalCompositeOperation = 'multiply'; x.fillStyle = 'rgba(214,176,120,0.32)'; x.fillRect(0, 0, w, h);
   x.globalCompositeOperation = 'source-over';
   const vg = x.createRadialGradient(w / 2, h * 0.42, w * 0.2, w / 2, h / 2, w * 0.72); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(25,14,6,0.65)');
   x.fillStyle = vg; x.fillRect(0, 0, w, h);
@@ -115,9 +120,10 @@ function cameo(K, name) {
 }
 function weave(K, x, w, h) {
   const r = K.rng(3);
-  x.globalAlpha = 0.07; x.fillStyle = '#000';
-  for (let y = 0; y < h; y += 3) x.fillRect(0, y, w, 1);
-  for (let i = 0; i < w; i += 3) x.fillRect(i, 0, 1, h);
+  // faint and not too fine: a tight grid shimmers (moiré) when the portrait is small on a phone
+  x.globalAlpha = 0.035; x.fillStyle = '#000';
+  for (let y = 0; y < h; y += 5) x.fillRect(0, y, w, 1);
+  for (let i = 0; i < w; i += 5) x.fillRect(i, 0, 1, h);
   x.globalAlpha = 0.05; for (let i = 0; i < 600; i++) { x.fillStyle = r() > 0.5 ? '#fff' : '#000'; x.fillRect(r() * w, r() * h, 2, 2); }
   x.globalAlpha = 1;
 }

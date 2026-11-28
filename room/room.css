@@ -246,3 +246,14 @@ html.reading .rm .vignette { opacity: .6; }
 .rm .invite-spot:focus-visible { outline: 2px solid #e6c27a; outline-offset: 3px; }
 .rm .card .acts.stack { flex-direction: column; align-items: stretch; }
 .rm .card .acts.stack button { width: 100%; }
+/* a place's card arrives folded: a small tab with its title, so the view isn't covered; tap to open */
+.rm .card.peek { width: max-content; max-width: min(380px, calc(100vw - 32px)); padding: 9px 76px 10px 16px; cursor: pointer; overflow: hidden; border-radius: 14px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.45); }
+.rm .card.peek #rm-card-body > *:not(.eyebrow):not(h2) { display: none !important; }
+.rm .card.peek #rm-card-body h2 { font-size: 1.12rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm .card.peek #rm-card-body .eyebrow { font-size: .64rem; margin: 0 0 1px; }
+.rm .card.peek .card-x { top: 50%; transform: translateY(-50%); right: 6px; }
+.rm .card-open { display: none; }
+.rm .card.peek .card-open { display: grid; place-items: center; position: absolute; top: 50%; right: 38px; transform: translateY(-50%); width: 32px; height: 32px;
+  border: 0; border-radius: 50%; background: rgba(42,30,22,.1); color: var(--ink); cursor: pointer; }
+.rm .card.peek:hover { background: #f4e9d2; }

@@ -2151,6 +2151,8 @@ function glide(name, dur, arrive) {
 // arriving somewhere opens what's there, so nobody has to guess to tap the desk or the fire
 function arrived(name) {
   if (name !== station || !HOST || outBook || !$('card').hidden || document.querySelector('dialog[open]')) return;
+  // a place's card arrives folded small, so you can see what you came to look at; tap it to open
+  peekNext = true;
   if (name === 'desk') deskCard();
   else if (name === 'hearth') hearthCard();
   else if (name === 'tome') tomeCard();
@@ -2158,7 +2160,8 @@ function arrived(name) {
   else if (name === 'authors') authorsCard();
   else if (name === 'family') familyCard();
   else if (name === 'paper') triviaCard();
-  else if (isHome(name)) { if (!growIntro()) firstRun(); }
+  else if (isHome(name)) { peekNext = false; if (!growIntro()) firstRun(); }
+  peekNext = false;
   setTimeout(playArrival, 400);
 }
 // a word on how the shelf works, the first few visits
@@ -3226,9 +3229,16 @@ function hearthCard() {
     <div class="acts"><button type="button" data-act="calendar">Reading calendar</button><button type="button" class="quiet" data-act="goals">Reading goals</button><button type="button" class="quiet" data-act="year">Year in review</button>${HOST && HOST.openLife ? '<button type="button" class="quiet" data-act="life">Your reading life</button>' : ''}</div>`, 'hearth');
 }
 let cardKind = '', clockTimer = null;
+let peekNext = false;
 function openCard(html, kind = '') {
+  // folded ("peek"): only the card's eyebrow and title show, as a small tab; tapping it opens it.
+  // A card that's folded stays folded when it refreshes itself.
+  const was = !$('card').hidden && $('card').classList.contains('peek') && cardKind === kind;
   cardKind = kind;
   $('card-body').innerHTML = html; $('card').hidden = false;
+  const fold = (peekNext || was) && !!$('card-body').querySelector('h2');
+  peekNext = false;
+  setPeek(fold);
   $('card').classList.toggle('searchcard', kind === 'search');
   if (kind !== 'search') searching = false;
   shelfTools();
@@ -3239,7 +3249,23 @@ function openCard(html, kind = '') {
     tickClock(); clockTimer = setInterval(tickClock, 1000);
   }
 }
-function closeCard() { $('card').hidden = true; cardKind = ''; searching = false; clearInterval(clockTimer); clockTimer = null; shelfTools(); }
+function closeCard() { $('card').hidden = true; setPeek(false); cardKind = ''; searching = false; clearInterval(clockTimer); clockTimer = null; shelfTools(); }
+const cardOpenBtn = document.createElement('button');
+cardOpenBtn.type = 'button'; cardOpenBtn.className = 'card-open';
+cardOpenBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+$('card').appendChild(cardOpenBtn);
+function setPeek(on) {
+  $('card').classList.toggle('peek', on);
+  cardOpenBtn.hidden = !on;
+  cardOpenBtn.setAttribute('aria-expanded', 'false');
+  const t = $('card-body').querySelector('h2');
+  cardOpenBtn.setAttribute('aria-label', `Open ${t ? t.textContent : 'card'}`);
+}
+// tapping a folded card anywhere (but its ×) opens it
+$('card').addEventListener('click', (e) => {
+  if (!$('card').classList.contains('peek') || e.target.closest('.card-x')) return;
+  e.stopPropagation(); setPeek(false); cardOpenBtn.setAttribute('aria-expanded', 'true');
+}, true);
 function clockText(ms) {
   const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), p2 = (n) => String(n).padStart(2, '0');
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;

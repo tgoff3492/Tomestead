@@ -1111,7 +1111,9 @@
     live.slice(0, maxCustom).forEach(({ g, i }) => {
       const tail = i.met ? 'goal reached' : (i.daysLeft === 1 ? 'last day' : `${i.daysLeft} days left`);
       rows.push(`<button type="button" class="goal-row custom${i.met ? ' met' : ''}" data-cgoal="${esc(g.id)}" aria-label="${esc(goalName(g))}: ${i.done} of ${g.target}, ${tail}. Edit goal.">
-        <span class="goal-text"><span class="goal-name">${esc(goalName(g))}</span> · <strong>${i.done} of ${g.target}</strong>${G.countsFrom(g) > g.start && !i.met ? ` since ${esc(shortDate(G.countsFrom(g), false))}` : ''} · ${tail}</span>
+        <span class="goal-text">${skipYear
+          ? `${g.name ? `<span class="goal-name">${esc(g.name)}</span> · ` : ''}<strong>${i.done} of ${g.target}</strong> · ${tail}`
+          : `<span class="goal-name">${esc(goalName(g))}</span> · <strong>${i.done} of ${g.target}</strong>${G.countsFrom(g) > g.start && !i.met ? ` since ${esc(shortDate(G.countsFrom(g), false))}` : ''} · ${tail}`}</span>
         <span class="goal-meter" aria-hidden="true"><span style="width:${i.pct}%"></span></span></button>`);
     });
     if (live.length > maxCustom) rows.push(`<div class="goal-row"><button class="linkbtn" data-goals>${live.length - maxCustom} more ${live.length - maxCustom === 1 ? 'goal' : 'goals'}</button></div>`);
@@ -3456,7 +3458,7 @@
   // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
   // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
   // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
-  const ROOM_SRC = './room/room.js?v=20261127204552';
+  const ROOM_SRC = './room/room.js?v=20261127205424';
   function loadRoom(attempt) {
     // a failed import can be remembered for its exact address, so each retry asks with a fresh one
     import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {

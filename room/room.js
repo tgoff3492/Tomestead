@@ -48572,8 +48572,7 @@ function buildPortraits(K, tier, authors) {
     const top = K.mesh(new THREE.SphereGeometry(0.018, 14, 10), M.gold, P, { cast: false });
     top.position.set(0, H / 2 + 0.06, 0.03);
     const mat = K.std({ map: K.canvasTex(cameo(K, a.name), { repeat: false }), roughness: 0.62 });
-    const face = K.mesh(ovalGeo(W, H), mat, P, { cast: false });
-    face.position.z = 0.012;
+    const face = K.mesh(ovalGeo(W, H), mat, P, { cast: false, recv: false });
     face.userData = { author: a, dyn: true };
     const years = a.born ? `${a.born}\u2013${a.died || ""}` : "";
     const plate = K.mesh(new THREE.PlaneGeometry(0.3, 0.05), K.std({ map: K.canvasTex(K.plateTex(years ? `${a.name} \xB7 ${years}` : a.name, 768, 128), { repeat: false }), roughness: 0.35, metalness: 0.6 }), P, { cast: false });
@@ -48621,31 +48620,33 @@ function buildPortraits(K, tier, authors) {
   };
 }
 function oilPortrait(K, img) {
-  const w = 320, h = 414;
+  const w = 512, h = 662, SW = 128, SH = 166;
   const [c, x] = K.mkCanvas(w, h);
-  const [s, sx] = K.mkCanvas(80, 104);
+  const [s, sx] = K.mkCanvas(SW, SH);
   const fit = (ctx, cw, ch) => {
     const k = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
     const iw = img.naturalWidth * k, ih = img.naturalHeight * k;
     ctx.drawImage(img, (cw - iw) / 2, (ch - ih) / 2 - ch * 0.04, iw, ih);
   };
-  fit(sx, 80, 104);
+  fit(sx, SW, SH);
   let px2 = null;
   try {
-    px2 = sx.getImageData(0, 0, 80, 104).data;
+    px2 = sx.getImageData(0, 0, SW, SH).data;
   } catch {
     px2 = null;
   }
   x.imageSmoothingQuality = "high";
-  x.drawImage(s, 0, 0, w, h);
+  if ("filter" in x) x.filter = "blur(1.5px)";
+  fit(x, w, h);
+  if ("filter" in x) x.filter = "none";
   if (px2) {
     const r = K.rng(7);
     x.lineCap = "round";
-    for (let i = 0; i < 4200; i++) {
-      const u = r(), v = r(), ix = Math.min(79, Math.floor(u * 80)), iy = Math.min(103, Math.floor(v * 104)), o = (iy * 80 + ix) * 4;
+    for (let i = 0; i < 9e3; i++) {
+      const u = r(), v = r(), ix = Math.min(SW - 1, Math.floor(u * SW)), iy = Math.min(SH - 1, Math.floor(v * SH)), o = (iy * SW + ix) * 4;
       const lum = (px2[o] + px2[o + 1] + px2[o + 2]) / 3;
-      x.strokeStyle = `rgba(${px2[o]},${px2[o + 1]},${px2[o + 2]},${0.55})`;
-      x.lineWidth = 2 + r() * (lum > 140 ? 4 : 3);
+      x.strokeStyle = `rgba(${px2[o]},${px2[o + 1]},${px2[o + 2]},${0.42})`;
+      x.lineWidth = 1.6 + r() * (lum > 140 ? 3 : 2.4);
       const a = (r() - 0.5) * 1.2 + (u - 0.5) * 0.8, L = 4 + r() * 9;
       const cx = u * w, cy = v * h;
       x.beginPath();
@@ -48655,7 +48656,7 @@ function oilPortrait(K, img) {
     }
   }
   x.globalCompositeOperation = "multiply";
-  x.fillStyle = "rgba(214,176,120,0.42)";
+  x.fillStyle = "rgba(214,176,120,0.32)";
   x.fillRect(0, 0, w, h);
   x.globalCompositeOperation = "source-over";
   const vg = x.createRadialGradient(w / 2, h * 0.42, w * 0.2, w / 2, h / 2, w * 0.72);
@@ -48697,10 +48698,10 @@ function cameo(K, name) {
 }
 function weave(K, x, w, h) {
   const r = K.rng(3);
-  x.globalAlpha = 0.07;
+  x.globalAlpha = 0.035;
   x.fillStyle = "#000";
-  for (let y = 0; y < h; y += 3) x.fillRect(0, y, w, 1);
-  for (let i = 0; i < w; i += 3) x.fillRect(i, 0, 1, h);
+  for (let y = 0; y < h; y += 5) x.fillRect(0, y, w, 1);
+  for (let i = 0; i < w; i += 5) x.fillRect(i, 0, 1, h);
   x.globalAlpha = 0.05;
   for (let i = 0; i < 600; i++) {
     x.fillStyle = r() > 0.5 ? "#fff" : "#000";
@@ -51901,6 +51902,7 @@ function glide(name, dur, arrive) {
 }
 function arrived(name) {
   if (name !== station || !HOST || outBook || !$("card").hidden || document.querySelector("dialog[open]")) return;
+  peekNext = true;
   if (name === "desk") deskCard();
   else if (name === "hearth") hearthCard();
   else if (name === "tome") tomeCard();
@@ -51909,8 +51911,10 @@ function arrived(name) {
   else if (name === "family") familyCard();
   else if (name === "paper") triviaCard();
   else if (isHome(name)) {
+    peekNext = false;
     if (!growIntro()) firstRun();
   }
+  peekNext = false;
   setTimeout(playArrival, 400);
 }
 var HINT_KEY = "tomestead.shelfhint";
@@ -53295,10 +53299,15 @@ function hearthCard() {
 }
 var cardKind = "";
 var clockTimer = null;
+var peekNext = false;
 function openCard(html, kind = "") {
+  const was = !$("card").hidden && $("card").classList.contains("peek") && cardKind === kind;
   cardKind = kind;
   $("card-body").innerHTML = html;
   $("card").hidden = false;
+  const fold = (peekNext || was) && !!$("card-body").querySelector("h2");
+  peekNext = false;
+  setPeek(fold);
   $("card").classList.toggle("searchcard", kind === "search");
   if (kind !== "search") searching = false;
   shelfTools();
@@ -53314,12 +53323,31 @@ function openCard(html, kind = "") {
 }
 function closeCard() {
   $("card").hidden = true;
+  setPeek(false);
   cardKind = "";
   searching = false;
   clearInterval(clockTimer);
   clockTimer = null;
   shelfTools();
 }
+var cardOpenBtn = document.createElement("button");
+cardOpenBtn.type = "button";
+cardOpenBtn.className = "card-open";
+cardOpenBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+$("card").appendChild(cardOpenBtn);
+function setPeek(on) {
+  $("card").classList.toggle("peek", on);
+  cardOpenBtn.hidden = !on;
+  cardOpenBtn.setAttribute("aria-expanded", "false");
+  const t = $("card-body").querySelector("h2");
+  cardOpenBtn.setAttribute("aria-label", `Open ${t ? t.textContent : "card"}`);
+}
+$("card").addEventListener("click", (e) => {
+  if (!$("card").classList.contains("peek") || e.target.closest(".card-x")) return;
+  e.stopPropagation();
+  setPeek(false);
+  cardOpenBtn.setAttribute("aria-expanded", "true");
+}, true);
 function clockText(ms) {
   const t = Math.max(0, Math.floor(ms / 1e3)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), p2 = (n) => String(n).padStart(2, "0");
   return h ? `${h}:${p2(m)}:${p2(t % 60)}` : `${m}:${p2(t % 60)}`;
