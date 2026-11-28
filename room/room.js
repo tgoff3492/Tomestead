@@ -52311,18 +52311,18 @@ async function familyPaintingImage() {
 var cam = { pos: new Vector3(), dir: new Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 var station = "room";
 var tween = null;
-var HOME_KEY = "tomestead.roomhome";
+var HOME_KEY = "tomestead.roomhome.v2";
 var homeView = (() => {
   try {
-    return localStorage.getItem(HOME_KEY) === "room" ? "room" : "house";
+    return localStorage.getItem(HOME_KEY) === "house" ? "house" : "room";
   } catch {
-    return "house";
+    return "room";
   }
 })();
 var home = () => homeView;
 var isHome = (st) => st === "house" || st === "room";
 function setHome(v) {
-  homeView = v === "room" ? "room" : "house";
+  homeView = v === "house" ? "house" : "room";
   try {
     localStorage.setItem(HOME_KEY, homeView);
   } catch {
@@ -55072,7 +55072,7 @@ function setActive(on) {
   cam.dir.copy(f.dir);
   cam.dist = f.dist;
   if (!start) {
-    cam.pos.z = Math.min(2.6, cam.pos.z + 0.9);
+    cam.pos.z = Math.min(dims.zF - 0.1, cam.pos.z + 0.9);
     cam.pos.y += 0.3;
     cam.pitch = -0.12;
   }

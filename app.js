@@ -3509,7 +3509,7 @@
   // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
   // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
   // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
-  const ROOM_SRC = './room/room.js?v=20261128082509';
+  const ROOM_SRC = './room/room.js?v=20261128095521';
   function loadRoom(attempt) {
     // a failed import can be remembered for its exact address, so each retry asks with a fresh one
     import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {

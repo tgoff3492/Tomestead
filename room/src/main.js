@@ -2199,11 +2199,14 @@ async function familyPaintingImage() {
 const cam = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), dist: 2, yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, vx: 0 };
 let station = 'room', tween = null;
 // home is the dollhouse, or standing in the room: your pick, remembered on this device
-const HOME_KEY = 'tomestead.roomhome';
-let homeView = (() => { try { return localStorage.getItem(HOME_KEY) === 'room' ? 'room' : 'house'; } catch { return 'house'; } })();
+// Where the app opens and where the Room button goes: inside the room, unless you've switched it to
+// the dollhouse with the swap button (a newer key, so everyone starts inside once; growing still
+// flies out to the dollhouse to show the bigger room)
+const HOME_KEY = 'tomestead.roomhome.v2';
+let homeView = (() => { try { return localStorage.getItem(HOME_KEY) === 'house' ? 'house' : 'room'; } catch { return 'room'; } })();
 const home = () => homeView;
 const isHome = (st) => st === 'house' || st === 'room';
-function setHome(v) { homeView = v === 'room' ? 'room' : 'house'; try { localStorage.setItem(HOME_KEY, homeView); } catch {} }
+function setHome(v) { homeView = v === 'house' ? 'house' : 'room'; try { localStorage.setItem(HOME_KEY, homeView); } catch {} }
 const baseFov = () => (portrait() ? 62 : 50);
 const fovFor = (name) => (STATIONS[name] && STATIONS[name].fov) || baseFov();
 function pressStation(name) {
@@ -4279,7 +4282,7 @@ function setActive(on) {
   if (!HOST && params.get('case')) { world.books.showPage(Number(params.get('case'))); setTimeout(() => clearView(true), 300); }     // (the test page can open on any bookcase)
   const f = framing(start && STATIONS[start] && !famStation(start) ? start : 'room');
   cam.pos.copy(f.pos); cam.dir.copy(f.dir); cam.dist = f.dist;
-  if (!start) { cam.pos.z = Math.min(2.6, cam.pos.z + 0.9); cam.pos.y += 0.3; cam.pitch = -0.12; }
+  if (!start) { cam.pos.z = Math.min(dims.zF - 0.1, cam.pos.z + 0.9); cam.pos.y += 0.3; cam.pitch = -0.12; }     // (a step back, easing in)
   if (start === 'house') setFov(fovFor('house'));
   if (params.get('yaw')) cam.yaw = Number(params.get('yaw'));
   // (test page) ?cam=x,y,z,tx,ty,tz puts the camera anywhere, looking at a point
