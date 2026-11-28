@@ -2138,6 +2138,82 @@
     const st = Trivia.state(), bk = st.item.book;
     $('#triviaBody').innerHTML = Trivia.html(st, { canWant: true, owned: !!(bk && findDuplicate(bk.title, bk.author)) });
   }
+  // ---------- Share my shelf: a postcard of your room (share.js draws it, the room takes the photo)
+  const pc = { kind: 'shelf', book: null, look: null, busy: 0, blob: null, url: null };
+  function lastFinish(b) { const d = datesOf(b); return d.length ? d.slice().sort().slice(-1)[0] : ''; }
+  const finishedBooks = () => books.filter(b => statusOf(b) === 'read' && datesOf(b).length).sort((a, b) => lastFinish(b).localeCompare(lastFinish(a)));
+  function firstLine(text) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    const m = t.match(/^.{20,160}?[.!?](\s|$)/);
+    const s = (m ? m[0] : t).trim();
+    return s.length > 160 ? s.slice(0, 157).replace(/\s+\S*$/, '') + '…' : s;
+  }
+  function openPostcard(kind = 'shelf', bookId = null) {
+    const R = window.TomesteadRoom;
+    if (!R || !R.snapshot) return toast('Sharing your shelf needs the 3D reading room, which this device can’t show.');
+    if (!books.length) return toast('Add a book first, then share your shelf.');
+    const fin = finishedBooks();
+    pc.kind = kind === 'book' && fin.length ? 'book' : 'shelf';
+    pc.book = bookId && fin.some(b => b.id === bookId) ? bookId : (fin[0] ? fin[0].id : null);
+    pc.look = pc.look || (R.mode ? R.mode() : 'day');
+    $('#pcBook').innerHTML = fin.slice(0, 60).map(b => `<option value="${esc(b.id)}">${esc(b.title)}${b.author ? ` · ${esc(b.author)}` : ''}</option>`).join('');
+    $('#pcHandle').value = prefs.shareHandle || '';
+    $('#pcQuote').checked = false;
+    $('#postcardDialog [data-pckind="book"]').hidden = !fin.length;
+    $('#postcardDialog').showModal();
+    pcUpdate();
+  }
+  function pcUpdate() {
+    const d = $('#postcardDialog');
+    d.querySelectorAll('[data-pckind]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.pckind === pc.kind)));
+    d.querySelectorAll('[data-pclook]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.pclook === pc.look)));
+    $('#pcTitle').textContent = pc.kind === 'book' ? 'Share a book I finished' : 'Share my shelf';
+    $('#pcBookField').hidden = pc.kind !== 'book';
+    if (pc.book) $('#pcBook').value = pc.book;
+    const b = books.find(x => x.id === pc.book);
+    $('#pcQuoteField').hidden = !(pc.kind === 'book' && b && firstLine(b.review));
+    pcRender();
+  }
+  async function pcRender() {
+    const n = ++pc.busy;
+    $('#pcSend').disabled = true; $('#pcWait').hidden = false; $('#pcImg').classList.add('dim');
+    await new Promise(r => setTimeout(r, 30));       // let the "Developing" note paint first
+    if (n !== pc.busy) return;
+    const R = window.TomesteadRoom, S = window.TomesteadShare;
+    const handle = $('#pcHandle').value.trim();
+    let o;
+    try {
+      if (pc.kind === 'book') {
+        const b = books.find(x => x.id === pc.book);
+        if (!b) return;
+        const photo = R.snapshot({ kind: 'desk', look: pc.look });
+        const cover = R.coverFor ? await R.coverFor(b.id) : null;
+        o = { kind: 'book', photo, cover, title: b.title, author: b.author, rating: b.rating || 0, eyebrow: `Just finished · ${shortDate(lastFinish(b), false)}`,
+          quote: $('#pcQuote').checked ? firstLine(b.review) : '', handle };
+      } else {
+        const y = thisYear(), cy = countInYear(y), n2 = readBooks().length;
+        const yearRead = readBooks().filter(b => datesOf(b).some(d => d.startsWith(y)));
+        let pick = yearRead.filter(b => (b.rating || 0) >= 5), label = 'Five-star reads';
+        if (!pick.length) { pick = readBooks().filter(b => (b.rating || 0) >= 5); label = 'Five-star reads'; }
+        if (!pick.length) { pick = readBooks().filter(b => b.rating).sort((a, b) => b.rating - a.rating); label = 'Favorites'; }
+        const photo = R.snapshot({ kind: 'shelf', look: pc.look });
+        o = { kind: 'shelf', photo, eyebrow: `My reading room · ${y}`,
+          count: cy ? `${cy} ${cy === 1 ? 'book' : 'books'}` : `${n2} ${n2 === 1 ? 'book' : 'books'}`,
+          line: cy ? 'read this year' : 'on my shelves', listLabel: label, titles: pick.slice(0, 6).map(b => b.title), handle };
+      }
+      const blob = await S.postcard(o);
+      if (n !== pc.busy || !blob) return;
+      pc.blob = blob;
+      if (pc.url) URL.revokeObjectURL(pc.url);
+      pc.url = URL.createObjectURL(blob);
+      $('#pcImg').src = pc.url; $('#pcImg').hidden = false; $('#pcImg').classList.remove('dim');
+      $('#pcWait').hidden = true; $('#pcSend').disabled = false;
+    } catch (e) {
+      console.warn('postcard', e);
+      if (n === pc.busy) $('#pcWait').textContent = 'Couldn’t make the picture. Try again in a moment.';
+    }
+  }
   function openTrivia() {
     if (!Trivia) return;
     if (inRoom() && window.TomesteadRoom) { window.TomesteadRoom.go('paper'); return; }
@@ -2887,6 +2963,21 @@
     $('#calBtn').addEventListener('click', () => { more.open = false; calendar.open(); });
     $('#triviaBtn').addEventListener('click', () => { more.open = false; openTrivia(); });
     $('#goalRing').addEventListener('click', () => openGoal(thisYear()));
+    $('#postcardBtn').addEventListener('click', () => { more.open = false; openPostcard('shelf'); });
+    $('#postcardDialog').addEventListener('click', (e) => {
+      const k = e.target.closest('[data-pckind]'); if (k) { pc.kind = k.dataset.pckind; return pcUpdate(); }
+      const l = e.target.closest('[data-pclook]'); if (l) { pc.look = l.dataset.pclook; return pcRender(); }
+    });
+    $('#pcBook').addEventListener('change', (e) => { pc.book = e.target.value; pcUpdate(); });
+    $('#pcQuote').addEventListener('change', pcRender);
+    let pcT = 0;
+    $('#pcHandle').addEventListener('input', () => { clearTimeout(pcT); pcT = setTimeout(() => { prefs.shareHandle = $('#pcHandle').value.trim().slice(0, 40); savePrefs(); pcRender(); }, 500); });
+    $('#pcSend').addEventListener('click', () => {
+      if (!pc.blob) return;
+      const b = books.find(x => x.id === pc.book);
+      const name = pc.kind === 'book' && b ? `tomestead-${b.title}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60) : `my-reading-room-${thisYear()}`;
+      window.TomesteadShare.send(pc.blob, name, toast, pc.kind === 'book' ? 'Just finished' : 'My reading room');
+    });
     $('#triviaDialog').addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]');
       if (!act || !Trivia) return;
@@ -3289,6 +3380,7 @@
       d.action = { rd: 'start', label: 'Pick it back up', quiet: true };
     } else {
       d.action = { rd: 'again', label: 'Read it again', quiet: true };
+      if (window.TomesteadRoom && window.TomesteadRoom.snapshot && dates.length) (d.links = d.links || []).push({ rd: 'postcard', label: 'Share this book' });
     }
     if (st === 'read' || st === 'dnf' || st === 'reading') (d.links = d.links || []).push({ rd: 'showcase', label: showcaseIds().includes(b.id) ? 'Take it out of my display case' : 'Put it in my display case' });
     if (dates.length > 1) d.reads = `Read ${dates.length} times: ${dates.map(x => fmtDate(x)).join(', ')}`;
@@ -3364,7 +3456,7 @@
   // The room's code is one big file (~2 MB). On a weak phone signal, or for the minute GitHub Pages
   // is publishing a new version, fetching it can fail. Try a few times before giving up, and then
   // show the classic shelf only for now (not for good): the next open, or a tap on Room, tries again.
-  const ROOM_SRC = './room/room.js?v=20261127202410';
+  const ROOM_SRC = './room/room.js?v=20261127204552';
   function loadRoom(attempt) {
     // a failed import can be remembered for its exact address, so each retry asks with a fresh one
     import(attempt ? `${ROOM_SRC}&try=${attempt}` : ROOM_SRC).catch((err) => {
@@ -3397,6 +3489,7 @@
       else if (act === 'quote') openQuote(id, el.dataset.q);
       else if (act === 'upnext') toggleUpNext(b);
       else if (act === 'showcase') toggleShowcase(b);
+      else if (act === 'postcard') openPostcard('book', b.id);
       else if (act === 'dnf') setAside(b);
       else if (act === 'goto' && el.dataset.id) reader.putBack().then(() => openDetail(el.dataset.id, null));
       else if (act === 'series-next') {

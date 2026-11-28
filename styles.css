@@ -1986,3 +1986,21 @@ html.room-mode #addBtn { width: 44px; height: 44px; padding: 0; border-radius: 5
 html.room-mode #addBtn .add-text { display: none; }
 html.room-mode #addBtn .add-plus { display: block; }
 html.room-mode .more summary { width: 44px; height: 44px; background: rgba(25,16,10,.55); box-shadow: inset 0 0 0 1px rgba(239,227,200,.32); fill: #efe3c8; }
+
+/* ---------- Share my shelf (a postcard of your room) ---------- */
+.pc-dialog { width: min(760px, calc(100vw - 20px)); }
+.pc-grid { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; margin: 6px 0 4px; }
+.pc-preview { position: relative; flex: 0 0 auto; width: min(240px, 100%); aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 14px; overflow: hidden;
+  background: #1a120c; box-shadow: 0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(42,30,22,.25); display: grid; place-items: center; }
+.pc-preview img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .25s; }
+.pc-preview img.dim { opacity: .45; }
+.pc-wait { position: absolute; margin: 0; padding: 0 16px; text-align: center; font-family: var(--serif); font-style: italic; color: #efe3c8; }
+.pc-wait[hidden] { display: none; }
+.pc-opts { flex: 1 1 260px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pc-opts label.field { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: .92rem; margin: 0; border: 0; padding: 0; }
+.pc-opts label.field[hidden], .pc-check[hidden] { display: none; }
+.pc-opts label.field small { font-weight: 400; opacity: .75; }
+.pc-opts select, .pc-opts input[type="text"] { font: inherit; font-weight: 400; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(42,30,22,.25); background: rgba(255,255,255,.55); color: var(--ink); min-height: 44px; }
+.pc-check { display: flex; gap: 8px; align-items: center; font-size: .95rem; min-height: 44px; }
+.pc-note { margin: 0; font-size: .85rem; color: var(--ink-soft, #5b4634); line-height: 1.4; }
+@media (max-width: 560px) { .pc-preview { width: min(200px, 60vw); } }

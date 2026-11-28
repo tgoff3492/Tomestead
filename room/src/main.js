@@ -501,7 +501,7 @@ async function build() {
   for (const y of [WIN.y0 + winH / 3, WIN.y0 + (2 * winH) / 3]) box(0.04, 0.035, winW, M.trim, -3.04, y, winMid);
   const skyMat = new THREE.MeshBasicMaterial({ map: canvasTex(skyTex('day'), { repeat: false }) });
   const sky = mesh(new THREE.PlaneGeometry(2.6, 2.4).rotateY(Math.PI / 2), skyMat, scene, { cast: false, recv: false });
-  sky.position.set(-3.6, 1.65, winMid);
+  sky.position.set(-3.6, 1.65, winMid); sky.userData.sky = true;
   // curtains on a brass rod
   const rod = mesh(new THREE.CylinderGeometry(0.018, 0.018, winW + 1.5, 12).rotateX(Math.PI / 2), M.brass);
   rod.position.set(-2.9, WIN.y1 + 0.2, winMid);
@@ -2302,8 +2302,11 @@ function outside() {
   isOut = out;
   for (const m of CUT) m.visible = !out;
   for (const m of PLINTH) m.visible = out;
+  setSkies(!out);
   renderer.shadowMap.needsUpdate = true;
 }
+// the pictures behind the windows only make sense from inside: from the dollhouse they'd hang in the air
+function setSkies(on) { scene.traverse((o) => { if (o.userData.sky) o.visible = on; }); }
 
 // ---------------------------------------------------------------- input
 let drag = null;
@@ -3388,7 +3391,7 @@ function rebuildShell(tier) {
   for (const m of old.plinth) { const i = PLINTH.indexOf(m); if (i >= 0) PLINTH.splice(i, 1); }
   old.dispose();
   const sh = buildShell(world.K, tier);
-  sh.cut.forEach((m) => { CUT.push(m); m.visible = !isOut; }); sh.plinth.forEach((m) => { PLINTH.push(m); m.visible = isOut; });
+  sh.cut.forEach((m) => { CUT.push(m); m.visible = !isOut; }); sh.plinth.forEach((m) => { PLINTH.push(m); m.visible = isOut; }); setSkies(!isOut);
   world.shell = sh;
   applyTierStations(sh);
   buildPortraitsNow();
@@ -3707,7 +3710,50 @@ function overlays() {
   nowEl.hidden = !b;
 }
 
-// ---------------------------------------------------------------- loop (and keeping it fast)
+// ---------------------------------------------------------------- postcards (share.js)
+// The room photographed for a tall phone picture (Share my shelf): standing inside with the walls up,
+// in the light asked for, the camera at one of these poses; the app's controls aren't in the shot.
+const POSTCARD = {
+  shelf: { p: [0, 1.16, 0.78], t: [0, 1.1, -2.45], fov: 48 },
+  desk: { p: [-1.05, 1.62, 0.95], t: [-2.6, 0.86, -0.62], fov: 52 },
+};
+function snapshot({ kind = 'shelf', look = mode, w = 1080, h = 1920 } = {}) {
+  if (!world) return null;
+  const pose = POSTCARD[kind] || POSTCARD.shelf;
+  const keepMode = mode, keepDpr = renderer.getPixelRatio();
+  try {
+    for (const m of CUT) m.visible = true;
+    for (const m of PLINTH) m.visible = false;
+    setSkies(true);
+    if (look !== mode) { mode = look; world.applyLook(); }
+    renderer.shadowMap.needsUpdate = true;
+    camera.clearViewOffset();
+    camera.aspect = w / h; camera.fov = pose.fov; camera.near = 0.05; camera.far = 40;
+    camera.position.set(...pose.p); camera.lookAt(...pose.t); camera.updateProjectionMatrix();
+    renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+    renderer.render(scene, camera);
+    const [c, x] = mkCanvas(w, h);
+    x.drawImage(renderer.domElement, 0, 0, w, h);      // read in the same task, before the frame is shown
+    return c;
+  } finally {
+    if (mode !== keepMode) { mode = keepMode; world.applyLook(); }
+    for (const m of CUT) m.visible = !isOut;
+    for (const m of PLINTH) m.visible = isOut;
+    setSkies(!isOut);
+    renderer.shadowMap.needsUpdate = true;
+    renderer.setPixelRatio(keepDpr);
+    resize();
+  }
+}
+// a book's cover as the room draws it: the real cover art when it can be drawn, else cloth and gold
+async function coverFor(id) {
+  const b = lib.books.find((x) => x.id === id);
+  if (!b) return null;
+  const img = await coverImage(b).catch(() => null);
+  const aspect = img ? img.naturalWidth / img.naturalHeight : 2 / 3;
+  return img ? artCover(img, Math.min(0.85, Math.max(0.5, aspect))) : plainCover(b, 2 / 3);
+}
+
 let world = null, last = performance.now(), lastRender = 0, activeUntil = 0, firstFrameAt = 0;
 const perf = { busy: [], fpsMoving: 0, frames: 0, fpsNow: 0, tick: performance.now() };
 function kick(ms = 1200) { activeUntil = performance.now() + ms; }
@@ -3910,7 +3956,7 @@ function setActive(on) {
     resize(); shelfTools();
   };
   const show = (st) => { if (!STATIONS[st]) return; if (customizing) { glide(st, 1.1, false); kick(); } else go(st); };
-  window.TomesteadRoom = { state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
+  window.TomesteadRoom = { snapshot, coverFor, mode: () => mode, state: () => ({ station, where, tier: world && world.shell.tier, stations: Object.keys(STATIONS), cam: cam.pos.toArray().map((v) => +v.toFixed(2)), display: !!(world && world.display), pending: pendingArrive.slice() }), refresh, setActive, customize, show, settle, arrive: () => { if (HOST) lib = fromHost(); queueArrivals(); }, go: (st) => go(st), openBook: (id) => openOnDesk(id), tour: () => { go(home(), 1.5, { arrive: false }); tourCard(0); kick(); }, home: () => home(), setHome: (v) => { setHome(v); go(home()); kick(); } };
   if (HOST && HOST.ready) HOST.ready(window.TomesteadRoom);
   // something earned while a dialog was open (or the room was busy) arrives once things are quiet
   setInterval(() => { if (pendingArrive.length) playArrival(); }, 2500);

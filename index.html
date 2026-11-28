@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="room/room.css?v=20261127202410">
+  <link rel="stylesheet" href="room/room.css?v=20261127204552">
   <script>/* the reading room is home whenever this device can show it, so the old 2D opening never plays there */ try { var cv = document.createElement('canvas'); if (cv.getContext && cv.getContext('webgl2')) document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
   <script>try { var m = localStorage.getItem('tomestead.intro.mode') || 'always'; if (!localStorage.getItem('tomestead.intro.v2') && m === 'day') m = 'always'; var d = new Date(), t = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if (m === 'never' || (m === 'day' && localStorage.getItem('tomestead.intro.day') === t) || sessionStorage.getItem('tomestead.intro') === '1') document.documentElement.classList.add('no-intro'); } catch (e) {}</script>
 </head>
@@ -79,6 +79,7 @@
           <button id="goalMenuBtn">Reading goals</button>
           <button id="calBtn">Reading calendar</button>
           <button id="triviaBtn">Today’s question</button>
+          <button id="postcardBtn">Share my shelf</button>
           <button id="tagsBtn">Tags</button>
           <button id="customizeBtn">Customize the room</button>
           <button id="tourBtn" hidden>Show me around</button>
@@ -536,6 +537,37 @@
   </dialog>
 
   <!-- Your tags -->
+  <dialog id="postcardDialog" class="paper narrow pc-dialog" aria-labelledby="pcTitle">
+    <article>
+      <h2 id="pcTitle">Share my shelf</h2>
+      <div class="pc-grid">
+        <div class="pc-preview">
+          <img id="pcImg" alt="Preview of your picture" hidden>
+          <p id="pcWait" class="pc-wait">Developing your picture…</p>
+        </div>
+        <div class="pc-opts">
+          <div class="spans" role="radiogroup" aria-label="Picture">
+            <button type="button" role="radio" data-pckind="shelf" aria-checked="true">My shelf</button>
+            <button type="button" role="radio" data-pckind="book" aria-checked="false">Just finished</button>
+          </div>
+          <label class="field" id="pcBookField" hidden><span>Book</span><select id="pcBook"></select></label>
+          <div class="spans" role="radiogroup" aria-label="Light">
+            <button type="button" role="radio" data-pclook="day">Day</button>
+            <button type="button" role="radio" data-pclook="night">Night</button>
+          </div>
+          <label class="pc-check" id="pcQuoteField" hidden><input type="checkbox" id="pcQuote"> Include a line from my review</label>
+          <label class="field"><span>Your handle <small>(optional)</small></span><input id="pcHandle" type="text" maxlength="40" placeholder="@yourname" autocomplete="off"></label>
+          <p class="pc-note">Made on this device from your own room. Only titles, stars and counts show, plus your handle if you add one.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-ghost" data-close>Done</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-brass" id="pcSend" disabled>Share</button>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="triviaDialog" class="paper narrow tq-dialog" aria-label="Today’s question">
     <article>
       <div id="triviaBody"></div>
